@@ -262,6 +262,7 @@ function InternalBotCreateFormDialog({ opened, setOpened, currentUser }: IShared
                     {formRequirements.includes("value") && (
                         <Box mt="4">
                             <BotValueInput
+                                purpose={selectedType === InternalBotModel.EInternalBotType.DocumentEmbedding ? "embedding" : "chat"}
                                 currentUser={currentUser}
                                 platform={selectedPlatform}
                                 platformRunningType={selectedPlatformRunningType}

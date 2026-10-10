@@ -5,6 +5,7 @@ import { ESocketTopic } from "@langboard/core/enums";
 
 export interface IDashboardCardCreatedRawResponse {
     project_column_uid: string;
+    source_type?: string | null;
 }
 
 export interface IUseDashboardCardCreatedHandlersProps extends IBaseUseSocketHandlersProps<{}> {
@@ -21,6 +22,9 @@ const useDashboardCardCreatedHandlers = ({ callback, project }: IUseDashboardCar
             params: { uid: project.uid },
             callback,
             responseConverter: (data) => {
+                if (data.source_type === "project_wiki") {
+                    return {};
+                }
                 const column = ProjectColumn.Model.getModel((model) => model.uid === data.project_column_uid);
                 if (!column) {
                     return {};

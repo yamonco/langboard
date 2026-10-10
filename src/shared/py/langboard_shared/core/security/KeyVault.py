@@ -1,13 +1,7 @@
 from ...Env import Env
 from ..utils.decorators.ClassInstance import class_instance
-from .vault import (
-    AwsKmsVaultProvider,
-    AzureVaultProvider,
-    HashiCorpVaultProvider,
-    LocalDevVaultProvider,
-    OpenBaoVaultProvider,
-    VaultProvider,
-)
+from .vault.LocalDevVaultProvider import LocalDevVaultProvider
+from .vault.VaultProvider import VaultProvider
 
 
 @class_instance()
@@ -23,12 +17,20 @@ class KeyVault(VaultProvider):
 
         try:
             if self.provider_type.startswith("openbao"):
+                from .vault.OpenBaoVaultProvider import OpenBaoVaultProvider
+
                 self.provider = OpenBaoVaultProvider()
             elif self.provider_type == "hashicorp":
+                from .vault.HashiCorpVaultProvider import HashiCorpVaultProvider
+
                 self.provider = HashiCorpVaultProvider()
             elif self.provider_type == "aws":
+                from .vault.AwsKmsVaultProvider import AwsKmsVaultProvider
+
                 self.provider = AwsKmsVaultProvider()
             elif self.provider_type == "azure":
+                from .vault.AzureVaultProvider import AzureVaultProvider
+
                 self.provider = AzureVaultProvider()
             else:
                 raise ValueError(f"Unsupported key provider type: {self.provider_type}")
@@ -51,6 +53,11 @@ class KeyVault(VaultProvider):
 
     def create_key(self, key_id: str) -> str:
         return self.provider.create_key(key_id)
+
+    def store_secret(self, secret_id: str, value: str) -> str:
+        if not isinstance(value, str) or not value:
+            raise ValueError("Secret material must be a nonempty string")
+        return self.provider.store_secret(secret_id, value)
 
     def get_key(self, key_id: str) -> str:
         return self.provider.get_key(key_id)

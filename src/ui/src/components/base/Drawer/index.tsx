@@ -13,11 +13,11 @@ Root.displayName = "Drawer";
 
 const Trigger: typeof DrawerPrimitive.Trigger = DrawerPrimitive.Trigger;
 
-const Portal = DrawerPrimitive.Portal;
+const Portal: typeof DrawerPrimitive.Portal = DrawerPrimitive.Portal;
 
 const Close: typeof DrawerPrimitive.Close = DrawerPrimitive.Close;
 
-const Handle = DrawerPrimitive.Handle;
+const Handle: typeof DrawerPrimitive.Handle = DrawerPrimitive.Handle;
 
 const Overlay: typeof DrawerPrimitive.Overlay = React.forwardRef<
     React.ComponentRef<typeof DrawerPrimitive.Overlay>,
@@ -92,10 +92,10 @@ const Description: typeof DrawerPrimitive.Description = React.forwardRef<
 >(({ className, ...props }, ref) => <DrawerPrimitive.Description ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />);
 Description.displayName = DrawerPrimitive.Description.displayName;
 
-interface IDrawerComponents {
+const Drawer: {
     Close: typeof Close;
     Handle: typeof Handle;
-    Content: typeof Content;
+    Content: TContent;
     Description: typeof Description;
     Footer: typeof Footer;
     Header: typeof Header;
@@ -104,9 +104,7 @@ interface IDrawerComponents {
     Root: typeof Root;
     Title: typeof Title;
     Trigger: typeof Trigger;
-}
-
-const Drawer: IDrawerComponents = {
+} = {
     Close,
     Handle,
     Content,

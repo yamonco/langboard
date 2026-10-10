@@ -73,6 +73,22 @@ class Env:
         return self.__get_from_cache("API_INTERNAL_URL", f"http://{self.API_HOST}:{self.API_PORT}").rstrip("/")
 
     @property
+    def MCP_OIDC_DEFAULT_TOOL_GROUP_UID(self) -> str:
+        return self.__get_from_cache("MCP_OIDC_DEFAULT_TOOL_GROUP_UID", "").strip()
+
+    @property
+    def IDENTITY_PROOF_ISSUER(self) -> str:
+        return self.__get_from_cache("IDENTITY_PROOF_ISSUER", "").strip()
+
+    @property
+    def IDENTITY_PROOF_AUDIENCE(self) -> str:
+        return self.__get_from_cache("IDENTITY_PROOF_AUDIENCE", "").strip()
+
+    @property
+    def IDENTITY_PROOF_SIGNING_KEY_PATH(self) -> str:
+        return self.__get_from_cache("IDENTITY_PROOF_SIGNING_KEY_PATH", "").strip()
+
+    @property
     def MCP_ALLOWED_HOSTS(self) -> list[str]:
         """Return explicitly allowed MCP Host header values."""
 
@@ -85,6 +101,38 @@ class Env:
 
         origins = self.__get_from_cache("MCP_ALLOWED_ORIGINS", "")
         return [origin.strip().rstrip("/") for origin in origins.split(",") if origin.strip()]
+
+    @property
+    def MCP_OAUTH_ENABLED(self) -> bool:
+        return self.__get_from_cache("MCP_OAUTH_ENABLED", "false").lower() == "true"
+
+    @property
+    def MCP_OAUTH_BASE_URL(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_BASE_URL", "")
+
+    @property
+    def MCP_OAUTH_DISCOVERY_URL(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_DISCOVERY_URL", "")
+
+    @property
+    def MCP_OAUTH_CLIENT_ID(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_CLIENT_ID", "")
+
+    @property
+    def MCP_OAUTH_CLIENT_SECRET(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_CLIENT_SECRET", "")
+
+    @property
+    def MCP_OAUTH_SIGNING_KEY(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_SIGNING_KEY", "")
+
+    @property
+    def MCP_OAUTH_SCOPES(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_SCOPES", "openid profile mcp:access")
+
+    @property
+    def MCP_OAUTH_PROMPT(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_PROMPT", "")
 
     @property
     def UI_PORT(self) -> int:
@@ -229,6 +277,14 @@ class Env:
         return self.__get_from_cache("SENTRY_DSN")
 
     @property
+    def SENTRY_ENVIRONMENT(self) -> str:
+        return self.__get_from_cache("SENTRY_ENVIRONMENT", "") or self.ENVIRONMENT
+
+    @property
+    def SENTRY_RELEASE(self) -> str | None:
+        return self.__get_from_cache("SENTRY_RELEASE", "") or None
+
+    @property
     def BROADCAST_TYPE(self) -> Literal["in-memory", "kafka"]:
         broadcast_type = cast(Any, self.__get_from_cache("BROADCAST_TYPE", "in-memory"))
         _available_broadcast_types = {"in-memory", "kafka"}
@@ -338,6 +394,22 @@ class Env:
         return int(self.__get_from_cache("OIDC_CLOCK_SKEW_SEC", "60"))
 
     @property
+    def OIDC_BEARER_ENABLED(self) -> bool:
+        return self.__get_from_cache("OIDC_BEARER_ENABLED", "false").lower() == "true"
+
+    @property
+    def OIDC_RESOURCE_AUDIENCE(self) -> str:
+        return self.__get_from_cache("OIDC_RESOURCE_AUDIENCE", "")
+
+    @property
+    def OIDC_AUTO_LINK_BY_EMAIL(self) -> bool:
+        return self.__get_from_cache("OIDC_AUTO_LINK_BY_EMAIL", "false").lower() == "true"
+
+    @property
+    def OIDC_AUTO_PROVISION(self) -> bool:
+        return self.__get_from_cache("OIDC_AUTO_PROVISION", "true").lower() == "true"
+
+    @property
     def SCIM_ENABLED(self) -> bool:
         return self.__get_from_cache("SCIM_ENABLED", "false").lower() == "true"
 
@@ -348,6 +420,33 @@ class Env:
     @property
     def SCIM_ISSUER(self) -> str:
         return self.__get_from_cache("SCIM_ISSUER", "")
+
+    @property
+    def MCP_EMPLOYEE_GROUP_IDS(self) -> list[str]:
+        """Explicit SCIM group external IDs whose members are employees.
+
+        Empty means the deployment has no employee classification policy.
+        """
+        raw = self.__get_from_cache("MCP_EMPLOYEE_GROUP_IDS", "")
+        return list(dict.fromkeys(value.strip() for value in raw.split(",") if value.strip()))
+
+    @property
+    def CARD_INTERNAL_ACCESS_MODE(self) -> str:
+        """Explicit deployment policy: SCIM employees or current board members.
+
+        Unknown values deny access; missing configuration retains strict SCIM.
+        Board membership does not classify anyone as an employee.
+        """
+        return self.__get_from_cache("CARD_INTERNAL_ACCESS_MODE", "scim").strip()
+
+    @property
+    def CARD_INTERNAL_OIDC_ISSUERS(self) -> list[str]:
+        """Operator-selected identity authorities for internal collaboration.
+
+        Empty grants nothing; this does not imply employee classification.
+        """
+        raw = self.__get_from_cache("CARD_INTERNAL_OIDC_ISSUERS", "")
+        return list(dict.fromkeys(value.strip().rstrip("/") for value in raw.split(",") if value.strip()))
 
     @property
     def REFRESH_TOKEN_NAME(self) -> str:

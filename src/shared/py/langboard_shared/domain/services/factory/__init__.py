@@ -6,6 +6,7 @@ from .BotLogService import BotLogService
 from .BotService import BotService
 from .CardAttachmentService import CardAttachmentService
 from .CardCommentService import CardCommentService
+from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
 from .CardService import CardService
 from .ChatService import ChatService
@@ -13,6 +14,7 @@ from .CheckitemService import CheckitemService
 from .ChecklistService import ChecklistService
 from .DoclingMetadataService import DoclingMetadataService
 from .EmailService import EmailService
+from .GlobalLabelService import GlobalLabelService
 from .GraphApprovalRequestService import GraphApprovalRequestService
 from .IdentityLinkService import IdentityLinkService
 from .InternalBotService import InternalBotService
@@ -20,6 +22,7 @@ from .McpToolGroupService import McpToolGroupService
 from .MetadataService import MetadataService
 from .NotificationService import NotificationService
 from .OrchestrationTaskService import OrchestrationTaskService
+from .OrganizationService import OrganizationService
 from .ProjectColumnService import ProjectColumnService
 from .ProjectEmailNotificationService import ProjectEmailNotificationService
 from .ProjectInvitationService import ProjectInvitationService
@@ -29,9 +32,11 @@ from .ProjectTemplateService import ProjectTemplateService
 from .ProjectWikiService import ProjectWikiService
 from .ReactionService import ReactionService
 from .ScimProvisioningService import ScimProvisioningService
+from .SecretReferenceService import SecretReferenceService
 from .UserGroupService import UserGroupService
 from .UserNotificationSettingService import UserNotificationSettingService
 from .UserService import UserService
+from .WorkflowStageService import WorkflowStageService
 
 
 __all__ = [
@@ -43,6 +48,7 @@ __all__ = [
     "BotService",
     "CardAttachmentService",
     "CardCommentService",
+    "CardContentBlockService",
     "CardRelationshipService",
     "CardService",
     "ChatService",
@@ -50,6 +56,8 @@ __all__ = [
     "ChecklistService",
     "DoclingMetadataService",
     "EmailService",
+    "GlobalLabelService",
+    "WorkflowStageService",
     "GraphApprovalRequestService",
     "IdentityLinkService",
     "InternalBotService",
@@ -57,6 +65,8 @@ __all__ = [
     "MetadataService",
     "NotificationService",
     "OrchestrationTaskService",
+    "OrganizationService",
+    "SecretReferenceService",
     "ProjectColumnService",
     "ProjectEmailNotificationService",
     "ProjectInvitationService",

@@ -56,6 +56,7 @@ services:
       - ./envs/.api.env
     environment:
       WORKER: main
+      FASTMCP_HOME: /app/.fastmcp
     working_dir: /app
     command: uv run --no-sync ${PROJECT_NAME} run --workers ${API_WORKERS_COUNT:-1}
     stop_grace_period: 16m
@@ -63,6 +64,7 @@ services:
       - ../src/api/${PROJECT_NAME}:/app/src/api/${PROJECT_NAME}
       - ../src/shared/py:/app/src/shared/py
       - shared-py-venv:/app/shared/py/.venv
+      - mcp-oauth-state:/app/.fastmcp
       - ../src/resources:/app/src/resources
       - ../pyproject.toml:/app/pyproject.toml
       - ../uv.lock:/app/uv.lock
@@ -72,6 +74,8 @@ services:
       - ../local:/app/local
       - ../scripts/run_bot_cron.sh:/app/scripts/run_bot_cron.sh:x
       - ../scripts/run_notification_cron.sh:/app/scripts/run_notification_cron.sh:x
+      - ../scripts/run_execution_outbox_cron.sh:/app/scripts/run_execution_outbox_cron.sh:x
+      - ../scripts/run_github_health_cron.sh:/app/scripts/run_github_health_cron.sh:x
       - ./volumes/.vault-credentials:/app/.vault-credentials:ro
     depends_on:
       db-bouncer:
@@ -123,6 +127,7 @@ services:
     working_dir: /app
     stop_grace_period: 16m
     volumes:
+      - socket_data:/app/local
       - ../src/socket/package.json:/app/package.json
       - ../src/socket/yarn.lock:/app/yarn.lock
       - ../src/socket/src:/app/src
@@ -208,5 +213,9 @@ services:
     restart: always
 
 volumes:
+  socket_data:
+    driver: local
+  mcp-oauth-state:
+    driver: local
   shared-py-venv:
     driver: local

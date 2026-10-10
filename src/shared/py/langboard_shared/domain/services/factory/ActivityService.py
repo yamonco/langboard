@@ -1,7 +1,11 @@
+import json
+from datetime import datetime
 from typing import Any, Literal, cast, overload
-from ....core.db import BaseDbModel
+from ....core.db import BaseDbModel, DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.schema import TimeBasedPagination
+from ....core.security.CollaborationChannel import CollaborationChannel
+from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TUserOrBotParam, TUserParam, TWikiParam
 from ....helpers import InfraHelper
 from ...models import (
@@ -19,6 +23,69 @@ from ...models.bases import BaseActivityModel
 
 
 class ActivityService(BaseDomainService):
+    def get_shared_user_activities(
+        self,
+        viewer: User,
+        target_uid: str,
+        pagination: TimeBasedPagination,
+        activity_uid: str | None = None,
+        scope: Literal["project", "wiki"] | None = None,
+        offset: int = 0,
+        max_chars: int = 4000,
+        project_uid: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        *, channel: CollaborationChannel = CollaborationChannel.Api,
+    ) -> dict[str, Any]:
+        """Read another person's currently shared workspace history without side effects."""
+        if pagination.page < 1 or not 1 <= pagination.limit <= 50 or offset < 0 or not 1 <= max_chars <= 8000:
+            raise ValueError("Invalid pagination bounds")
+        if activity_uid and scope is None:
+            raise ValueError("Activity scope is required for detail")
+        start = datetime.fromisoformat(since) if since else None
+        end = datetime.fromisoformat(until) if until else None
+        if any(value is not None and value.utcoffset() is None for value in (start, end)):
+            raise ValueError("Period timestamps must include a timezone")
+        if start and end and start >= end:
+            raise ValueError("since must be earlier than until")
+        from .CardService import CardService
+
+        contexts = self._get_service(CardService).resolve_work_visibility_contexts(viewer, channel)
+        with DbSession.use(readonly=False) as db:
+            target = db.exec(SqlBuilder.select.table(User).where(User.id == InfraHelper.convert_id(target_uid))).first()
+        if not contexts or not target or target.deleted_at or not target.activated_at:
+            return {"activities": [], "has_more": False}
+        rows = self.repo.activity.get_shared_user_activities(
+            viewer, target, pagination, activity_uid, scope, project_uid, start, end, contexts=contexts
+        )
+        items = []
+        for row in rows[: pagination.limit]:
+            item = {
+                "activity_uid": SnowflakeID(row[0]).to_short_code(),
+                "created_at": str(row[1]),
+                "activity_type": row[2].value if hasattr(row[2], "value") else row[2],
+                "scope": row[3],
+                "project": {"uid": SnowflakeID(row[4]).to_short_code(), "title": row[5]},
+                "resource": {"uid": SnowflakeID(row[6]).to_short_code(), "title": row[7]} if row[6] else None,
+            }
+            if activity_uid:
+                history = json.dumps(row[8], ensure_ascii=False, sort_keys=True, default=str)
+                item.update(
+                    {
+                        "history_format": "json",
+                        "history_fragment": history[offset : offset + max_chars],
+                        "offset": offset,
+                        "next_offset": offset + max_chars if offset + max_chars < len(history) else None,
+                        "total_chars": len(history),
+                    }
+                )
+            items.append(item)
+        return {
+            "activities": items,
+            "has_more": not activity_uid and len(rows) > pagination.limit,
+            "refer_time": str(pagination.refer_time),
+        }
+
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
@@ -26,25 +93,27 @@ class ActivityService(BaseDomainService):
 
     @overload
     def get_api_list_by_user(
-        self, user: TUserParam | None, pagination: TimeBasedPagination
+        self, user: TUserParam | None, pagination: TimeBasedPagination, *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, User] | None: ...
     @overload
     def get_api_list_by_user(
-        self, user: TUserParam | None, pagination: TimeBasedPagination, only_count: Literal[True]
+        self, user: TUserParam | None, pagination: TimeBasedPagination, only_count: Literal[True], *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> int: ...
     def get_api_list_by_user(
-        self, user: TUserParam | None, pagination: TimeBasedPagination, only_count: bool = False
+        self, user: TUserParam | None, pagination: TimeBasedPagination, only_count: bool = False, *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, User] | int | None:
-        user = InfraHelper.get_by_id_like(User, user)
-        if not user:
-            if only_count:
-                return 0
-            return None
+        from .CardService import CardService
+
+        if not isinstance(user, User):
+            return 0 if only_count else None
+        contexts = self._get_service(CardService).resolve_work_visibility_contexts(user, channel)
+        if not contexts:
+            return 0 if only_count else None
 
         if only_count:
-            return self.repo.activity.get_list_by_user(user, pagination, only_count=True)
+            return self.repo.activity.get_list_by_user(user, pagination, only_count=True, contexts=contexts)
 
-        activities, count_new_records = self.repo.activity.get_list_by_user(user, pagination, only_count=False)
+        activities, count_new_records = self.repo.activity.get_list_by_user(user, pagination, only_count=False, contexts=contexts)
 
         api_activties = []
         cached_dict = self.__get_cached_references(activities)
@@ -70,6 +139,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: Literal[False] = False,
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, Project] | None: ...
     @overload
     def get_api_list_by_project(
@@ -78,6 +150,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: Literal[True],
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> int: ...
     def get_api_list_by_project(
         self,
@@ -85,7 +160,16 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: bool = False,
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, Project] | int | None:
+        from .CardService import CardService
+
+        resolved = self._get_service(CardService).resolve_visibility_context(project, user, channel)
+        if resolved is None or not resolved[1].project_member:
+            return 0 if only_count else None
+        project, context = resolved
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             if only_count:
@@ -93,11 +177,13 @@ class ActivityService(BaseDomainService):
             return None
 
         if only_count:
-            return self.repo.activity.get_list_by_project(project, pagination, only_count=True, assignee=assignee)
+            return self.repo.activity.get_scoped_project_activities(
+                project, pagination, context=context, only_count=True, assignee=assignee,
+            )
 
-        activities, count_new_records = self.repo.activity.get_list_by_project(
-            project, pagination, only_count=False, assignee=assignee
-        )
+        activities, count_new_records = self.repo.activity.get_scoped_project_activities(
+                project, pagination, context=context, only_count=False, assignee=assignee,
+            )
 
         if assignee:
             api_activities = self.__convert_api_response(cast(Any, activities))
@@ -114,6 +200,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: Literal[False] = False,
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, Project, ProjectColumn] | None: ...
     @overload
     def get_api_list_by_column(
@@ -123,6 +212,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: Literal[True],
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> int: ...
     def get_api_list_by_column(
         self,
@@ -131,7 +223,16 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: bool = False,
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, Project, ProjectColumn] | int | None:
+        from .CardService import CardService
+
+        resolved = self._get_service(CardService).resolve_visibility_context(project, user, channel)
+        if resolved is None or not resolved[1].project_member:
+            return 0 if only_count else None
+        project, context = resolved
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
         if not params:
             if only_count:
@@ -140,13 +241,13 @@ class ActivityService(BaseDomainService):
         project, column = params
 
         if only_count:
-            return self.repo.activity.get_list_by_column(
-                project, column, pagination, only_count=True, assignee=assignee
+            return self.repo.activity.get_scoped_project_activities(
+                project, pagination, context=context, column=column, only_count=True, assignee=assignee,
             )
 
-        activities, count_new_records = self.repo.activity.get_list_by_column(
-            project, column, pagination, only_count=False, assignee=assignee
-        )
+        activities, count_new_records = self.repo.activity.get_scoped_project_activities(
+                project, pagination, context=context, column=column, only_count=False, assignee=assignee,
+            )
 
         if assignee:
             api_activities = self.__convert_api_response(cast(Any, activities))
@@ -163,6 +264,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: Literal[False] = False,
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, Project, Card] | None: ...
     @overload
     def get_api_list_by_card(
@@ -172,6 +276,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: Literal[True],
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> int: ...
     def get_api_list_by_card(
         self,
@@ -180,20 +287,25 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: bool = False,
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, Project, Card] | int | None:
-        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
-        if not params:
-            if only_count:
-                return 0
-            return None
-        project, card = params
+        from .CardService import CardService
+
+        resolved = self._get_service(CardService).resolve_readable_card(project, card, user, channel)
+        if resolved is None:
+            return 0 if only_count else None
+        project, card, context = resolved
 
         if only_count:
-            return self.repo.activity.get_list_by_card(project, card, pagination, only_count=True, assignee=assignee)
+            return self.repo.activity.get_scoped_project_activities(
+                project, pagination, context=context, card=card, only_count=True, assignee=assignee,
+            )
 
-        activities, count_new_records = self.repo.activity.get_list_by_card(
-            project, card, pagination, only_count=False, assignee=assignee
-        )
+        activities, count_new_records = self.repo.activity.get_scoped_project_activities(
+                project, pagination, context=context, card=card, only_count=False, assignee=assignee,
+            )
 
         if assignee:
             api_activities = self.__convert_api_response(cast(Any, activities))
@@ -201,6 +313,24 @@ class ActivityService(BaseDomainService):
             api_activities = [activity.api_response() for activity in activities]
 
         return api_activities, count_new_records, project, card
+
+    def get_card_column_history(self, project: TProjectParam, card: TCardParam) -> list[dict[str, Any]]:
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return []
+        resolved_project, resolved_card = params
+        if resolved_card.project_id != resolved_project.id:
+            return []
+        return [
+            {
+                "uid": activity.get_uid(),
+                "activity_type": activity.activity_type.value,
+                "created_at": activity.api_response()["created_at"],
+                "column": activity.activity_history.get("column"),
+                "recorder": activity.activity_history.get("recorder"),
+            }
+            for activity in self.repo.activity.get_card_column_history(resolved_project, resolved_card)
+        ]
 
     @overload
     def get_api_list_by_wiki(
@@ -210,6 +340,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: Literal[False] = False,
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, Project, ProjectWiki] | None: ...
     @overload
     def get_api_list_by_wiki(
@@ -219,6 +352,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: Literal[True],
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> int | None: ...
     def get_api_list_by_wiki(
         self,
@@ -227,6 +363,9 @@ class ActivityService(BaseDomainService):
         pagination: TimeBasedPagination,
         only_count: bool = False,
         assignee: TUserOrBotParam | None = None,
+        *,
+        user: User | Bot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, Project, ProjectWiki] | int | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectWiki, wiki))
         if not params:

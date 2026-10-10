@@ -1,0 +1,42 @@
+name: Check Card Animation UI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/check-card-animation-ui.yaml
+      - src/ui/src/assets/styles/main.css
+      - src/ui/src/components/base/Dialog/index.tsx
+      - src/ui/src/pages/BoardPage/BoardCardPage.tsx
+      - src/ui/src/pages/BoardPage/index.tsx
+      - src/ui/src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx
+      - src/ui/src/pages/BoardPage/components/board/CardAnimation.*
+      - src/ui/src/pages/BoardPage/components/board/CardViewerDeepLink.*
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-transform:
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: src/ui/yarn.lock
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile
+        working-directory: src/ui
+      - run: yarn eslint src/components/base/Dialog/index.tsx src/pages/BoardPage/BoardCardPage.tsx src/pages/BoardPage/index.tsx src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/CardAnimation.ts src/pages/BoardPage/components/board/CardAnimation.test.ts src/pages/BoardPage/components/board/CardViewerDeepLink.fixture.tsx src/pages/BoardPage/components/board/CardViewerDeepLinkLateChunk.fixture.tsx src/pages/BoardPage/components/board/CardViewerDeepLink.spec.ts --max-warnings 0
+        working-directory: src/ui
+      - run: node --experimental-strip-types --test src/pages/BoardPage/components/board/CardAnimation.test.ts
+        working-directory: src/ui

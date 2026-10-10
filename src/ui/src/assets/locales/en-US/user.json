@@ -20,5 +20,9 @@
   "Delete avatar": "Delete avatar",
   "Drop avatar here": "Drop avatar here",
   "industries": {},
-  "purposes": {}
+  "purposes": {},
+  "Internal member": "Internal member",
+  "External member": "External member",
+  "Personal space": "Personal space",
+  "Unverified membership": "Unverified membership"
 }

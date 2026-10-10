@@ -1,0 +1,279 @@
+"""Template workflow persistence and native column creation acceptance."""
+
+from types import SimpleNamespace
+from unittest.mock import Mock
+import pytest
+from langboard_shared.core.db.DbEngine import DbEngine
+from langboard_shared.domain.models import Project, ProjectColumn, ProjectTemplate
+from langboard_shared.domain.services.factory.ProjectColumnService import ProjectColumnService
+from langboard_shared.domain.services.factory.ProjectTemplateService import (
+    SI_COLUMN_DESCRIPTIONS,
+    SI_WORKFLOW_STAGES,
+    ProjectTemplateService,
+)
+from langboard_shared.helpers import InfraHelper
+from langboard_shared.infrastructure.repositories.factory.ProjectColumnRepository import ProjectColumnRepository
+from langboard_shared.infrastructure.repositories.factory.ProjectTemplateRepository import ProjectTemplateRepository
+from sqlalchemy import create_engine
+
+
+@pytest.fixture
+def storage(monkeypatch):
+    engine = create_engine("sqlite://")
+    ProjectTemplate.__table__.create(engine)
+    from langboard_shared.domain.models import WorkflowStageDefinition
+    from langboard_shared.infrastructure.repositories.factory.WorkflowStageRepository import WorkflowStageRepository
+
+    WorkflowStageDefinition.__table__.create(engine)
+    ProjectColumn.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    repositories = SimpleNamespace(
+        project_template=ProjectTemplateRepository(None, None),
+        project_column=ProjectColumnRepository(None, None),
+        workflow_stage=WorkflowStageRepository(None, None),
+    )
+    for key in SI_WORKFLOW_STAGES:
+        repositories.workflow_stage.insert(WorkflowStageDefinition(key=key, name=key))
+    yield repositories
+    engine.dispose()
+
+
+def test_structured_json_roundtrip_retains_duplicate_names_and_stage_keys(storage):
+    template = ProjectTemplate(
+        name="Support",
+        columns=[
+            {"name": "Queue", "description": "Awaiting work", "workflow_stage": "ready"},
+            {"name": "Queue", "description": "Accepted work", "workflow_stage": "closed"},
+        ],
+    )
+    storage.project_template.insert(template)
+    loaded = storage.project_template.get_by_name("Support")
+    assert loaded.column_definitions() == template.columns
+    assert loaded.column_descriptions == []
+    assert loaded.api_response()["columns"] == ["Queue", "Queue"]
+    assert loaded.api_response()["column_descriptions"] == ["Awaiting work", "Accepted work"]
+    assert set(loaded.columns[1]) == {"name", "description", "workflow_stage"}
+
+
+def test_template_recreation_and_copy_resolve_current_registry_without_policy_snapshots(storage, monkeypatch):
+    project = Project(id=1, owner_id=1, title="QA")
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, _uid: project)
+    column_service = ProjectColumnService(None, None, storage)
+    column_service.dispatch_created = Mock()
+    services = {
+        "project": SimpleNamespace(create=Mock(return_value=project), delete=Mock()),
+        "project_column": column_service,
+    }
+    service = ProjectTemplateService(None, services.__getitem__, storage)
+    service._apply_internal_bots = Mock()
+    service._apply_scopes = Mock()
+    service._apply_email_notification_policy = Mock()
+    template = service.save_columns(
+        "Registry reference",
+        [
+            {
+                "name": "Queue",
+                "description": "Local guidance",
+                "workflow_stage": "ready",
+                "counts_as_completed": True,
+                "entry_effects": ["complete_checkitems"],
+                "active_queue_policy": "exclude",
+                "overdue_policy": "suppress",
+            }
+        ],
+    )
+    stored = storage.project_template.get_by_name(template.name)
+    allowed = {"name", "description", "workflow_stage", "translations"}
+    assert set(stored.column_definitions()[0]) == allowed
+    stage = storage.workflow_stage.get_by_keys({"ready"})["ready"]
+    stage.description = "Current registry guidance"
+    stage.counts_as_completed = True
+    stage.active_queue_policy = "exclude"
+    stage.overdue_policy = "suppress"
+    storage.workflow_stage.update(stage)
+    _, columns, _ = service.create_project(object(), "QA", template_name=stored.name)
+    column = columns[0]
+    guidance = column_service.get_workflow_guidance([column])[column.id]
+    assert guidance["workflow_counts_as_completed"] is True
+    assert guidance["workflow_stage_description"] == "Current registry guidance"
+    assert guidance["column_description"] == "Local guidance"
+    assert guidance["workflow_guidance"] == "Workflow stage:\nCurrent registry guidance\n\nColumn:\nLocal guidance"
+    from langboard_shared.domain.models import Card
+
+    Card.__table__.create(DbEngine.get_main_engine())
+    storage.project_assigned_internal_bot = SimpleNamespace(get_all_by_project=lambda _: [])
+    storage.project_bot_scope = SimpleNamespace(get_all_by_project=lambda _: [])
+    storage.project_column.get_bot_scopes_by_project = lambda _: []
+    storage.project_label = SimpleNamespace(get_all_by_project=lambda _: [])
+    service._email_notification_policy_snapshot = Mock(return_value={})
+    copied = service.copy_from_project(project, "Copied registry reference")
+    assert copied.column_definitions() == stored.column_definitions()
+    assert set(copied.column_definitions()[0]) == allowed
+    stage.description = "Updated after copying"
+    stage.counts_as_completed = False
+    storage.workflow_stage.update(stage)
+    guidance = column_service.get_workflow_guidance([column])[column.id]
+    assert guidance["workflow_counts_as_completed"] is False
+    assert guidance["workflow_stage_description"] == "Updated after copying"
+    assert storage.project_template.get_by_name(copied.name).columns == copied.columns
+
+
+def test_legacy_roundtrip_never_infers_done_meaning(storage):
+    storage.project_template.insert(
+        ProjectTemplate(name="Legacy", columns=["Done", "Done"], column_descriptions=["First", "Second"])
+    )
+    template = storage.project_template.get_by_name("Legacy")
+    assert template.column_definitions() == [
+        {"name": "Done", "description": "First", "workflow_stage": None},
+        {"name": "Done", "description": "Second", "workflow_stage": None},
+    ]
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_native_template_creation_persists_semantics_or_calls_project_cleanup(storage, monkeypatch, invalid):
+    project = Project(id=1, owner_id=1, title="QA")
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, _uid: project)
+    column_service = ProjectColumnService(None, None, storage)
+    column_service.dispatch_created = Mock()
+    project_service = SimpleNamespace(create=Mock(return_value=project), delete=Mock())
+    services = {"project": project_service, "project_column": column_service}
+    service = ProjectTemplateService(None, services.__getitem__, storage)
+    service._apply_internal_bots = Mock()
+    service._apply_scopes = Mock()
+    service._apply_email_notification_policy = Mock()
+    actor = object()
+    if invalid:
+        template = ProjectTemplate(
+            name="Invalid",
+            columns=[
+                {"name": "Ready", "description": "Valid first", "workflow_stage": "ready"},
+                {"name": "Unknown", "workflow_stage": "not_registered"},
+            ],
+        )
+        storage.project_template.insert(template)
+        with pytest.raises(ValueError, match="Unknown or inactive workflow stage"):
+            service.create_project(actor, "QA", template_name="Invalid")
+        project_service.delete.assert_not_called()
+        column_service.dispatch_created.assert_not_called()
+        from langboard_shared.core.db import DbSession, SqlBuilder
+
+        with DbSession.use(readonly=True) as db:
+            assert db.exec(SqlBuilder.select.table(ProjectColumn)).all() == []
+        return
+    _, columns, template = service.create_project(actor, "QA", template_name="SI")
+    from langboard_shared.core.db import DbSession, SqlBuilder
+
+    with DbSession.use(readonly=True) as db:
+        loaded = db.exec(SqlBuilder.select.table(ProjectColumn).order_by(ProjectColumn.column("order"))).all()
+    assert [column.workflow_stage for column in loaded if not column.is_archive] == SI_WORKFLOW_STAGES
+    assert [column.description for column in loaded if not column.is_archive] == SI_COLUMN_DESCRIPTIONS
+    assert sum(column.is_archive for column in loaded) == 1
+    assert all(column.workflow_stage is None for column in loaded if column.is_archive)
+    assert [column.name for column in columns] == template.api_response()["columns"]
+    project_service.delete.assert_not_called()
+    assert column_service.dispatch_created.call_count == 5
+
+
+def test_template_translations_survive_native_create_and_copy(storage, monkeypatch):
+    project = Project(id=1, owner_id=1, title="QA")
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, _uid: project)
+    column_service = ProjectColumnService(None, None, storage)
+    column_service.dispatch_created = Mock()
+    project_service = SimpleNamespace(create=Mock(return_value=project), delete=Mock())
+    services = {"project": project_service, "project_column": column_service}
+    service = ProjectTemplateService(None, services.__getitem__, storage)
+    service._apply_internal_bots = Mock()
+    service._apply_scopes = Mock()
+    service._apply_email_notification_policy = Mock()
+    translations = {"ko": {"name": "대기", "description": "실행 대기"}, "ja": {"name": "待機", "description": ""}}
+    template = ProjectTemplate(
+        name="Localized",
+        columns=[
+            {
+                "name": "Queue",
+                "description": "Waiting",
+                "workflow_stage": "ready",
+                "translations": translations,
+            }
+        ],
+    )
+    storage.project_template.insert(template)
+    _, columns, _ = service.create_project(object(), "QA", template_name="Localized")
+    from langboard_shared.core.db import DbSession, SqlBuilder
+
+    with DbSession.use(readonly=True) as db:
+        loaded = db.exec(SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.name == "Queue")).first()
+    assert loaded.translations == translations
+    assert loaded.name == "Queue" and loaded.description == "Waiting" and loaded.workflow_stage == "ready"
+    from langboard_shared.domain.models import Card
+
+    Card.__table__.create(DbEngine.get_main_engine())
+    storage.project_assigned_internal_bot = SimpleNamespace(get_all_by_project=lambda _: [])
+    storage.project_bot_scope = SimpleNamespace(get_all_by_project=lambda _: [])
+    storage.project_column.get_bot_scopes_by_project = lambda _: []
+    service._email_notification_policy_snapshot = Mock(return_value={})
+    storage.project_label = SimpleNamespace(get_all_by_project=lambda _: [])
+    copied = service.copy_from_project(project, "Localized copy")
+    assert copied.column_definitions()[0]["translations"] == translations
+    assert copied.column_definitions()[0]["workflow_stage"] == "ready"
+    assert len(copied.column_definitions()) == 1
+    project_service.delete.assert_not_called()
+
+
+@pytest.mark.parametrize("failure_phase", ["project", "column", "bots", "scopes", "email", None])
+def test_project_and_columns_are_atomic_and_effects_run_only_after_commit(storage, monkeypatch, failure_phase):
+    from langboard_shared.core.db import DbSession, SqlBuilder
+    from langboard_shared.domain.models import User
+
+    engine = DbEngine.get_main_engine()
+    User.__table__.create(engine)
+    Project.__table__.create(engine)
+    with DbSession.use(readonly=False) as db:
+        actor = User(firstname="Atomic", lastname="Owner", email="atomic@example.invalid", password="test-only")
+        db.insert(actor)
+    effects = []
+
+    def create_project(_actor, title, *_args):
+        project = Project(owner_id=actor.id, title=title)
+        with DbSession.use(readonly=False) as db:
+            db.insert(project)
+            db.after_commit(lambda: effects.append("project"))
+        if failure_phase == "project":
+            raise RuntimeError("injected project failure")
+        return project
+
+    project_service = SimpleNamespace(create=create_project, delete=Mock())
+    column_service = ProjectColumnService(None, None, storage)
+    column_service.dispatch_created = lambda _actor, _project, column: effects.append(column.name)
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, value: value)
+    services = {"project": project_service, "project_column": column_service}
+    service = ProjectTemplateService(None, services.__getitem__, storage)
+    template = ProjectTemplate(name="Atomic", columns=[{"name": "Queue", "workflow_stage": "ready"}])
+    if failure_phase == "column":
+        template.columns.append({"name": "Invalid", "workflow_stage": "missing"})
+    service.get = Mock(return_value=template)
+
+    def phase(name):
+        def apply(*_args):
+            assert effects == []
+            if failure_phase == name:
+                raise RuntimeError(f"injected {name} failure")
+
+        return apply
+
+    service._apply_internal_bots = phase("bots")
+    service._apply_scopes = phase("scopes")
+    service._apply_email_notification_policy = phase("email")
+    if failure_phase:
+        with pytest.raises((ValueError, RuntimeError)):
+            service.create_project(actor, "Atomic board")
+    else:
+        service.create_project(actor, "Atomic board")
+    with DbSession.use(readonly=True) as db:
+        projects = db.exec(SqlBuilder.select.table(Project)).all()
+        columns = db.exec(SqlBuilder.select.table(ProjectColumn)).all()
+    assert len(projects) == (0 if failure_phase else 1)
+    assert len(columns) == (0 if failure_phase else 2)
+    assert effects == ([] if failure_phase else ["project", "Queue"])
+    project_service.delete.assert_not_called()

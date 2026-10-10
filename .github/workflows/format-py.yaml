@@ -2,10 +2,16 @@ name: Format Python
 
 on: workflow_dispatch
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   run-core-formatter:
-    name: Format (src/shared/py via uv)
-    runs-on: ubuntu-latest
+    name: Lint (src/shared/py via uv)
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     defaults:
       run:
         working-directory: src/shared/py
@@ -15,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -33,23 +39,28 @@ jobs:
           else
             uv sync
           fi
-      - name: Check formatting (core)
-        run: uv run ruff format --check .
+      - name: Lint (core)
+        run: |
+          uv run ruff check . --fix
+          uv run ruff format .
   run-root-formatter:
-    name: Format (root via uv)
-    runs-on: ubuntu-latest
+    name: Lint (root via uv)
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     strategy:
       matrix:
         python-version:
           - "3.13"
           - "3.12"
+          - "3.11"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -67,11 +78,15 @@ jobs:
           else
             uv sync
           fi
-      - name: Check formatting (root)
-        run: uv run ruff format --check . --exclude "src/api/langboard/migrations/**"
+      - name: Lint (root)
+        run: |
+          uv run ruff check . --fix
+          uv run ruff format .
   run-graph-formatter:
-    name: Format (src/graph via uv)
-    runs-on: ubuntu-latest
+    name: Lint (src/graph via uv)
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     defaults:
       run:
         working-directory: src/graph
@@ -81,7 +96,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -99,5 +114,7 @@ jobs:
           else
             uv sync
           fi
-      - name: Check formatting (graph)
-        run: uv run ruff format --check .
+      - name: Lint (graph)
+        run: |
+          uv run ruff check . --fix
+          uv run ruff format .

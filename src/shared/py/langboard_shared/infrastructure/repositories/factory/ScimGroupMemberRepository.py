@@ -2,7 +2,7 @@ from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TScimGroupParam, TUserParam
-from ....domain.models import ScimGroupMember, User
+from ....domain.models import IdentityProvider, ScimGroup, ScimGroupMember, User, UserIdentityLink
 from ....helpers import InfraHelper
 
 
@@ -15,10 +15,34 @@ class ScimGroupMemberRepository(BaseRepository[ScimGroupMember]):
     def name() -> str:
         return "scim_group_member"
 
-    def get_users_by_group(self, group: TScimGroupParam) -> list[tuple[ScimGroupMember, User]]:
+    def get_employee_users(self, group_external_ids: list[str], issuer: str, *, offset: int, limit: int, group_ids: list[SnowflakeID] | None = None) -> list[User]:
+        """Filter current linked users before bounded pagination on the primary database."""
+        query = (
+            SqlBuilder.select.table(User)
+            .join(UserIdentityLink, UserIdentityLink.column("user_id") == User.column("id"))
+            .join(ScimGroupMember, ScimGroupMember.column("user_id") == User.column("id"))
+            .join(ScimGroup, ScimGroup.column("id") == ScimGroupMember.column("group_id"))
+            .where(
+                UserIdentityLink.column("provider") == IdentityProvider.Scim,
+                UserIdentityLink.column("issuer") == issuer,
+                (ScimGroup.id.in_(group_ids) if group_ids is not None else ScimGroup.external_id.in_(group_external_ids)),
+                User.column("activated_at").is_not(None),
+                User.column("deleted_at").is_(None),
+            )
+            .distinct()
+            .order_by(User.column("id").asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        with DbSession.use(readonly=False) as db:
+            return db.exec(query).all()
+
+    def get_users_by_group(
+        self, group: TScimGroupParam, *, consistent: bool = False
+    ) -> list[tuple[ScimGroupMember, User]]:
         group_id = InfraHelper.convert_id(group)
 
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             return db.exec(
                 SqlBuilder.select.tables(ScimGroupMember, User)
                 .join(User, User.column("id") == ScimGroupMember.column("user_id"))
@@ -36,6 +60,19 @@ class ScimGroupMemberRepository(BaseRepository[ScimGroupMember]):
                 .join(User, User.column("id") == ScimGroupMember.column("user_id"))
                 .where(ScimGroupMember.column("group_id").in_(group_ids))
                 .order_by(ScimGroupMember.column("group_id").asc(), User.column("email").asc(), User.column("id").asc())
+            ).all()
+
+    def get_groups_by_user(
+        self, user: TUserParam, *, consistent: bool = False
+    ) -> list[tuple[ScimGroupMember, ScimGroup]]:
+        user_id = InfraHelper.convert_id(user)
+
+        with DbSession.use(readonly=not consistent) as db:
+            return db.exec(
+                SqlBuilder.select.tables(ScimGroupMember, ScimGroup)
+                .join(ScimGroup, ScimGroup.column("id") == ScimGroupMember.column("group_id"))
+                .where(ScimGroupMember.column("user_id") == user_id)
+                .order_by(ScimGroup.column("external_id").asc(), ScimGroup.column("id").asc())
             ).all()
 
     def delete_all_by_group(self, group: TScimGroupParam) -> None:

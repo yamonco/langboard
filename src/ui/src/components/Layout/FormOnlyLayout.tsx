@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { forwardRef } from "react";
 import CachedImage from "@/components/CachedImage";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -48,6 +49,7 @@ export const createTwoSidedSizeClassNames = (size: IBaseFormOnlyLayoutProps["siz
 
 const FormOnlyLayout = forwardRef<HTMLDivElement, TFormOnlyLayoutProps>(
     ({ size = "default", leftSide, rightSide, children, useLogo, ...props }, ref) => {
+        const [t] = useTranslation();
         const isTwoSided = leftSide && rightSide;
         let content;
         let widthClassName;
@@ -88,7 +90,7 @@ const FormOnlyLayout = forwardRef<HTMLDivElement, TFormOnlyLayoutProps>(
                         <Box p={{ initial: "6", sm: "9" }} border={{ xs: "2" }} rounded={{ xs: "2xl" }} className="xs:border-border">
                             {useLogo && (
                                 <Box mb="6">
-                                    <CachedImage src="/images/logo.png" alt="Logo" size="9" />
+                                    <CachedImage src="/images/logo.png" alt={t("common.Logo")} size="9" />
                                 </Box>
                             )}
                             {content}

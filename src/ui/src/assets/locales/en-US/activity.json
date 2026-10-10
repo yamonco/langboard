@@ -1,5 +1,5 @@
 {
-  "{count} New Activities": "{{count}} New Activities",
+  "{count} New Activities": "{{count, number}} New Activities",
   "No activities": "No activities",
   "changes": {
     "title": "Title",

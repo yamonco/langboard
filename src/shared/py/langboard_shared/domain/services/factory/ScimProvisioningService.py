@@ -1,5 +1,6 @@
 from re import IGNORECASE, search
 from typing import Any
+from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.exceptions import ScimProvisioningException
 from ....core.types import SafeDateTime, SnowflakeID
@@ -7,12 +8,24 @@ from ....core.utils.String import generate_random_string
 from ....Env import Env
 from ....helpers import InfraHelper
 from ....security import Auth
-from ...models import IdentityProvider, ScimGroup, ScimGroupMember, User
+from ...models import (
+    EmployeeMembershipPolicy,
+    IdentityProvider,
+    Project,
+    ScimGroup,
+    ScimGroupMember,
+    User,
+    UserIdentityLink,
+)
+from ...models.ProjectRole import ProjectRoleAction
 from .IdentityLinkService import IdentityLinkService
 from .UserService import UserService
 
 
 class ScimProvisioningService(BaseDomainService):
+    PROJECT_ROLE_GROUP_PREFIX = "project-role"
+    PROJECT_ROLE_KEYS = ("viewer", "contributor", "owner")
+
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
@@ -30,9 +43,174 @@ class ScimProvisioningService(BaseDomainService):
     def SCIM_LIST_SCHEMA(self) -> str:
         return "urn:ietf:params:scim:api:messages:2.0:ListResponse"
 
+    def _employee_policy(self) -> EmployeeMembershipPolicy | None:
+        with DbSession.use(readonly=False) as db:
+            return db.exec(
+                SqlBuilder.select.table(EmployeeMembershipPolicy).where(EmployeeMembershipPolicy.key == "global")
+            ).first()
+
+    def classify_members(self, user_ids: list[SnowflakeID]) -> dict[str, str]:
+        """Bounded primary reads for avatar projection; never one query per avatar."""
+        if not user_ids:
+            return {}
+        policy = self._employee_policy()
+        issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+        with DbSession.use(readonly=False) as db:
+            users = db.exec(SqlBuilder.select.table(User).where(User.id.in_(user_ids))).all()
+            links = db.exec(
+                SqlBuilder.select.table(UserIdentityLink).where(UserIdentityLink.user_id.in_(user_ids))
+            ).all()
+            groups = db.exec(
+                SqlBuilder.select.tables(ScimGroupMember, ScimGroup)
+                .join(ScimGroup, ScimGroup.id == ScimGroupMember.group_id)
+                .where(ScimGroupMember.user_id.in_(user_ids))
+            ).all()
+        selected = {
+            (member.user_id)
+            for member, group in groups
+            if (group.get_uid() in policy.group_uids if policy else group.external_id in Env.MCP_EMPLOYEE_GROUP_IDS)
+        }
+        scim_configured = policy is not None or bool(Env.MCP_EMPLOYEE_GROUP_IDS)
+        scim_linked = {
+            link.user_id
+            for link in links
+            if link.provider == IdentityProvider.Scim and link.issuer.rstrip("/") == issuer
+        }
+        oidc_internal = {
+            link.user_id
+            for link in links
+            if link.provider == IdentityProvider.Oidc
+            and link.external_id
+            and link.issuer.rstrip("/") in Env.CARD_INTERNAL_OIDC_ISSUERS
+        }
+        result = {}
+        for user in users:
+            status = "unknown"
+            if user.activated_at and user.deleted_at is None:
+                if scim_configured:
+                    status = (
+                        "internal"
+                        if issuer
+                        and (policy is None or policy.issuer == issuer)
+                        and user.id in selected
+                        and user.id in scim_linked
+                        else "external"
+                    )
+                elif Env.CARD_INTERNAL_ACCESS_MODE == "oidc_issuers" and Env.CARD_INTERNAL_OIDC_ISSUERS:
+                    status = "internal" if user.id in oidc_internal else "external"
+            result[user.get_uid()] = status
+        return result
+
+    def get_employee_membership_settings(self) -> dict[str, Any]:
+        policy = self._employee_policy()
+        with DbSession.use(readonly=False) as db:
+            groups = db.exec(SqlBuilder.select.table(ScimGroup).order_by(ScimGroup.display_name, ScimGroup.id)).all()
+        selected = (
+            (policy.group_uids if policy.issuer == (Env.SCIM_ISSUER or "").strip().rstrip("/") else [])
+            if policy
+            else [g.get_uid() for g in groups if g.external_id in Env.MCP_EMPLOYEE_GROUP_IDS]
+        )
+        return {
+            "issuer": (Env.SCIM_ISSUER or "").strip().rstrip("/"),
+            "configured": policy is not None,
+            "group_uids": selected,
+            "groups": [
+                {"uid": g.get_uid(), "display_name": g.display_name, "external_id": g.external_id} for g in groups
+            ],
+        }
+
+    def save_employee_membership_settings(self, group_uids: list[str]) -> dict[str, Any]:
+        selected = list(dict.fromkeys(group_uids))
+        if selected and not (Env.SCIM_ISSUER or "").strip():
+            raise ValueError("Configure the SCIM identity authority before selecting groups")
+        with DbSession.atomic() as db:
+            groups = db.exec(SqlBuilder.select.table(ScimGroup)).all()
+            if not set(selected).issubset({g.get_uid() for g in groups}):
+                raise ValueError("Select existing synchronized SCIM groups")
+            policy = self._employee_policy()
+            if policy is None:
+                db.insert(
+                    EmployeeMembershipPolicy(
+                        key="global", issuer=(Env.SCIM_ISSUER or "").strip().rstrip("/"), group_uids=selected
+                    )
+                )
+            else:
+                policy.issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+                policy.group_uids = selected
+                db.update(policy)
+        return self.get_employee_membership_settings()
+
+    def employee_policy_status(self) -> str:
+        """Return configured only when an operator explicitly selected SCIM groups."""
+        policy = self._employee_policy()
+        issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+        if policy is not None and policy.issuer != issuer:
+            return "unknown"
+        return "configured" if (policy is not None or Env.MCP_EMPLOYEE_GROUP_IDS) and issuer else "unknown"
+
+    def is_employee(self, user: User) -> bool | None:
+        """Classify a user from explicit SCIM group membership; never infer from email/name."""
+        policy = self._employee_policy()
+        expected_issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+        if not expected_issuer or (policy is None and not Env.MCP_EMPLOYEE_GROUP_IDS):
+            return None
+        if user.deleted_at is not None or not user.activated_at:
+            return False
+        if policy is not None and policy.issuer != expected_issuer:
+            return False
+        identity_link = self.repo.user_identity_link.get_by_user_provider(user, IdentityProvider.Scim, consistent=True)
+        expected_issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+        if not identity_link or (identity_link.issuer or "").strip().rstrip("/") != expected_issuer:
+            return False
+        groups = self.repo.scim_group_member.get_groups_by_user(user, consistent=True)
+        if policy is not None:
+            return any(group.get_uid() in policy.group_uids for _, group in groups)
+        configured = set(Env.MCP_EMPLOYEE_GROUP_IDS)
+        return any((group.external_id or "") in configured for _, group in groups)
+
+    def list_employees(self, *, page: int = 1, limit: int = 50) -> dict[str, Any]:
+        """Return bounded public fields for members of configured employee groups."""
+        if not 1 <= page <= 10000 or not 1 <= limit <= 50:
+            raise ValueError("page must be between 1 and 10000 and limit between 1 and 50")
+        if self.employee_policy_status() != "configured":
+            return {"policy_status": "unknown", "items": [], "page": page, "limit": limit, "has_more": False}
+        policy = self._employee_policy()
+        if policy is not None and policy.issuer != (Env.SCIM_ISSUER or "").strip().rstrip("/"):
+            return {"policy_status": "unknown", "items": [], "page": page, "limit": limit, "has_more": False}
+        selected = self.repo.scim_group_member.get_employee_users(
+            Env.MCP_EMPLOYEE_GROUP_IDS,
+            (Env.SCIM_ISSUER or "").strip().rstrip("/"),
+            offset=(page - 1) * limit,
+            limit=limit + 1,
+            **({"group_ids": [InfraHelper.convert_id(uid) for uid in policy.group_uids]} if policy else {}),
+        )
+        return {
+            "policy_status": "configured",
+            "items": [
+                {
+                    key: value
+                    for key, value in {
+                        "uid": user.get_uid(),
+                        "username": user.username,
+                        "firstname": user.firstname,
+                        "lastname": user.lastname,
+                    }.items()
+                    if value is not None
+                }
+                for user in selected[:limit]
+            ],
+            "page": page,
+            "limit": limit,
+            "has_more": len(selected) > limit,
+        }
+
     def resolve_user(self, identifier: str) -> User | None:
         identity_link = self._get_service(IdentityLinkService)
-        user = identity_link.get_user_by_provider_external_id(IdentityProvider.Scim, identifier)
+        user = identity_link.get_user_by_provider_external_id(
+            IdentityProvider.Scim,
+            identifier,
+            (Env.SCIM_ISSUER or "").rstrip("/"),
+        )
         if user:
             return user
 
@@ -42,12 +220,9 @@ class ScimProvisioningService(BaseDomainService):
     def build_scim_user(self, user: User) -> dict[str, Any]:
         identity_link = self._get_service(IdentityLinkService)
         link = identity_link.get_by_user_provider(user, IdentityProvider.Scim)
-        external_id = link.external_id if link else user.get_uid()
-
-        return {
+        content = {
             "schemas": [self.SCIM_USER_SCHEMA],
             "id": user.get_uid(),
-            "externalId": external_id,
             "userName": user.email,
             "name": {
                 "givenName": user.firstname,
@@ -62,6 +237,9 @@ class ScimProvisioningService(BaseDomainService):
                 "lastModified": user.updated_at,
             },
         }
+        if link:
+            content["externalId"] = link.external_id
+        return content
 
     def resolve_group(self, identifier: str) -> ScimGroup | None:
         group = self.repo.scim_group.get_by_external_id(identifier)
@@ -147,7 +325,28 @@ class ScimProvisioningService(BaseDomainService):
 
     def create_or_upsert_user(self, payload: dict[str, Any]) -> User:
         email = self._extract_email(payload)
+        external_id = self._extract_external_id(payload)
+        identity_link = self._get_service(IdentityLinkService)
         user_service = self._get_service(UserService)
+
+        if external_id:
+            user = identity_link.get_user_by_provider_external_id(
+                IdentityProvider.Scim,
+                external_id,
+                (Env.SCIM_ISSUER or "").rstrip("/"),
+            )
+            if user:
+                self.apply_user_mutations(user, payload)
+                return user
+
+            existing, _ = user_service.get_by_email(email) if email else (None, None)
+            if existing:
+                # Linking an existing account is an explicit administrative action via
+                # PUT /Users/{uid}; a matching email is mutable metadata, not identity.
+                if identity_link.get_by_user_provider(existing, IdentityProvider.Scim):
+                    raise ScimProvisioningException.ExternalIdentityConflict()
+                raise ScimProvisioningException.IdentityLinkRequired()
+
         user, _ = user_service.get_by_email(email) if email else (None, None)
 
         if user:
@@ -190,8 +389,26 @@ class ScimProvisioningService(BaseDomainService):
         return user
 
     def apply_user_mutations(self, user: User, payload: dict[str, Any]) -> None:
-        firstname, lastname = self._extract_names(payload)
+        external_id = self._extract_external_id(payload)
         email = self._extract_email(payload)
+        if external_id:
+            identity_link = self._get_service(IdentityLinkService)
+            current_link = identity_link.get_by_user_provider(user, IdentityProvider.Scim)
+            linked_user = identity_link.get_user_by_provider_external_id(
+                IdentityProvider.Scim,
+                external_id,
+                (Env.SCIM_ISSUER or "").rstrip("/"),
+            )
+            if (current_link and current_link.external_id != external_id) or (
+                linked_user and linked_user.id != user.id
+            ):
+                raise ScimProvisioningException.ExternalIdentityConflict()
+        if email and email != user.email:
+            existing, _ = self._get_service(UserService).get_by_email(email)
+            if existing and existing.id != user.id:
+                raise ScimProvisioningException.Conflict()
+
+        firstname, lastname = self._extract_names(payload)
         active = payload.get("active")
 
         update_form: dict[str, Any] = {}
@@ -210,23 +427,22 @@ class ScimProvisioningService(BaseDomainService):
                 self.deactivate_user(user)
 
         if email and email != user.email:
-            existing, _ = self._get_service(UserService).get_by_email(email)
-            if existing and existing.id != user.id:
-                raise ScimProvisioningException.Conflict()
-
             user.email = email
             self.repo.user.update(user)
             Auth.reset_user(user)
 
-        self._upsert_identity_link(user, payload.get("externalId"), user.email)
+        self._upsert_identity_link(user, external_id, user.email)
 
     def deactivate_user(self, user: User) -> None:
+        affected_projects = self._bound_projects_for_user(user)
         if user.activated_at:
             self._get_service(UserService).update(user, {"activated_at": None}, from_setting=True)
+        self.repo.scim_group_member.delete_all_by_user(user)
+        for project in affected_projects:
+            self._reconcile_project_entitlements(project)
 
     def delete_user(self, user: User) -> None:
         self.deactivate_user(user)
-        self.repo.scim_group_member.delete_all_by_user(user)
 
     def create_or_upsert_group(self, payload: dict[str, Any]) -> ScimGroup:
         external_id = self._extract_external_id(payload)
@@ -251,17 +467,28 @@ class ScimProvisioningService(BaseDomainService):
         if external_id and self.repo.scim_group.get_by_external_id(external_id):
             raise ScimProvisioningException.Conflict()
 
+        user_ids = self._extract_group_member_user_ids(payload) if "members" in payload else []
+        self._validate_project_role_members(external_id, user_ids)
+
         group = ScimGroup(display_name=display_name, external_id=external_id or None)
         self.repo.scim_group.insert(group)
         if "members" in payload:
-            user_ids = self._extract_group_member_user_ids(payload)
             self.repo.scim_group_member.replace_group_members(group, user_ids)
+        self._reconcile_bound_external_ids(external_id)
         return group
 
     def apply_group_mutations(self, group: ScimGroup, payload: dict[str, Any]) -> None:
+        old_external_id = group.external_id or ""
         display_name = self._extract_display_name(payload)
         external_id = self._extract_external_id(payload)
         has_external_id = "externalId" in payload
+        next_external_id = external_id if has_external_id else old_external_id
+        next_user_ids = (
+            self._extract_group_member_user_ids(payload)
+            if "members" in payload
+            else [member.user_id for member, _ in self.repo.scim_group_member.get_users_by_group(group)]
+        )
+        self._validate_project_role_members(next_external_id, next_user_ids)
 
         if display_name and display_name != group.display_name:
             group.display_name = display_name
@@ -276,12 +503,14 @@ class ScimProvisioningService(BaseDomainService):
 
         self.repo.scim_group.update(group)
         if "members" in payload:
-            new_user_ids = self._extract_group_member_user_ids(payload)
-            self.repo.scim_group_member.replace_group_members(group, new_user_ids)
+            self.repo.scim_group_member.replace_group_members(group, next_user_ids)
+        self._reconcile_bound_external_ids(old_external_id, group.external_id or "")
 
     def delete_group(self, group: ScimGroup) -> None:
+        old_external_id = group.external_id or ""
         self.repo.scim_group_member.delete_all_by_group(group)
         self.repo.scim_group.delete(group, purge=True)
+        self._reconcile_bound_external_ids(old_external_id)
 
     def normalize_patch_payload(self, operations: list[dict[str, Any]]) -> dict[str, Any]:
         payload: dict[str, Any] = {}
@@ -396,6 +625,137 @@ class ScimProvisioningService(BaseDomainService):
             issuer=Env.SCIM_ISSUER or None,
             email=email,
         )
+
+    def _parse_project_role_external_id(self, external_id: str) -> tuple[str, str] | None:
+        parts = str(external_id or "").strip().split(":")
+        if not parts or parts[0] != self.PROJECT_ROLE_GROUP_PREFIX:
+            return None
+        if len(parts) != 3 or not parts[1] or parts[2] not in self.PROJECT_ROLE_KEYS:
+            raise ScimProvisioningException.InvalidRequest()
+        return parts[1], parts[2]
+
+    def _resolve_project_role_external_id(self, external_id: str) -> tuple[Project, str] | None:
+        parsed = self._parse_project_role_external_id(external_id)
+        if not parsed:
+            return None
+        project = InfraHelper.get_by_id_like(Project, parsed[0])
+        if not project:
+            raise ScimProvisioningException.InvalidRequest()
+        return project, parsed[1]
+
+    def _project_role_external_id(self, project: Project, role_key: str) -> str:
+        return f"{self.PROJECT_ROLE_GROUP_PREFIX}:{project.get_uid()}:{role_key}"
+
+    def _is_current_scim_user(self, user: User) -> bool:
+        link = self._get_service(IdentityLinkService).get_by_user_provider(user, IdentityProvider.Scim)
+        if not link:
+            return False
+        expected_issuer = (Env.SCIM_ISSUER or "").rstrip("/")
+        return bool(expected_issuer) and (link.issuer or "").rstrip("/") == expected_issuer
+
+    def _validate_project_role_members(self, external_id: str, user_ids: list[SnowflakeID]) -> None:
+        if not self._resolve_project_role_external_id(external_id):
+            return
+        for user_id in user_ids:
+            user = InfraHelper.get_by_id_like(User, user_id)
+            if not user or not self._is_current_scim_user(user):
+                raise ScimProvisioningException.InvalidRequest()
+
+    def _bound_projects_for_user(self, user: User) -> list[Project]:
+        projects: dict[SnowflakeID, Project] = {}
+        for _, group in self.repo.scim_group_member.get_groups_by_user(user, consistent=True):
+            binding = self._resolve_project_role_external_id(group.external_id or "")
+            if binding:
+                projects[binding[0].id] = binding[0]
+        return list(projects.values())
+
+    def _reconcile_bound_external_ids(self, *external_ids: str) -> None:
+        projects: dict[SnowflakeID, Project] = {}
+        for external_id in external_ids:
+            binding = self._resolve_project_role_external_id(external_id)
+            if binding:
+                projects[binding[0].id] = binding[0]
+        for project in projects.values():
+            self._reconcile_project_entitlements(project)
+
+    def _desired_project_roles(self, project: Project) -> dict[SnowflakeID, tuple[User, str]]:
+        desired: dict[SnowflakeID, tuple[User, str]] = {}
+        for role_key in self.PROJECT_ROLE_KEYS:
+            group = self.repo.scim_group.get_by_external_id(
+                self._project_role_external_id(project, role_key), consistent=True
+            )
+            if not group:
+                continue
+            for _, user in self.repo.scim_group_member.get_users_by_group(group, consistent=True):
+                if not self._is_current_scim_user(user):
+                    raise ScimProvisioningException.InvalidRequest()
+                # Iteration order is lowest to highest privilege, so the highest
+                # group wins deterministically when an upstream sends duplicates.
+                desired[user.id] = (user, role_key)
+        return desired
+
+    def _project_role_actions(self, role_key: str) -> list[str]:
+        if role_key == "viewer":
+            return [ProjectRoleAction.Read.value]
+        if role_key == "contributor":
+            return [
+                ProjectRoleAction.Read.value,
+                ProjectRoleAction.CardWrite.value,
+                ProjectRoleAction.CardUpdate.value,
+            ]
+        return ["*"]
+
+    def _reconcile_project_entitlements(self, project: Project) -> None:
+        desired = self._desired_project_roles(project)
+        assigned_rows = self.repo.project_assigned_user.get_all_by_project(project, consistent=True)
+        managed_current = {
+            user.id: user
+            for user, _ in assigned_rows
+            if user.id != project.owner_id and self._is_current_scim_user(user)
+        }
+
+        for user_id, (user, role_key) in desired.items():
+            if user_id == project.owner_id:
+                continue
+            self.repo.project_assigned_user.ensure_assigned(project, user)
+            actions = self._project_role_actions(role_key)
+            if actions == ["*"]:
+                self.repo.role.project.grant_all(user_id=user_id, project_id=project.id)
+            else:
+                self.repo.role.project.grant(actions=actions, user_id=user_id, project_id=project.id)
+
+        stale_users = [user for user_id, user in managed_current.items() if user_id not in desired]
+        if stale_users:
+            self.repo.project_assigned_user.delete_all_by_project_and_users(project, stale_users)
+
+        final_rows = self.repo.project_assigned_user.get_all_by_project(project, consistent=True)
+        final_user_ids = {user.id for user, _ in final_rows}
+        self.repo.project_user_relationship.ensure_project_relationships(project, list(final_user_ids))
+        self._verify_project_entitlements(project, desired, final_user_ids, set(managed_current))
+
+    def _verify_project_entitlements(
+        self,
+        project: Project,
+        desired: dict[SnowflakeID, tuple[User, str]],
+        final_user_ids: set[SnowflakeID],
+        previously_managed: set[SnowflakeID],
+    ) -> None:
+        for user_id, (_, role_key) in desired.items():
+            if user_id == project.owner_id:
+                continue
+            role = self.repo.role.project.get_one(user_id=user_id, project_id=project.id, consistent=True)
+            if user_id not in final_user_ids or not role:
+                raise ScimProvisioningException.Unavailable()
+            expected = self._project_role_actions(role_key)
+            if expected == ["*"]:
+                if not role.is_all_granted():
+                    raise ScimProvisioningException.Unavailable()
+            elif set(role.actions) != set(expected):
+                raise ScimProvisioningException.Unavailable()
+
+        stale_user_ids = previously_managed - set(desired) - {project.owner_id}
+        if stale_user_ids & final_user_ids:
+            raise ScimProvisioningException.Unavailable()
 
     def _extract_email(self, payload: dict[str, Any]) -> str:
         emails = payload.get("emails")

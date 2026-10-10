@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Badge from "@/components/base/Badge";
 import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
@@ -65,7 +66,7 @@ interface IBoardGraphApprovalTargetPreviewProps {
 }
 
 function BoardGraphApprovalTargetPreview({ approvals }: IBoardGraphApprovalTargetPreviewProps) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const visibleApprovals = approvals.slice(0, 4);
     const hiddenCount = approvals.length - visibleApprovals.length;
 
@@ -77,7 +78,7 @@ function BoardGraphApprovalTargetPreview({ approvals }: IBoardGraphApprovalTarge
                     {t("bot.Pending approvals")}
                 </Box>
                 <Badge variant="secondary" className="ml-auto px-2 py-0 text-[11px]">
-                    {approvals.length}
+                    {formatNumber(approvals.length, i18n.language)}
                 </Badge>
             </Flex>
             <Flex direction="col" gap="1.5">

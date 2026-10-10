@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Badge from "@/components/base/Badge";
 import Flex from "@/components/base/Flex";
 import { formatTaskMetadataValue, hasTaskMetadata, parseTaskMetadata } from "@/core/constants/TaskMetadata";
@@ -31,7 +32,7 @@ interface IBoardTaskMetadataBadgesInnerProps {
 function BoardTaskMetadataBadgesInner({ metadataRecord, className, compact }: IBoardTaskMetadataBadgesInnerProps): React.JSX.Element | null {
     const metadata = metadataRecord.useField("metadata");
     const task = parseTaskMetadata(metadata);
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
 
     if (!hasTaskMetadata(task)) {
         return null;
@@ -78,7 +79,7 @@ function BoardTaskMetadataBadgesInner({ metadataRecord, className, compact }: IB
         !compact &&
             !!task.suggestions.length && {
                 key: "suggestions",
-                label: `${t("card.Suggestions")}: ${task.suggestions.length}`,
+                label: `${t("card.Suggestions")}: ${formatNumber(task.suggestions.length, i18n.language)}`,
                 variant: "secondary" as const,
             },
     ].filter(Boolean);

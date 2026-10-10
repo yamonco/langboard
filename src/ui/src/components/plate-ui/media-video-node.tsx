@@ -60,7 +60,7 @@ export const VideoElement = withHOC(ResizableProvider, function VideoElement(pro
                             <div ref={handleRef}>
                                 <LiteYouTubeEmbed
                                     id={embed!.id!}
-                                    title="youtube"
+                                    title={t("card.YouTube video")}
                                     wrapperClass={cn(
                                         "aspect-video rounded-sm",
                                         "relative block cursor-pointer bg-black bg-cover bg-center [contain:content]",

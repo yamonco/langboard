@@ -1,0 +1,99 @@
+{
+  "My account": "내 계정",
+  "Sign out": "로그아웃",
+  "Profile": "프로필",
+  "Emails": "이메일",
+  "Add new email": "새 이메일 추가",
+  "Primary email": "기본 이메일",
+  "Primary": "기본",
+  "Sub": "추가",
+  "Unverified": "미인증",
+  "Search email...": "이메일 검색...",
+  "Resend": "다시 보내기",
+  "Groups": "그룹",
+  "Add an email...": "이메일 추가...",
+  "Add new group": "새 그룹 추가",
+  "Preferences": "환경설정",
+  "Language": "언어",
+  "errors": {
+    "You must sign in before verifying your email.": "이메일을 인증하려면 먼저 로그인해 주세요.",
+    "missing": {
+      "firstname": "이름을 입력해 주세요.",
+      "lastname": "성을 입력해 주세요.",
+      "new_email": "새 이메일 주소를 입력해 주세요.",
+      "current_password": "현재 비밀번호를 입력해 주세요.",
+      "new_password": "새 비밀번호를 입력해 주세요.",
+      "password-confirm": "새 비밀번호 확인을 입력해 주세요."
+    },
+    "invalid": {
+      "new_email": "올바른 이메일 주소를 입력해 주세요.",
+      "current_password": "현재 비밀번호가 틀렸습니다. 다시 시도해 주세요.",
+      "password-confirm": "비밀번호 확인이 일치하지 않습니다. 다시 시도해 주세요."
+    },
+    "exists": {
+      "new_email": "이미 사용 중인 이메일입니다. 다른 주소를 입력해 주세요."
+    },
+    "Invalid language.": "지원하지 않는 언어입니다."
+  },
+  "Default language": "기본 언어",
+  "Default language description": "로그인할 때 사용할 언어를 선택하세요. 변경사항은 내 계정에 저장됩니다.",
+  "secretInput": {
+    "title": "보안 시크릿 입력",
+    "help": "비밀값은 대화 대신 이 화면에서 입력합니다. 어시스턴트에는 불투명한 시크릿 참조만 전달됩니다. 요청은 10분 후 만료되며 한 번만 사용할 수 있습니다.",
+    "value": "비밀값",
+    "save": "시크릿 저장",
+    "completed": "저장했습니다. 이 페이지를 닫고 대화로 돌아가세요.",
+    "failed": "만료되었거나 이미 사용된 요청 또는 처리 실패입니다. 새 입력 링크를 요청하세요.",
+    "cancel": "요청 취소",
+    "cancelled": "취소했습니다. 시크릿은 저장하지 않았습니다.",
+    "create": "시크릿 생성",
+    "rotate": "기존 시크릿 값 교체",
+    "reason": "변경 사유"
+  },
+  "secretHistory": {
+    "title": "시크릿 변경 이력",
+    "help": "이 참조의 감사 기록입니다. 비밀값과 Vault 위치는 표시하지 않습니다.",
+    "failed": "이력을 조회할 수 없거나 접근 권한이 변경되었습니다.",
+    "empty": "아직 이력이 없습니다.",
+    "older": "이전 기록",
+    "actor": "사용자",
+    "actions": {
+      "created": "생성",
+      "resolved": "사용",
+      "renamed": "이름 변경",
+      "moved": "이동",
+      "revoked": "폐기",
+      "rotated": "값 교체",
+      "bound": "연결됨",
+      "migrated": "저장소 이전",
+      "copied": "복사"
+    },
+    "reasons": {
+      "user_input": "사용자의 명시 웹 입력",
+      "runtime_use": "권한이 확인된 실행 사용",
+      "reference_created": "참조 생성",
+      "reference_renamed": "참조 이름 변경",
+      "reference_moved": "참조 범위 변경",
+      "reference_revoked": "참조 폐기",
+      "value_rotated": "시크릿 값 교체",
+      "reference_bound": "권한이 확인된 앱 연결 바인딩",
+      "provider_migrated": "시크릿 저장소 변경",
+      "integration_setup": "연동 설정",
+      "routine_rotation": "정기 비밀값 교체",
+      "credential_expired": "만료된 비밀값 교체",
+      "security_response": "보안 대응",
+      "reference_copied": "동일 권한 범위의 명시적 시크릿 복사"
+    },
+    "openSource": "원본 카드 열기",
+    "openSourceWiki": "원본 위키 열기"
+  },
+  "secretCopy": {
+    "title": "시크릿 복사",
+    "help": "같은 권한 범위에 독립된 시크릿을 만듭니다. 비밀값은 보안 저장소에 유지됩니다.",
+    "name": "새 논리 이름",
+    "submit": "복사본 만들기",
+    "completed": "복사본을 만들었습니다. 원본은 유지됩니다.",
+    "open": "복사본 이력 열기",
+    "failed": "복사 결과를 확인하지 못했습니다. 이름 중복 또는 권한·버전 변경일 수 있습니다. 재시도 전 이력을 확인하고, 닫고 다시 열어 원본을 갱신하세요."
+  }
+}

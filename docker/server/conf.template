@@ -20,6 +20,13 @@ upstream socket_server {
 server {
     listen 8000;
 
+    location = /panel-sdk-resources.json {
+        root /usr/share/nginx/html;
+        try_files $uri =404;
+        add_header Cache-Control "no-cache";
+        add_header Access-Control-Allow-Origin "*";
+    }
+
     location = /index.html {
         root /usr/share/nginx/html;
         add_header Cache-Control "no-cache";
@@ -29,6 +36,8 @@ server {
         root /usr/share/nginx/html;
         try_files $uri =404;
         add_header Cache-Control "public, max-age=31536000, immutable";
+        # Public immutable UI modules/CSS only; never credentialed API responses.
+        add_header Access-Control-Allow-Origin "*";
     }
 
     location / {

@@ -3,7 +3,6 @@ import { useBoardCard } from "@/core/providers/BoardCardProvider";
 import { memo } from "react";
 import BoardCardActionActivity from "@/pages/BoardPage/components/card/action/BoardCardActionActivity";
 import BoardCardActionShare from "@/pages/BoardPage/components/card/action/BoardCardActionShare";
-import BoardCardActionSetLabel from "@/pages/BoardPage/components/card/action/label/BoardCardActionSetLabel";
 import BoardCardActionRelationship from "@/pages/BoardPage/components/card/action/relationship/BoardCardActionRelationship";
 import BoardCardActionAddChecklist from "@/pages/BoardPage/components/card/action/checklist/BoardCardActionAddChecklist";
 import BoardCardActionArchive from "@/pages/BoardPage/components/card/action/BoardCardActionArchive";
@@ -32,21 +31,22 @@ const BoardCardActionList = memo(() => {
     const { card, currentUser, hasRoleAction } = useBoardCard();
     const isAdmin = currentUser.useField("is_admin");
     const archivedAt = card.useField("archived_at");
+    const visibility = card.useField("visibility");
+    const canDelete = card.useField("can_delete");
 
     return (
         <>
-            <BoardCardActionSetLabel buttonClassName={sharedButtonClassName} />
-            <BoardCardActionBotScope buttonClassName={sharedButtonClassName} />
+            {visibility !== "PRIVATE" && <BoardCardActionBotScope buttonClassName={sharedButtonClassName} />}
             <BoardCardActionRelationship buttonClassName={`${sharedButtonClassName} sm:hidden`} />
             <BoardCardActionAttachFile buttonClassName={sharedButtonClassName} />
             <BoardCardActionAddChecklist buttonClassName={sharedButtonClassName} />
             <BoardCardActionMetadata buttonClassName={sharedButtonClassName} />
             <BoardCardActionActivity buttonClassName={sharedButtonClassName} />
-            <BoardCardActionShare buttonClassName={sharedButtonClassName} />
+            {visibility !== "PRIVATE" && <BoardCardActionShare buttonClassName={sharedButtonClassName} />}
             {!archivedAt && (hasRoleAction(ProjectRole.EAction.CardUpdate) || isAdmin) ? (
                 <BoardCardActionArchive buttonClassName={sharedButtonClassName} />
             ) : null}
-            {!!archivedAt && (hasRoleAction(ProjectRole.EAction.CardDelete) || isAdmin) ? (
+            {!!archivedAt && canDelete && (hasRoleAction(ProjectRole.EAction.CardDelete) || isAdmin) ? (
                 <BoardCardActionDelete buttonClassName={sharedButtonClassName} />
             ) : null}
         </>

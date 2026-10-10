@@ -8,20 +8,104 @@ from ..domain.models import Card, Checkitem, Project, ProjectColumn, ProjectLabe
 @staticclass
 class CardPublisher(BaseSocketPublisher):
     @staticmethod
+    def app_signal_changed(project_uid: str):
+        """Board-scoped invalidation only; never disclose card IDs or provider evidence."""
+        CardPublisher.put_dispather(
+            {"app_signal_changed": True},
+            SocketPublishModel(
+                topic=SocketTopic.Board,
+                topic_id=project_uid,
+                event="board:app-signal:changed",
+                data_keys="app_signal_changed",
+            ),
+        )
+
+    @staticmethod
+    def read_state_changed(card: Card, user: User):
+        """Invalidate read receipts without changing content timestamps."""
+        shared = card.visibility == "SHARED"
+        CardPublisher.put_dispather(
+            {"read_state_changed": True},
+            SocketPublishModel(card_uids=[card.get_uid()], topic=SocketTopic.Board if shared else SocketTopic.UserPrivate,
+                               topic_id=card.project_id.to_short_code() if shared else user.get_uid(),
+                               event=f"board:card:details:changed:{card.get_uid()}", data_keys="read_state_changed"),
+        )
+
+    @staticmethod
+    def execution_receipt_changed(card: Card):
+        """Invalidate committed receipt history without broadcasting execution evidence."""
+        CardPublisher.put_dispather(
+            {"execution_receipt_changed": True},
+            SocketPublishModel(
+                card_uids=[card.get_uid()],
+                topic=SocketTopic.Board,
+                topic_id=card.project_id.to_short_code(),
+                event=f"board:card:details:changed:{card.get_uid()}",
+                data_keys="execution_receipt_changed",
+            ),
+        )
+
+    @staticmethod
+    def metadata_changed(card: Card):
+        """Publish persisted timestamps after nested card mutations."""
+        CardPublisher.put_dispather(
+            {"updated_at": card.updated_at.isoformat()},
+            SocketPublishModel(
+                card_uids=[card.get_uid()],
+                topic=SocketTopic.Board,
+                topic_id=card.project_id.to_short_code(),
+                event=f"board:card:details:changed:{card.get_uid()}",
+                data_keys="updated_at",
+            ),
+        )
+
+    @staticmethod
+    def linked_resource_changed(project: Project, card: Card):
+        """Invalidate a linked card without publishing protected source data."""
+
+        model = {"uid": card.get_uid()}
+        event = f"board:card:linked-resource:changed:{card.get_uid()}"
+        CardPublisher.put_dispather(
+            model,
+            [
+                SocketPublishModel(
+                    card_uids=[card.get_uid()],
+                    topic=SocketTopic.Board,
+                    topic_id=project.get_uid(),
+                    event=event,
+                    data_keys="uid",
+                ),
+                SocketPublishModel(
+                    card_uids=[card.get_uid()],
+                    topic=SocketTopic.BoardCard,
+                    topic_id=card.get_uid(),
+                    event=event,
+                    data_keys="uid",
+                ),
+            ],
+        )
+
+    @staticmethod
     def created(project: Project, column: ProjectColumn, model: dict[str, Any]):
         topic_id = project.get_uid()
+        card_uid = model.get("card", {}).get("uid")
         publish_models = [
             SocketPublishModel(
+                card_uids=[card_uid] if isinstance(card_uid, str) else None,
                 topic=SocketTopic.Board,
                 topic_id=topic_id,
                 event=f"board:card:created:{column.get_uid()}",
                 data_keys="card",
             ),
             SocketPublishModel(
+                card_uids=[card_uid] if isinstance(card_uid, str) else None,
                 topic=SocketTopic.Dashboard,
                 topic_id=topic_id,
                 event=f"dashboard:card:created:{topic_id}",
-                custom_data={"project_column_uid": column.get_uid()},
+                custom_data={
+                    "project_column_uid": column.get_uid(),
+                    "source_type": model.get("card", {}).get("source_type"),
+                },
             ),
         ]
 
@@ -34,10 +118,12 @@ class CardPublisher(BaseSocketPublisher):
         checkitem_cardified_from: Checkitem | None,
         model: dict[str, Any],
     ):
+        model = {**model, "updated_at": card.updated_at.isoformat()}
         topic_id = project.get_uid()
         card_uid = card.get_uid()
         publish_models = [
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Board,
                 topic_id=topic_id,
                 event=f"board:card:details:changed:{card_uid}",
@@ -49,6 +135,7 @@ class CardPublisher(BaseSocketPublisher):
             publish_models.extend(
                 [
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.Dashboard,
                         topic_id=topic_id,
                         event=f"dashboard:card:title:changed:{topic_id}",
@@ -56,12 +143,14 @@ class CardPublisher(BaseSocketPublisher):
                         custom_data={"uid": card_uid},
                     ),
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.BoardCard,
                         topic_id=card_uid,
                         event=f"board:card:checkitem:title:changed:{checkitem_uid}",
                         data_keys="title",
                     ),
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.Dashboard,
                         topic_id=topic_id,
                         event=f"dashboard:checkitem:title:changed:{topic_id}",
@@ -84,6 +173,7 @@ class CardPublisher(BaseSocketPublisher):
             "uid": card.get_uid(),
             "order": card.order,
             "archived_at": card.archived_at,
+            "updated_at": card.updated_at.isoformat(),
         }
 
         old_column_uid = old_column.get_uid()
@@ -100,16 +190,18 @@ class CardPublisher(BaseSocketPublisher):
             publish_models.extend(
                 [
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.Board,
                         topic_id=topic_id,
                         event=f"board:card:order:changed:{new_column_uid}",
-                        data_keys=["uid", "order", "archived_at"],
+                        data_keys=["uid", "order", "archived_at", "updated_at"],
                         custom_data={
                             "move_type": "to_column",
                             "column_uid": new_column_uid,
                         },
                     ),
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.Board,
                         topic_id=topic_id,
                         event=f"board:card:order:changed:{old_column_uid}",
@@ -119,12 +211,14 @@ class CardPublisher(BaseSocketPublisher):
                         },
                     ),
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.BoardCard,
                         topic_id=card_uid,
                         event=f"board:card:order:changed:{card_uid}",
-                        data_keys=["to_column_uid", "project_column_name", "archived_at"],
+                        data_keys=["to_column_uid", "project_column_name", "archived_at", "updated_at"],
                     ),
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.Dashboard,
                         topic_id=topic_id,
                         event=f"dashboard:card:order:changed:{topic_id}",
@@ -132,6 +226,7 @@ class CardPublisher(BaseSocketPublisher):
                         custom_data={
                             "uid": card_uid,
                             "from_column_uid": old_column_uid,
+                            "source_type": card.source_type,
                         },
                     ),
                 ]
@@ -139,10 +234,11 @@ class CardPublisher(BaseSocketPublisher):
         else:
             publish_models.append(
                 SocketPublishModel(
+                    card_uids=[card.get_uid()],
                     topic=SocketTopic.Board,
                     topic_id=topic_id,
                     event=f"board:card:order:changed:{old_column_uid}",
-                    data_keys=["uid", "order"],
+                    data_keys=["uid", "order", "updated_at"],
                     custom_data={
                         "move_type": "in_column",
                         "column_uid": old_column_uid,
@@ -156,6 +252,7 @@ class CardPublisher(BaseSocketPublisher):
     def assigned_users_updated(project: Project, card: Card, users: list[User]):
         model = {"member_uids": [user.get_uid() for user in users]}
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=project.get_uid(),
             event=f"board:card:assigned-users:updated:{card.get_uid()}",
@@ -168,6 +265,7 @@ class CardPublisher(BaseSocketPublisher):
     def labels_updated(project: Project, card: Card, labels: list[ProjectLabel]):
         model = {"labels": [label.api_response() for label in labels]}
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=project.get_uid(),
             event=f"board:card:labels:updated:{card.get_uid()}",
@@ -183,17 +281,20 @@ class CardPublisher(BaseSocketPublisher):
         column_uid = card.project_column_id.to_short_code()
         publish_models: list[SocketPublishModel] = [
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Board,
                 topic_id=topic_id,
                 event=f"board:card:deleted:{card_uid}",
             ),
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Dashboard,
                 topic_id=topic_id,
                 event=f"dashboard:card:deleted:{topic_id}",
                 custom_data={
                     "uid": card_uid,
                     "project_column_uid": column_uid,
+                    "source_type": card.source_type,
                 },
             ),
         ]

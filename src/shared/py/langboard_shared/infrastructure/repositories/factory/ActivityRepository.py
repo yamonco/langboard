@@ -1,12 +1,28 @@
+from datetime import datetime
 from typing import Literal, TypeAlias, TypeVar, overload, override
+from sqlalchemy import String, and_, cast, false, literal, or_, select, union_all
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.queries.Select import SelectOfScalar
 from ....core.domain import BaseRepository
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TUserOrBotParam, TUserParam, TWikiParam
-from ....domain.models import Bot, ProjectActivity, ProjectWikiActivity, User, UserActivity
+from ....domain.models import (
+    Bot,
+    Card,
+    Project,
+    ProjectActivity,
+    ProjectAssignedUser,
+    ProjectRole,
+    ProjectWiki,
+    ProjectWikiActivity,
+    ProjectWikiAssignedUser,
+    User,
+    UserActivity,
+)
 from ....domain.models.bases import BaseActivityModel
+from ....domain.models.ProjectActivity import ProjectActivityType
+from ....domain.services.CardVisibilityPolicy import CardVisibilityContext, card_visibility_scope
 from ....helpers import InfraHelper
 
 
@@ -19,26 +35,269 @@ _TUserOrBotActivityParam: TypeAlias = User | Bot | SnowflakeID | int | str
 
 class ActivityRepository(BaseRepository[BaseActivityModel]):
     @staticmethod
+    def _activity_visibility_scope(contexts: dict[int, CardVisibilityContext]):
+        grouped: dict[CardVisibilityContext, list[int]] = {}
+        for project_id, context in contexts.items():
+            grouped.setdefault(context, []).append(project_id)
+        scopes = []
+        for context, project_ids in grouped.items():
+            card_visible = select(Card.id).where(
+                Card.id == ProjectActivity.card_id, Card.project_id == ProjectActivity.project_id,
+                Card.deleted_at.is_(None), card_visibility_scope(context),
+            ).correlate(ProjectActivity).exists()
+            scopes.append(and_(
+                ProjectActivity.project_id.in_(project_ids),
+                or_(ProjectActivity.card_id.is_(None), card_visible),
+            ))
+        return or_(false(), *scopes)
+
+    def get_scoped_project_activities(
+        self, project: Project, pagination: TimeBasedPagination, *, context: CardVisibilityContext,
+        column: TColumnParam | None = None, card: TCardParam | None = None,
+        assignee: TUserOrBotParam | None = None, only_count: bool = False,
+    ) -> tuple[list[ProjectActivity] | list[UserActivity], int] | int:
+        """Apply the same current card scope to pages and new-record counts."""
+        if not context.active or not context.project_member:
+            return 0 if only_count else ([], 0)
+        scope = "card" if card is not None else "project_column" if column is not None else "project"
+        ids = {"project": project.id}
+        if column is not None:
+            ids["project_column"] = InfraHelper.convert_id(column)
+        if card is not None:
+            ids["card"] = InfraHelper.convert_id(card)
+        model, page_query, count_query, actor_filters = self.__create_refer_activity_queries(
+            ProjectActivity, scope, assignee=assignee, **ids,
+        )
+        if model is ProjectActivity:
+            page_query = SqlBuilder.select.table(model)
+            count_query = SqlBuilder.select.count(model, model.id)
+            actor_filters = {f"{key}_id": value for key, value in ids.items()}
+        visible_card = select(Card.id).where(
+            Card.id == ProjectActivity.card_id, Card.project_id == project.id,
+            Card.deleted_at.is_(None), card_visibility_scope(context),
+        ).exists()
+        readable_activity = or_(ProjectActivity.card_id.is_(None), visible_card)
+        if model is UserActivity:
+            readable_activity = or_(
+                and_(ProjectActivity.id.is_not(None), readable_activity),
+                ProjectWikiActivity.id.is_not(None) if scope == "project" else False,
+            )
+        page_query = InfraHelper.where_recursive(page_query, model, **actor_filters).where(readable_activity)
+        count_query = InfraHelper.where_recursive(count_query, model, **actor_filters).where(
+            readable_activity, model.created_at > pagination.refer_time,
+        )
+        with DbSession.use(readonly=False) as db:
+            count = db.exec(count_query).first() or 0
+            if only_count:
+                return count
+            page_query = page_query.where(model.created_at <= pagination.refer_time).order_by(
+                model.created_at.desc(), model.id.desc(),
+            )
+            page_query = InfraHelper.paginate(page_query, pagination.page, pagination.limit)
+            return list(db.exec(page_query).all()), count
+
+    def get_card_change_page(
+        self, project: Project, limit: int, *, context: CardVisibilityContext,
+        before_activity_uid: str | None = None,
+    ) -> list[ProjectActivity]:
+        """Filter primary card visibility before keyset pagination or its sentinel."""
+        def scoped_query():
+            return SqlBuilder.select.table(ProjectActivity).join(
+                Card, Card.id == ProjectActivity.card_id,
+            ).where(
+                ProjectActivity.project_id == project.id, Card.project_id == project.id,
+                Card.deleted_at.is_(None), card_visibility_scope(context),
+            )
+
+        with DbSession.use(readonly=False) as db:
+            query = scoped_query()
+            if before_activity_uid:
+                cursor = db.exec(scoped_query().where(
+                    ProjectActivity.id == InfraHelper.convert_id(before_activity_uid),
+                )).first()
+                if cursor is None:
+                    return []
+                query = query.where(or_(
+                    ProjectActivity.created_at < cursor.created_at,
+                    and_(ProjectActivity.created_at == cursor.created_at, ProjectActivity.id < cursor.id),
+                ))
+            return list(db.exec(query.order_by(
+                ProjectActivity.created_at.desc(), ProjectActivity.id.desc(),
+            ).limit(limit + 1)).all())
+
+    def get_card_column_history(self, project: Project, card: Card) -> list[ProjectActivity]:
+        """Read the complete, ordered status path without paging unrelated activity."""
+        query = (
+            SqlBuilder.select.table(ProjectActivity)
+            .where(
+                ProjectActivity.column("project_id") == project.id,
+                ProjectActivity.column("card_id") == card.id,
+                ProjectActivity.column("activity_type").in_(
+                    [ProjectActivityType.CardCreated, ProjectActivityType.CardMoved]
+                ),
+            )
+            .order_by(ProjectActivity.column("created_at"), ProjectActivity.column("id"))
+        )
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
+
+    def get_shared_user_activities(
+        self,
+        viewer: User,
+        target: User,
+        pagination: TimeBasedPagination,
+        activity_uid: str | None = None,
+        scope: Literal["project", "wiki"] | None = None,
+        project_uid: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        *, contexts: dict[int, CardVisibilityContext],
+    ) -> list:
+        """Authorize before paging; list queries never select editing history.
+
+        Even administrators must belong to the same board as the target here.
+        This is a collaboration history endpoint, not an administrator audit feed.
+        """
+        if not contexts:
+            return []
+        queries = []
+        for kind, model in (("project", ProjectActivity), ("wiki", ProjectWikiActivity)):
+            if scope and kind != scope:
+                continue
+            columns = [
+                model.column("id"),
+                model.column("created_at"),
+                cast(model.column("activity_type"), String).label("activity_type"),
+                literal(kind).label("scope"),
+                Project.column("id").label("project_id"),
+                Project.column("title").label("project_title"),
+            ]
+            if kind == "project":
+                columns.extend([Card.column("id").label("resource_id"), Card.column("title").label("resource_title")])
+            else:
+                columns.extend(
+                    [
+                        ProjectWiki.column("id").label("resource_id"),
+                        ProjectWiki.column("title").label("resource_title"),
+                    ]
+                )
+            if activity_uid:
+                columns.append(model.column("activity_history"))
+            query = select(*columns).join(Project, Project.column("id") == model.column("project_id"))
+            if kind == "project":
+                query = query.outerjoin(Card, Card.column("id") == ProjectActivity.column("card_id"))
+                query = query.where(self._activity_visibility_scope(contexts))
+            else:
+                query = query.join(
+                    ProjectWiki, ProjectWiki.column("id") == ProjectWikiActivity.column("project_wiki_id")
+                )
+                query = query.where(ProjectWiki.column("deleted_at").is_(None), ProjectWikiActivity.project_id.in_(list(contexts)))
+            query = query.where(
+                model.column("user_id") == target.id,
+                Project.column("deleted_at").is_(None),
+                model.column("created_at") <= pagination.refer_time,
+            )
+            if project_uid:
+                query = query.where(Project.column("id") == InfraHelper.convert_id(project_uid))
+            if since:
+                query = query.where(model.column("created_at") >= since)
+            if until:
+                query = query.where(model.column("created_at") < until)
+            for person in (viewer, target):
+                membership = (
+                    select(ProjectAssignedUser.column("id"))
+                    .where(
+                        ProjectAssignedUser.column("project_id") == Project.column("id"),
+                        ProjectAssignedUser.column("user_id") == person.id,
+                    )
+                    .exists()
+                )
+                query = query.where(membership)
+                if not person.is_admin:
+                    actions = literal(",") + cast(ProjectRole.column("actions"), String) + literal(",")
+                    readable = (
+                        select(ProjectRole.column("id"))
+                        .where(
+                            ProjectRole.column("project_id") == Project.column("id"),
+                            ProjectRole.column("user_id") == person.id,
+                            or_(actions.contains(",read,"), actions.contains(",*,")),
+                        )
+                        .exists()
+                    )
+                    query = query.where(or_(Project.column("owner_id") == person.id, readable))
+                if kind == "wiki" and not person.is_admin:
+                    assigned = (
+                        select(ProjectWikiAssignedUser.column("id"))
+                        .where(
+                            ProjectWikiAssignedUser.column("project_wiki_id") == ProjectWiki.column("id"),
+                            ProjectWikiAssignedUser.column("user_id") == person.id,
+                        )
+                        .exists()
+                    )
+                    query = query.where(
+                        or_(
+                            ProjectWiki.column("is_public").is_(True),
+                            Project.column("owner_id") == person.id,
+                            assigned,
+                        )
+                    )
+            if activity_uid:
+                query = query.where(model.column("id") == InfraHelper.convert_id(activity_uid))
+            queries.append(query)
+        combined = union_all(*queries).subquery()
+        statement = select(combined).order_by(combined.c.created_at.desc(), combined.c.id.desc())
+        if not activity_uid:
+            statement = statement.offset((pagination.page - 1) * pagination.limit).limit(pagination.limit + 1)
+        else:
+            statement = statement.limit(1)
+        with DbSession.use(readonly=False) as db:
+            return list(db.exec(statement).all())
+
+    @staticmethod
     @override
     def name() -> str:
         return "activity"
 
-    @overload
     def get_list_by_user(
-        self, user: TUserParam, pagination: TimeBasedPagination, only_count: Literal[False] = False
-    ) -> tuple[list[UserActivity], int]: ...
-    @overload
-    def get_list_by_user(self, user: TUserParam, pagination: TimeBasedPagination, only_count: Literal[True]) -> int: ...
-    def get_list_by_user(
-        self, user: TUserParam, pagination: TimeBasedPagination, only_count: bool = False
+        self, user: TUserParam, pagination: TimeBasedPagination, only_count: bool = False,
+        *, contexts: dict[int, CardVisibilityContext],
     ) -> tuple[list[UserActivity], int] | int:
+        """Revalidate referenced workspace/card access before page and count queries."""
+        if not contexts:
+            return 0 if only_count else ([], 0)
         user_id = InfraHelper.convert_id(user)
-
-        if only_count:
-            return self.__count_new_records(UserActivity, pagination.refer_time, user_id=user_id)
-
-        result = self.__get_list(UserActivity, pagination, user_id=user_id)
-        return result
+        wiki_assigned = select(ProjectWikiAssignedUser.id).where(
+            ProjectWikiAssignedUser.project_wiki_id == ProjectWiki.id,
+            ProjectWikiAssignedUser.user_id == user_id,
+        ).exists()
+        wiki_scope = and_(
+            ProjectWikiActivity.project_id.in_(list(contexts)), ProjectWiki.deleted_at.is_(None),
+            ProjectWiki.project_id == ProjectWikiActivity.project_id,
+            or_(ProjectWiki.is_public.is_(True), Project.owner_id == user_id, wiki_assigned),
+        )
+        def scoped(query):
+            return query.outerjoin(ProjectActivity, and_(
+                UserActivity.refer_activity_table == ProjectActivity.__tablename__,
+                UserActivity.refer_activity_id == ProjectActivity.id,
+            )).outerjoin(ProjectWikiActivity, and_(
+                UserActivity.refer_activity_table == ProjectWikiActivity.__tablename__,
+                UserActivity.refer_activity_id == ProjectWikiActivity.id,
+            )).outerjoin(ProjectWiki, ProjectWiki.id == ProjectWikiActivity.project_wiki_id).outerjoin(
+                Project, Project.id == ProjectWikiActivity.project_id,
+            ).where(
+                UserActivity.user_id == user_id,
+                or_(self._activity_visibility_scope(contexts), wiki_scope),
+            )
+        with DbSession.use(readonly=False) as db:
+            count = db.exec(scoped(SqlBuilder.select.count(UserActivity, UserActivity.id)).where(
+                UserActivity.created_at > pagination.refer_time,
+            )).first() or 0
+            if only_count:
+                return count
+            query = scoped(SqlBuilder.select.table(UserActivity)).where(
+                UserActivity.created_at <= pagination.refer_time,
+            ).order_by(UserActivity.created_at.desc(), UserActivity.id.desc())
+            return list(db.exec(InfraHelper.paginate(query, pagination.page, pagination.limit)).all()), count
 
     @overload
     def get_list_by_project(

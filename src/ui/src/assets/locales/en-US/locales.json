@@ -1,4 +1,7 @@
 {
   "title": "Locales",
-  "en-US": "English (US)"
+  "en-US": "English (US)",
+  "ko-KR": "한국어",
+  "ja-JP": "日本語",
+  "zh-CN": "简体中文"
 }

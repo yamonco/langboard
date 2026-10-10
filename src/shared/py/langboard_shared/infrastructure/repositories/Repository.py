@@ -12,6 +12,14 @@ class Repository(Factory):
         return self._create_or_get_product(factory.ProjectRepository)
 
     @property
+    def workflow_stage(self):
+        return self._create_or_get_product(factory.WorkflowStageRepository)
+
+    @property
+    def global_label(self):
+        return self._create_or_get_product(factory.GlobalLabelRepository)
+
+    @property
     def project_template(self):
         return self._create_or_get_product(factory.ProjectTemplateRepository)
 
@@ -50,6 +58,10 @@ class Repository(Factory):
     @property
     def card_attachment(self):
         return self._create_or_get_product(factory.CardAttachmentRepository)
+
+    @property
+    def card_content_block(self):
+        return self._create_or_get_product(factory.CardContentBlockRepository)
 
     @property
     def card_comment(self):
@@ -140,6 +152,14 @@ class Repository(Factory):
         return self._create_or_get_product(factory.UserEmailRepository)
 
     @property
+    def user_card_read_state(self):
+        return self._create_or_get_product(factory.UserCardReadStateRepository)
+
+    @property
+    def card_verification(self):
+        return self._create_or_get_product(factory.CardVerificationRepository)
+
+    @property
     def project_assigned_user(self):
         return self._create_or_get_product(factory.ProjectAssignedUserRepository)
 
@@ -154,6 +174,10 @@ class Repository(Factory):
     @property
     def scim_group(self):
         return self._create_or_get_product(factory.ScimGroupRepository)
+
+    @property
+    def organization(self):
+        return self._create_or_get_product(factory.OrganizationRepository)
 
     @property
     def scim_group_member(self):

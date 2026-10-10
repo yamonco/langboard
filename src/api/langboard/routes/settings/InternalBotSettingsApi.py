@@ -15,10 +15,13 @@ from langboard_shared.core.routing import (
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.domain.models import InternalBot, SettingRole
+from langboard_shared.domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
+from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.SettingRole import SettingRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import RoleFinder
+from langboard_shared.tasks.docling.DocumentEmbedding import validate_embedding_config
 from .Form import CreateInternalBotForm, UpdateInternalBotForm
 
 
@@ -56,6 +59,14 @@ def create_internal_bot(
 ) -> JsonResponse:
     if not validate_bot_form(form):
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
+
+    if form.bot_type == InternalBotType.DocumentEmbedding:
+        if form.platform != BotPlatform.Default or form.platform_running_type != BotPlatformRunningType.Default:
+            raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
+        try:
+            validate_embedding_config(form.value)
+        except (ValueError, TypeError):
+            raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from None
 
     file_model = Storage.upload(avatar, StorageName.InternalBot) if avatar else None
     internal_bot = service.internal_bot.create(
@@ -146,6 +157,15 @@ def update_internal_bot(
         raise ApiException.NotFound_404(ApiErrorCode.NF3004)
 
     form_dict = form.model_dump()
+    if internal_bot.bot_type == InternalBotType.DocumentEmbedding:
+        platform = form.platform or internal_bot.platform
+        running_type = form.platform_running_type or internal_bot.platform_running_type
+        if platform != BotPlatform.Default or running_type != BotPlatformRunningType.Default:
+            raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
+        try:
+            validate_embedding_config(form.value if form.value is not None else internal_bot.value)
+        except (ValueError, TypeError):
+            raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from None
     file_model = Storage.upload(avatar, StorageName.InternalBot) if avatar else None
     if file_model:
         form_dict["avatar"] = file_model

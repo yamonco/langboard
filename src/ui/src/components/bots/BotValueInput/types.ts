@@ -17,6 +17,7 @@ export type TBotValueDefaultInputRefLike = {
 export type TSharedBotValueInputProps = Omit<IBotValueInputProps, "valueType">;
 
 export interface IBotValueInputProps {
+    purpose?: "chat" | "embedding";
     collaborationType?: TEditorCollaborationType;
     currentUser: AuthUser.TModel;
     platform: EBotPlatform;

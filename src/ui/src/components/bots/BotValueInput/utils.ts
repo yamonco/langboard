@@ -56,6 +56,12 @@ export const showableDefaultInputs: Partial<Record<EBotPlatform, Partial<Record<
 
 export const providerIconMap: Record<TAgentModelName, keyof TSVGIconMap> = {
     OpenAI: "OpenAI",
+    "OpenAI Compatible": "OpenAI",
+    "Z.ai": "OpenAI",
+    "Z.ai Coding Plan": "OpenAI",
+    OpenRouter: "OpenAI",
+    LiteLLM: "OpenAI",
+    Kimi: "OpenAI",
     "Azure OpenAI": "Azure",
     Groq: "Groq",
     Anthropic: "Anthropic",

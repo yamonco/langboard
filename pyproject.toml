@@ -13,7 +13,6 @@ dependencies = [
     "anyio>=4.11.0",
     "argcomplete>=3.6.3",
     "bcrypt<=5.0.0",
-    "boto3>=1.40.61",
     "celery>=5.5.3",
     "cryptocode>=0.1",
     "fastapi==0.139.2",
@@ -22,33 +21,31 @@ dependencies = [
     "inflect>=7.5.0",
     "kafka-python>=2.2.15",
     "langboard-shared",
-    "fastmcp==4.0.0b3",
+    "fastmcp==4.0.10",
     "orjson>=3.11.0",
     "psutil>=7.1.2",
     "psycopg[binary]>=3.2.12",
     "pydantic>=2.10.0,<2.20.0",
     "pyjwt>=2.10.1",
-    "python-crontab>=3.3.0",
+    "python-crontab[cron-schedule]>=3.3.0",
     "python-multipart>=0.0.20,<0.1.0",
     "sqlalchemy>=2.0.41,<2.0.50",
     "pyyaml>=6.0.3",
     "redis>=5.2.1,<6.0.0",
     "requests>=2.32.5",
     "rich<=14.2.0",
-    "sentry-sdk[fastapi]>=2.43.0",
+    "sentry-sdk[fastapi]>=2.68.1",
     "uvicorn[standard]>=0.38.0",
-    "azure-keyvault-keys>=4.11.0",
-    "azure-identity>=1.25.1",
     "hvac>=2.4.0",
 ]
 
 
 [project.optional-dependencies]
-# Document conversion runs only in the broker worker. Keeping it out of the
-# API runtime avoids shipping Torch/CUDA into every web worker.
-document-processing = [
-    "docling>=2.105.0",
-]
+aws = ["langboard-shared[aws]"]
+azure-vault = ["langboard-shared[azure-vault]"]
+# Structured document types and CPU-only PDF rendering; no inference weights.
+document-processing = ["langboard-shared[document-processing]"]
+document-retrieval = ["langboard-shared[document-retrieval]"]
 
 
 [dependency-groups]
@@ -66,6 +63,7 @@ link-mode = "copy"
 
 [tool.uv.sources]
 langboard-shared = { path = "./src/shared/py", editable = true }
+langboard-sdk = { path = "./src/sdk/vendor/langboard_sdk-0.2.12-py3-none-any.whl" }
 langboard = { workspace = true }
 
 
@@ -75,6 +73,7 @@ members = ["."]
 
 [tool.hatch.build.targets.wheel]
 packages = ["./src/api/langboard"]
+exclude = ["**/*_test.py"]
 
 
 [project.scripts]
@@ -83,8 +82,13 @@ langboard = "langboard.CLI:execute"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-testpaths = ["src/api/tests"]
-python_files = ["test_*.py"]
+testpaths = [
+    "src/api/tests",
+    "src/api/langboard/wiki_workspace",
+    "src/api/langboard/migrations/card_comment_anchor_migration_test.py",
+    "src/shared/py/langboard_shared/domain/models/card_comment_anchor_test.py",
+]
+python_files = ["test_*.py", "*_test.py"]
 console_output_style = "progress"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

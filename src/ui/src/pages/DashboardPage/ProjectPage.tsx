@@ -1,9 +1,8 @@
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
 import { useDashboard } from "@/core/providers/DashboardProvider";
-import ProjectTabs from "@/pages/DashboardPage/components/ProjectTabs";
+import ProjectDiscoveryPage from "@/pages/DashboardPage/components/ProjectDiscoveryPage";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
-import { TProjectTab } from "@/pages/DashboardPage/constants";
 import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -12,12 +11,11 @@ import useUserProjectAssignedHandlers from "@/controllers/socket/user/useUserPro
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 
 interface IProjectPageProps {
-    currentTab: TProjectTab;
     updateStarredProjects: React.DispatchWithoutAction;
     scrollAreaUpdater: [number, React.DispatchWithoutAction];
 }
 
-const ProjectPage = memo(({ currentTab, updateStarredProjects, scrollAreaUpdater }: IProjectPageProps): React.JSX.Element => {
+const ProjectPage = memo(({ updateStarredProjects, scrollAreaUpdater }: IProjectPageProps): React.JSX.Element => {
     const navigate = usePageNavigateRef();
     const { setPageAliasRef } = usePageHeader();
     const { currentUser, socket } = useDashboard();
@@ -51,7 +49,7 @@ const ProjectPage = memo(({ currentTab, updateStarredProjects, scrollAreaUpdater
 
     useEffect(() => {
         setPageAliasRef.current("Dashboard");
-    }, []);
+    }, [setPageAliasRef]);
 
     useEffect(() => {
         if (error) {
@@ -86,11 +84,13 @@ const ProjectPage = memo(({ currentTab, updateStarredProjects, scrollAreaUpdater
     useSwitchSocketHandlers({ socket, handlers: projectAssignedHandlers, dependencies: [projectAssignedHandlers] });
 
     return (
-        <ProjectTabs
-            currentTab={currentTab}
+        <ProjectDiscoveryPage
+            userUID={currentUser.uid}
             projectsData={data}
             isProjectsFetching={isFetching}
             isProjectsLoading={isLoading}
+            hasProjectsError={!!error}
+            onRetryProjects={reloadProjects}
             updateStarredProjects={updateStarredProjects}
             scrollAreaUpdater={scrollAreaUpdater}
         />

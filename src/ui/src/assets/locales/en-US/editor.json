@@ -1,4 +1,8 @@
 {
+  "Add an audio file": "Add an audio file",
+  "Add a file": "Add a file",
+  "Add an image": "Add an image",
+  "Add a video": "Add a video",
   "Accept": "Accept",
   "Cancel": "Cancel",
   "Continue writing": "Continue writing",
@@ -130,6 +134,7 @@
   "Loading...": "Loading...",
   "Rendering...": "Rendering...",
   "Preview will appear here": "Preview will appear here",
+  "Navigate description": "Go to description {{position, number}} of {{total, number}}",
   "Show less": "Show less",
   "Show more": "Show more",
   "Show all": "Show all",
@@ -176,5 +181,7 @@
     "upload": {
       "unknown": "Something went wrong, please try again later."
     }
-  }
+  },
+  "Auto": "Auto",
+  "Plain Text": "Plain Text"
 }

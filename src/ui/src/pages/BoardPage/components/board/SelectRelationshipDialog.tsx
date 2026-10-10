@@ -1,4 +1,3 @@
-import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Dialog from "@/components/base/Dialog";
 import Flex from "@/components/base/Flex";
@@ -6,8 +5,8 @@ import ScrollArea from "@/components/base/ScrollArea";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { useBoard } from "@/core/providers/BoardProvider";
 import { useBoardController } from "@/core/providers/BoardController";
-import { cn } from "@/core/utils/ComponentUtils";
 import { IBoardColumnCardContextParams } from "@/pages/BoardPage/components/board/BoardConstants";
+import RelationshipTypePicker from "@/pages/BoardPage/components/board/RelationshipTypePicker";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -61,32 +60,12 @@ const SelectRelationshipDialog = memo(({ isOpened, setIsOpened }: ISelectRelatio
                 </Flex>
                 <ScrollArea.Root className="border">
                     <Flex direction="col" position="relative" textSize="sm" className="h-[min(theme(spacing.48),35vh)] select-none">
-                        {globalRelationshipTypes.map((relationship) => {
-                            const relationshipName = isParent ? relationship.parent_name : relationship.child_name;
-                            return (
-                                <Button
-                                    key={relationship.uid}
-                                    type="button"
-                                    variant="ghost"
-                                    title={relationshipName}
-                                    className={cn(
-                                        "justify-start rounded-none border-b p-0",
-                                        selectedRelationshipUID === relationship.uid && "bg-accent/70 text-accent-foreground"
-                                    )}
-                                    onClick={() => {
-                                        if (selectedRelationshipUID === relationship.uid) {
-                                            updateSelectedRelationshipUID(undefined);
-                                            return;
-                                        }
-                                        updateSelectedRelationshipUID(relationship.uid);
-                                    }}
-                                >
-                                    <Box py="1" px="2" className="truncate">
-                                        {relationshipName}
-                                    </Box>
-                                </Button>
-                            );
-                        })}
+                        <RelationshipTypePicker
+                            types={globalRelationshipTypes}
+                            selectedUid={selectedRelationshipUID}
+                            isParent={isParent}
+                            onSelect={(uid) => updateSelectedRelationshipUID(selectedRelationshipUID === uid ? undefined : uid)}
+                        />
                     </Flex>
                 </ScrollArea.Root>
                 <Flex items="center" justify="end" gap="1" mt="2">

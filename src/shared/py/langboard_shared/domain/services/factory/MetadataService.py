@@ -1,13 +1,35 @@
 from typing import Any, Literal, Sequence, TypeVar, overload
 from ....core.db import BaseDbModel
 from ....core.domain import BaseDomainService
+from ....core.types.ParamTypes import TUserOrBot
+from ...constants.CardPresentation import CARD_PRESENTATION_KEY, validate_card_presentation
+from ...models import Card, CardMetadata
 from ...models.bases import BaseMetadataModel
+from ..CardAppMutation import guard_card_app_mutation
 
 
 _TMetadata = TypeVar("_TMetadata", bound=BaseMetadataModel)
 
 
 class MetadataService(BaseDomainService):
+    @guard_card_app_mutation
+    def save_card(self, user_or_bot: TUserOrBot, project, card: Card, key: str, value: str,
+                  old_key: str | None = None, *, internal: bool = False):
+        """Authenticated card write boundary; internal keys do not bypass ownership."""
+        if card.project_id != project.id:
+            raise ValueError("Card not found in project")
+        return self.save(CardMetadata, card, key, value, old_key, internal=internal)
+
+    @guard_card_app_mutation
+    def delete_card(self, user_or_bot: TUserOrBot, project, card: Card, keys: str | list[str]) -> bool:
+        if card.project_id != project.id:
+            raise ValueError("Card not found in project")
+        return self.delete(CardMetadata, card, keys)
+
+    @staticmethod
+    def _is_work_plan_receipt(key: str) -> bool:
+        return key.strip().lower().startswith("internal.work_plan.")
+
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
@@ -38,7 +60,11 @@ class MetadataService(BaseDomainService):
     ) -> list[dict[str, Any]] | dict[str, Any]:
         """Return metadata, optionally enforcing a repository row limit."""
 
+        if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
+            return {} if as_dict else []
+
         metadata_list = self.repo.metadata.get_list(model, foreign_model, limit=limit)
+        metadata_list = [m for m in metadata_list if not self._is_work_plan_receipt(m.key)]
         if not as_dict:
             return [metadata.api_response() for metadata in metadata_list]
 
@@ -50,11 +76,18 @@ class MetadataService(BaseDomainService):
     def get_all_by_foreign_models_as_api(
         self, model: type[_TMetadata], foreign_key: str, foreign_models: Sequence[BaseDbModel]
     ) -> dict[str, dict[str, str]]:
+        foreign_models = [
+            foreign_model
+            for foreign_model in foreign_models
+            if not isinstance(foreign_model, Card) or not foreign_model.is_linked_resource
+        ]
         foreign_model_by_id = {int(foreign_model.id): foreign_model for foreign_model in foreign_models}
         foreign_ids = list(foreign_model_by_id.keys())
         metadata_list = self.repo.metadata.get_by_foreign_ids(model, foreign_key, foreign_ids)
         records: dict[int, dict[str, str]] = {}
         for data in metadata_list:
+            if self._is_work_plan_receipt(data.key):
+                continue
             foreign_id = int(getattr(data, foreign_key))
             if foreign_id not in records:
                 records[foreign_id] = {}
@@ -66,15 +99,38 @@ class MetadataService(BaseDomainService):
             if foreign_id in foreign_model_by_id
         }
 
-    def get_by_key_as_api(self, model: type[_TMetadata], foreign_model: BaseDbModel, key: str) -> dict[str, Any] | None:
+    def get_by_key_as_api(
+        self, model: type[_TMetadata], foreign_model: BaseDbModel, key: str, *, internal: bool = False
+    ) -> dict[str, Any] | None:
+        if self._is_work_plan_receipt(key) and not internal:
+            return None
+        if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
+            return None
         metadata = self.repo.metadata.get_by_key(model, foreign_model, key)
         return metadata.api_response() if metadata else None
 
     def save(
-        self, model: type[_TMetadata], foreign_model: BaseDbModel, key: str, value: str, old_key: str | None = None
+        self,
+        model: type[_TMetadata],
+        foreign_model: BaseDbModel,
+        key: str,
+        value: str,
+        old_key: str | None = None,
+        *,
+        internal: bool = False,
     ) -> _TMetadata | None:
+        if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
+            return None
+        if not internal and any(self._is_work_plan_receipt(k) for k in (key, old_key) if k is not None):
+            raise ValueError("Work plan receipt metadata is server-owned")
+        if isinstance(foreign_model, Card) and key == CARD_PRESENTATION_KEY:
+            validate_card_presentation(value)
         metadata = self.repo.metadata.save(model, foreign_model, key, value, old_key)
         return metadata
 
     def delete(self, model: type[_TMetadata], foreign_model: BaseDbModel, keys: str | list[str]) -> bool:
+        if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
+            return False
+        if any(self._is_work_plan_receipt(k) for k in ([keys] if isinstance(keys, str) else keys)):
+            raise ValueError("Work plan receipt metadata is server-owned")
         return self.repo.metadata.delete_keys(model, foreign_model, keys)

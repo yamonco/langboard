@@ -8,6 +8,8 @@ export interface Interface extends IBaseModel {
     relationship_type_uid: string;
     parent_card_uid: string;
     child_card_uid: string;
+    machine_semantic?: "contains" | "blocks" | "references" | null;
+    affects_readiness?: boolean;
 }
 
 class ProjectCardRelationship extends BaseModel<Interface> {
@@ -17,6 +19,14 @@ class ProjectCardRelationship extends BaseModel<Interface> {
 
     public get relationship_type_uid() {
         return this.getValue("relationship_type_uid");
+    }
+
+    public get machine_semantic() {
+        return this.getValue("machine_semantic");
+    }
+
+    public get affects_readiness() {
+        return this.getValue("affects_readiness");
     }
     public set relationship_type_uid(value) {
         this.update({ relationship_type_uid: value });

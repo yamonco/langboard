@@ -1,0 +1,99 @@
+{
+  "My account": "マイアカウント",
+  "Sign out": "ログアウト",
+  "Profile": "プロフィール",
+  "Emails": "メールアドレス",
+  "Add new email": "新しいメールアドレスを追加",
+  "Primary email": "メインのメールアドレス",
+  "Primary": "メイン",
+  "Sub": "追加",
+  "Unverified": "未確認",
+  "Search email...": "メールアドレスを検索...",
+  "Resend": "再送信",
+  "Groups": "グループ",
+  "Add an email...": "メールアドレスを追加...",
+  "Add new group": "新しいグループを追加",
+  "Preferences": "環境設定",
+  "Language": "言語",
+  "errors": {
+    "You must sign in before verifying your email.": "メールアドレスを確認する前にログインしてください。",
+    "missing": {
+      "firstname": "名を入力してください。",
+      "lastname": "姓を入力してください。",
+      "new_email": "新しいメールアドレスを入力してください。",
+      "current_password": "現在のパスワードを入力してください。",
+      "new_password": "新しいパスワードを入力してください。",
+      "password-confirm": "新しい確認用パスワードを入力してください。"
+    },
+    "invalid": {
+      "new_email": "有効なメールアドレスを入力してください。",
+      "current_password": "現在のパスワードが違います。再試行してください。",
+      "password-confirm": "確認用パスワードが一致しません。再試行してください。"
+    },
+    "exists": {
+      "new_email": "このメールアドレスは使用されています。別のアドレスを入力してください。"
+    },
+    "Invalid language.": "無効な言語です。"
+  },
+  "Default language": "既定の言語",
+  "Default language description": "ログイン時に使用する言語を選択してください。変更はアカウントに保存されます。",
+  "secretInput": {
+    "title": "安全なシークレット入力",
+    "help": "秘密の値は会話ではなくこの画面で入力します。アシスタントには不透明な参照のみを返します。要求は10分で期限切れになり、1回のみ使用できます。",
+    "value": "秘密の値",
+    "save": "シークレットを保存",
+    "completed": "保存しました。このページを閉じて会話に戻れます。",
+    "failed": "期限切れ、使用済み、または処理に失敗しました。新しい入力リンクを要求してください。",
+    "cancel": "要求をキャンセル",
+    "cancelled": "キャンセルしました。シークレットは保存されていません。",
+    "create": "シークレットを作成",
+    "rotate": "既存の秘密値を置換",
+    "reason": "変更理由"
+  },
+  "secretHistory": {
+    "title": "シークレット履歴",
+    "help": "この参照の監査記録です。秘密値やVaultの場所は表示されません。",
+    "failed": "履歴を取得できないか権限が変更されました。",
+    "empty": "履歴はまだありません。",
+    "older": "過去の記録",
+    "actor": "ユーザー",
+    "actions": {
+      "created": "作成",
+      "resolved": "使用",
+      "renamed": "名前変更",
+      "moved": "移動",
+      "revoked": "失効",
+      "rotated": "値を置換",
+      "bound": "紐付け済み",
+      "migrated": "保存先の移行",
+      "copied": "コピー"
+    },
+    "reasons": {
+      "user_input": "ユーザーの明示的なWeb入力",
+      "runtime_use": "認可済みの実行時使用",
+      "reference_created": "参照作成",
+      "reference_renamed": "参照名変更",
+      "reference_moved": "参照範囲変更",
+      "reference_revoked": "参照失効",
+      "value_rotated": "秘密値の更新",
+      "reference_bound": "認可済みのアプリ接続への紐付け",
+      "provider_migrated": "シークレット保存プロバイダー変更",
+      "integration_setup": "連携設定",
+      "routine_rotation": "定期的な認証情報の更新",
+      "credential_expired": "期限切れ認証情報の交換",
+      "security_response": "セキュリティ対応",
+      "reference_copied": "同じ権限範囲内での明示的なシークレットのコピー"
+    },
+    "openSource": "元のカードを開く",
+    "openSourceWiki": "元のWikiを開く"
+  },
+  "secretCopy": {
+    "title": "シークレットをコピー",
+    "help": "同じ権限範囲で独立したシークレットを作成します。値は安全な保管領域に保持されます。",
+    "name": "新しい論理名",
+    "submit": "コピーを作成",
+    "completed": "コピーを作成しました。元のシークレットは変更されません。",
+    "open": "コピーの履歴を開く",
+    "failed": "コピー結果を確認できませんでした。名前の重複や権限・バージョンの変更の可能性があります。再試行前に履歴を確認し、閉じて再度開いて元の情報を更新してください。"
+  }
+}

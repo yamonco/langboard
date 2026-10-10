@@ -1,11 +1,37 @@
-from sqlalchemy import func, literal, or_
+from typing import Any, Sequence
+from sqlalchemy import Text, cast, false, func, or_, select, update
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from ....core.db import DbSession, SqlBuilder
+from ....core.db.DbEngine import DbEngine
 from ....core.domain import BaseOrderRepository
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TUserParam
-from ....domain.models import Card, CardAssignedUser, CardComment, Project, ProjectColumn, ProjectRole
+from ....domain.models import (
+    Bot,
+    Card,
+    CardAssignedUser,
+    CardAttachment,
+    CardComment,
+    Project,
+    ProjectColumn,
+    ProjectRole,
+    User,
+    WorkflowStageDefinition,
+)
+from ....domain.services.CardVisibilityPolicy import CardVisibilityContext, card_visibility_scope
 from ....helpers import InfraHelper
+
+
+def _editor_search_text(column, dialect: str):
+    """Decode the existing JSON string representation before literal text matching."""
+    if dialect == "postgresql":
+        return cast(column, JSONB).op("#>>")(cast([], ARRAY(Text)))
+    if dialect == "sqlite":
+        return func.json_extract(column, "$")
+    if dialect in {"mysql", "mariadb"}:
+        return func.json_unquote(column)
+    raise ValueError("Unsupported database dialect for editor content search")
 
 
 class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
@@ -24,7 +50,89 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         return InfraHelper.get_by_id_like(Card, card)
 
-    def get_board_list(self, project: TProjectParam) -> list[tuple[Card, int]]:
+    def get_existing_uids(
+        self, project: TProjectParam, card_uids: Sequence[str], *, context: CardVisibilityContext
+    ) -> list[str]:
+        if not card_uids:
+            return []
+        if len(card_uids) > 200:
+            raise ValueError("At most 200 recent cards may be checked")
+        project_id = InfraHelper.convert_id(project)
+        card_ids = [InfraHelper.convert_id(uid) for uid in card_uids]
+        with DbSession.use(readonly=False) as db:
+            cards = db.exec(
+                SqlBuilder.select.table(Card)
+                .join(Project, Project.column("id") == Card.column("project_id"))
+                .where(Project.column("deleted_at") == None)  # noqa: E711
+                .where(Card.column("project_id") == project_id)
+                .where(Card.column("id").in_(card_ids))
+                .where(card_visibility_scope(context))
+            ).all()
+        return [card.get_uid() for card in cards]
+
+    def update_description_if_current(self, card: Card, expected_content: str) -> bool:
+        """Lock and compare the primary row before updating only its description."""
+
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(
+                SqlBuilder.select.table(Card)
+                .where((Card.column("id") == card.id) & (Card.column("project_id") == card.project_id))
+                .with_for_update()
+            ).first()
+            if current is None:
+                return False
+            content = current.description.content if current.description is not None else ""
+            if content != expected_content:
+                return False
+            updated_at = SafeDateTime.now()
+            changed = db.exec(
+                update(Card.__table__)
+                .where(Card.column("id") == card.id)
+                .values(
+                    description=card.description,
+                    updated_at=updated_at,
+                    last_change_seq=card.last_change_seq,
+                    last_change_target_type=card.last_change_target_type,
+                    last_change_target_id=card.last_change_target_id,
+                    last_change_at=card.last_change_at,
+                )
+            )
+            if changed != 1:
+                return False
+        card.updated_at = updated_at
+        card.clear_changes()
+        return True
+
+    def find_linked_resource(self, project: TProjectParam, source_type: str, source_uid: str) -> Card | None:
+        project_id = InfraHelper.convert_id(project)
+        with DbSession.use(readonly=True) as db:
+            return db.exec(
+                SqlBuilder.select.table(Card)
+                .where(Card.column("project_id") == project_id)
+                .where(Card.column("source_type") == source_type)
+                .where(Card.column("source_uid") == source_uid)
+                .limit(1)
+            ).first()
+
+    def get_linked_resource_map(
+        self,
+        project: TProjectParam,
+        source_type: str,
+        source_uids: Sequence[str],
+    ) -> dict[str, Card]:
+        if not source_uids:
+            return {}
+        project_id = InfraHelper.convert_id(project)
+        with DbSession.use(readonly=True) as db:
+            cards = db.exec(
+                SqlBuilder.select.table(Card)
+                .where(Card.column("project_id") == project_id)
+                .where(Card.column("source_type") == source_type)
+                .where(Card.column("source_uid").in_(set(source_uids)))
+            ).all()
+        return {card.source_uid: card for card in cards if card.source_uid is not None}
+
+    def get_board_list(self, project: TProjectParam, archive_visible_since: SafeDateTime, *, context: CardVisibilityContext) -> list[tuple[Card, int]]:
         project_id = InfraHelper.convert_id(project)
         comment_counts = (
             SqlBuilder.select.columns(
@@ -33,12 +141,13 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             )
             .join(Card, Card.column("id") == CardComment.column("card_id"))
             .where(Card.column("project_id") == project_id)
+            .where(Card.deleted_at.is_(None), card_visibility_scope(context))
             .group_by(CardComment.column("card_id"))
             .subquery()
         )
 
         cards = []
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             result = db.exec(
                 SqlBuilder.select.tables(
                     Card,
@@ -46,13 +155,110 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                 )
                 .outerjoin(comment_counts, Card.column("id") == comment_counts.c.card_id)
                 .where(Card.column("project_id") == project_id)
+                .where(Card.deleted_at.is_(None), card_visibility_scope(context))
+                .where(
+                    (Card.column("archived_at") == None)  # noqa: E711
+                    | (Card.column("archived_at") >= archive_visible_since)
+                )
                 .order_by(Card.column("order").asc())
             )
             cards = result.all()
 
         return cards
 
-    def get_dashboard_list_scroller(self, user: TUserParam, pagination: TimeBasedPagination):
+    def get_board_creators(
+        self,
+        project: TProjectParam,
+        archive_visible_since: SafeDateTime,
+    ) -> dict[int, User | Bot]:
+        """Resolve immutable card authors with one query instead of per-card lookups."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.tables(Card, User, Bot)
+            .outerjoin(User, Card.column("created_by_user_id") == User.column("id"))
+            .outerjoin(Bot, Card.column("created_by_bot_id") == Bot.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(
+                (Card.column("archived_at") == None)  # noqa: E711
+                | (Card.column("archived_at") >= archive_visible_since)
+            )
+        )
+
+        creators: dict[int, User | Bot] = {}
+        with DbSession.use(readonly=True) as db:
+            for card, user, bot in db.exec(query).all():
+                creator = user if user is not None else bot
+                if creator is not None:
+                    creators[card.id] = creator
+        return creators
+
+    def get_archived_page_by_project(
+        self,
+        project: TProjectParam,
+        limit: int,
+        before_archived_at: SafeDateTime | None = None,
+        before_card: TCardParam | None = None,
+        input_value: str | None = None,
+    ) -> list[tuple[Card, ProjectColumn]]:
+        """Return a bounded archived-card keyset page without entering the hot board query."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.tables(Card, ProjectColumn)
+            .join(
+                ProjectColumn,
+                (Card.column("project_column_id") == ProjectColumn.column("id"))
+                & (ProjectColumn.column("project_id") == project_id),
+            )
+            .where(Card.column("project_id") == project_id)
+            .where(Card.column("archived_at") != None)  # noqa: E711
+        )
+        if input_value:
+            escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.where(Card.column("title").ilike(f"%{escaped_input}%", escape="\\"))
+        if before_archived_at is not None:
+            if before_card is None:
+                raise ValueError("before_card is required with before_archived_at")
+            before_card_id = InfraHelper.convert_id(before_card)
+            query = query.where(
+                (Card.column("archived_at") < before_archived_at)
+                | ((Card.column("archived_at") == before_archived_at) & (Card.column("id") < before_card_id))
+            )
+        query = query.order_by(Card.column("archived_at").desc(), Card.column("id").desc()).limit(limit + 1)
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
+
+    def count_archived_by_project(self, project: TProjectParam, input_value: str | None = None) -> int:
+        """Count archived project cards, optionally applying the archive title search."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.count(Card, Card.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(Card.column("archived_at") != None)  # noqa: E711
+        )
+        if input_value:
+            escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.where(Card.column("title").ilike(f"%{escaped_input}%", escape="\\"))
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query).first() or 0
+
+    @staticmethod
+    def _work_visibility_scope(contexts: dict[int, CardVisibilityContext]):
+        grouped: dict[CardVisibilityContext, list[int]] = {}
+        for project_id, context in contexts.items():
+            grouped.setdefault(context, []).append(project_id)
+        return or_(false(), *(
+            Card.project_id.in_(project_ids) & card_visibility_scope(context)
+            for context, project_ids in grouped.items()
+        ))
+
+    def get_dashboard_list_scroller(
+        self, user: TUserParam, pagination: TimeBasedPagination, *, contexts: dict[int, CardVisibilityContext],
+    ):
+        if not contexts:
+            return []
         user_id = InfraHelper.convert_id(user)
         query = (
             SqlBuilder.select.tables(Card, Project, ProjectColumn)
@@ -80,55 +286,251 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                     | ((ProjectRole.column("actions") != "*") & (CardAssignedUser.column("user_id") == user_id))
                 )
             )
+            .where(self._work_visibility_scope(contexts))
             .where(Card.column("created_at") <= pagination.refer_time)
             .order_by(Card.column("created_at").desc(), Card.column("id").desc())
         )
         query = InfraHelper.paginate(query, pagination.page, pagination.limit)
 
         records = []
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             result = db.exec(query)
             records = result.all()
         return records
 
-    def get_all_by_project(self, project: TProjectParam, limit: int | None = None) -> list[tuple[Card, ProjectColumn]]:
+    def get_all_by_project(self, project: TProjectParam, *, context: CardVisibilityContext | None = None):
         project_id = InfraHelper.convert_id(project)
 
-        query = (
-            SqlBuilder.select.tables(Card, ProjectColumn)
-            .join(
-                ProjectColumn,
-                Card.column("project_column_id") == ProjectColumn.column("id"),
+        records = []
+        with DbSession.use(readonly=context is None) as db:
+            result = db.exec(
+                SqlBuilder.select.tables(Card, ProjectColumn)
+                .join(
+                    ProjectColumn,
+                    Card.column("project_column_id") == ProjectColumn.column("id"),
+                )
+                .where(Card.column("project_id") == project_id)
+                .where(card_visibility_scope(context) if context is not None else True)
+                .where(ProjectColumn.project_id == project_id if context is not None else True)
+                .where(Card.deleted_at.is_(None))
+                .order_by(Card.column("order").asc())
             )
-            .where(Card.column("project_id") == project_id)
-            .order_by(Card.column("order").asc(), Card.column("id").asc())
-        )
-        if limit is not None:
-            query = query.limit(limit)
-
-        with DbSession.use(readonly=True) as db:
-            return list(db.exec(query).all())
+            records = result.all()
+        return records
 
     def search_context_by_project(
-        self, project: TProjectParam, input_value: str, limit: int = 20
+        self,
+        project: TProjectParam,
+        input_value: str,
+        limit: int = 20,
+        date_field: str = "updated_at",
+        since: SafeDateTime | None = None,
+        until: SafeDateTime | None = None,
+        *,
+        context: CardVisibilityContext,
+        include_closed: bool = True,
+        workflow_stages: list[str] | None = None,
     ) -> list[tuple[Card, ProjectColumn]]:
         project_id = InfraHelper.convert_id(project)
         escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         title = Card.column("title")
+        pattern = f"%{escaped_input}%"
+        dialect = DbEngine.get_main_engine().dialect.name
+        comments = (
+            select(CardComment.column("id"))
+            .where(CardComment.column("card_id") == Card.column("id"))
+            .where(CardComment.column("deleted_at") == None)  # noqa: E711
+            .where(_editor_search_text(CardComment.column("content"), dialect).ilike(pattern, escape="\\"))
+            .exists()
+        )
+        attachments = (
+            select(CardAttachment.column("id"))
+            .where(CardAttachment.column("card_id") == Card.column("id"))
+            .where(CardAttachment.column("deleted_at") == None)  # noqa: E711
+            .where(
+                or_(
+                    CardAttachment.column("filename").ilike(pattern, escape="\\"),
+                    (CardAttachment.column("document_text") != "")
+                    & CardAttachment.column("document_text").ilike(pattern, escape="\\"),
+                )
+            )
+            .exists()
+        )
         query = (
             SqlBuilder.select.tables(Card, ProjectColumn)
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Card.column("project_id") == project_id)
+            .where(card_visibility_scope(context))
+            .where(Card.column("source_type") == None)  # noqa: E711
             .where(
                 or_(
-                    literal(input_value).ilike("%" + title + "%"),
-                    title.ilike(f"%{escaped_input}%", escape="\\"),
+                    title.ilike(pattern, escape="\\"),
+                    _editor_search_text(Card.column("description"), dialect).ilike(pattern, escape="\\"),
+                    comments,
+                    attachments,
                 )
             )
             .order_by(Card.column("updated_at").desc(), Card.column("id").desc())
             .limit(limit)
         )
-        with DbSession.use(readonly=True) as db:
+        query = self._filter_project_workflow(query, include_closed, workflow_stages)
+        if date_field not in {"created_at", "updated_at"}:
+            raise ValueError("date_field must be created_at or updated_at")
+        if since is not None and until is not None and since >= until:
+            raise ValueError("since must be earlier than until")
+        date_column = Card.column(date_field)
+        if since is not None:
+            query = query.where(date_column >= since)
+        if until is not None:
+            query = query.where(date_column < until)
+        with DbSession.use(readonly=False) as db:
+            return db.exec(query).all()
+
+    def search_document_matches(
+        self, project: TProjectParam, card_ids: list[int], query: str, *, context: CardVisibilityContext
+    ) -> dict[int, list[dict[str, str]]]:
+        """Return bounded source excerpts, never entire attachment documents."""
+        if not card_ids or not query:
+            return {}
+        pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        body = CardAttachment.document_text
+        dialect = DbEngine.get_main_engine().dialect.name
+        position = (
+            func.strpos(func.lower(body), query.lower())
+            if dialect == "postgresql"
+            else func.instr(func.lower(body), query.lower())
+        )
+        if dialect in {"mysql", "mariadb"}:
+            position = func.locate(query.lower(), func.lower(body))
+        start = func.greatest(1, position - 100) if dialect != "sqlite" else func.max(1, position - 100)
+        excerpt = func.substr(body, start, 500).label("excerpt")
+        ranked = (
+            select(
+                CardAttachment.id,
+                CardAttachment.card_id,
+                CardAttachment.filename,
+                excerpt,
+                func.row_number()
+                .over(partition_by=CardAttachment.card_id, order_by=CardAttachment.id)
+                .label("source_rank"),
+            )
+            .join(Card, Card.id == CardAttachment.card_id)
+            .where(Card.project_id == InfraHelper.convert_id(project))
+            .where(Card.id.in_(card_ids[:20]))
+            .where(card_visibility_scope(context))
+            .where(Card.deleted_at.is_(None))
+            .where(CardAttachment.deleted_at.is_(None))
+            .where(body != "")
+            .where(body.ilike(pattern, escape="\\"))
+            .subquery()
+        )
+        statement = (
+            select(ranked.c.id, ranked.c.card_id, ranked.c.filename, ranked.c.excerpt)
+            .where(ranked.c.source_rank <= 2)
+            .order_by(ranked.c.card_id, ranked.c.id)
+            .limit(40)
+        )
+        result: dict[int, list[dict[str, str]]] = {}
+        with DbSession.use(readonly=False) as db:
+            for attachment_id, card_id, filename, snippet in db.exec(statement).all():
+                matches = result.setdefault(card_id, [])
+                if len(matches) < 2:
+                    matches.append(
+                        {"attachment_uid": attachment_id.to_short_code(), "filename": filename, "snippet": snippet}
+                    )
+        return result
+
+    def get_my_work_page(
+        self,
+        user: TUserParam,
+        project_uids: Sequence[TProjectParam],
+        purposes: set[str],
+        mentioned_card_ids: Sequence[int],
+        now: SafeDateTime,
+        due_before: SafeDateTime,
+        date_field: str,
+        since: SafeDateTime | None,
+        until: SafeDateTime | None,
+        limit: int,
+        before: tuple[SafeDateTime, int, int] | None = None,
+        *, contexts: dict[int, CardVisibilityContext],
+    ) -> list[tuple[Card, Project, ProjectColumn, bool]]:
+        """Return one bounded cross-project page of user-focused, non-archived cards."""
+
+        if not contexts:
+            return []
+        user_id = InfraHelper.convert_id(user)
+        assigned = (
+            select(CardAssignedUser.column("id"))
+            .where(CardAssignedUser.column("card_id") == Card.column("id"))
+            .where(CardAssignedUser.column("user_id") == user_id)
+            .exists()
+        )
+        mentioned = Card.column("id").in_(set(mentioned_card_ids)) if mentioned_card_ids else false()
+        mine = or_(assigned, Card.column("created_by_user_id") == user_id, mentioned)
+        conditions: list[Any] = []
+        if "assigned" in purposes:
+            conditions.append(assigned)
+        if "created" in purposes:
+            conditions.append(Card.column("created_by_user_id") == user_id)
+        if "mentioned" in purposes:
+            conditions.append(mentioned)
+        if "due_soon" in purposes:
+            conditions.append(
+                mine
+                & Card.column("deadline_at").is_not(None)
+                & (Card.column("deadline_at") >= now)
+                & (Card.column("deadline_at") <= due_before)
+            )
+        if "overdue" in purposes:
+            conditions.append(
+                mine
+                & Card.column("deadline_at").is_not(None)
+                & (Card.column("deadline_at") < now)
+                & or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.overdue_policy != "suppress")
+            )
+
+        if date_field not in {"created_at", "updated_at"}:
+            raise ValueError("date_field must be created_at or updated_at")
+        if since is not None and until is not None and since >= until:
+            raise ValueError("since must be earlier than until")
+        date_column = Card.column(date_field)
+
+        query = (
+            SqlBuilder.select.tables(Card, Project, ProjectColumn, assigned.label("is_assigned"))
+            .join(Project, Card.column("project_id") == Project.column("id"))
+            .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
+            .where(Project.column("id").in_([InfraHelper.convert_id(project) for project in project_uids]))
+            .where(self._work_visibility_scope(contexts))
+            .where(Project.column("deleted_at") == None)  # noqa: E711
+            .where(Card.column("archived_at") == None)  # noqa: E711
+            .where(ProjectColumn.column("is_archive").is_(False))
+            .outerjoin(WorkflowStageDefinition, WorkflowStageDefinition.key == ProjectColumn.workflow_stage)
+            .where(ProjectColumn.project_id == Card.project_id)
+            .where(Card.source_type.is_(None))
+            .where(or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.counts_as_completed.is_(False)))
+            .where(or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.active_queue_policy != "exclude"))
+            .where(or_(*conditions))
+        )
+        if since is not None:
+            query = query.where(date_column >= since)
+        if until is not None:
+            query = query.where(date_column < until)
+        if before is not None:
+            updated_at, project_id, card_id = before
+            query = query.where(
+                (Card.column("updated_at") < updated_at)
+                | ((Card.column("updated_at") == updated_at) & (Project.column("id") < project_id))
+                | (
+                    (Card.column("updated_at") == updated_at)
+                    & (Project.column("id") == project_id)
+                    & (Card.column("id") < card_id)
+                )
+            )
+        query = query.order_by(
+            Card.column("updated_at").desc(), Project.column("id").desc(), Card.column("id").desc()
+        ).limit(limit)
+        with DbSession.use(readonly=False) as db:
             return db.exec(query).all()
 
     def get_page_by_project(
@@ -137,6 +539,10 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         limit: int,
         before_updated_at: SafeDateTime | None = None,
         before_card: TCardParam | None = None,
+        *,
+        context: CardVisibilityContext,
+        include_closed: bool = True,
+        workflow_stages: list[str] | None = None,
     ) -> list[tuple[Card, ProjectColumn]]:
         """Return a bounded newest-updated-first project-card keyset page."""
 
@@ -145,7 +551,10 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             SqlBuilder.select.tables(Card, ProjectColumn)
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Card.column("project_id") == project_id)
+            .where(ProjectColumn.column("project_id") == project_id)
+            .where(card_visibility_scope(context))
         )
+        query = self._filter_project_workflow(query, include_closed, workflow_stages)
         if before_updated_at is not None:
             if before_card is None:
                 raise ValueError("before_card is required with before_updated_at")
@@ -155,20 +564,41 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                 | ((Card.column("updated_at") == before_updated_at) & (Card.column("id") < before_card_id))
             )
         query = query.order_by(Card.column("updated_at").desc(), Card.column("id").desc()).limit(limit + 1)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             return list(db.exec(query).all())
 
-    def count_by_project(self, project: TProjectParam) -> int:
-        """Count cards in one project without materializing them."""
-
-        project_id = InfraHelper.convert_id(project)
-        with DbSession.use(readonly=True) as db:
-            return (
-                db.exec(
-                    SqlBuilder.select.count(Card, Card.column("id")).where(Card.column("project_id") == project_id)
-                ).first()
-                or 0
+    @staticmethod
+    def _filter_project_workflow(query, include_closed: bool, workflow_stages: list[str] | None):
+        if not include_closed:
+            query = query.where(Card.archived_at.is_(None)).where(ProjectColumn.is_archive.is_(False))
+            query = query.outerjoin(
+                WorkflowStageDefinition, WorkflowStageDefinition.key == ProjectColumn.workflow_stage
             )
+            query = query.where(
+                or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.counts_as_completed.is_(False))
+            )
+        if workflow_stages is not None:
+            query = query.where(ProjectColumn.workflow_stage.in_(workflow_stages))
+        return query
+
+    def count_by_project(
+        self, project: TProjectParam, *, context: CardVisibilityContext,
+        include_closed: bool = True, workflow_stages: list[str] | None = None
+    ) -> int:
+        """Count with the same workflow filters as project pagination."""
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.count(Card, Card.column("id"))
+            .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(ProjectColumn.column("project_id") == project_id)
+            .where(card_visibility_scope(context))
+            .where(Card.column("deleted_at").is_(None))
+            .where(ProjectColumn.column("deleted_at").is_(None))
+        )
+        query = self._filter_project_workflow(query, include_closed, workflow_stages)
+        with DbSession.use(readonly=False) as db:
+            return db.exec(query).first() or 0
 
     def get_all_by_column(self, column: TColumnParam):
         column_id = InfraHelper.convert_id(column)
@@ -187,7 +617,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         self,
         source_column: TColumnParam,
         dest_column: TColumnParam,
-        count_cards_in_dest_column: int,
+        count_cards_in_source_column: int,
         is_archive: bool = False,
     ):
         source_column_id = InfraHelper.convert_id(source_column)
@@ -197,8 +627,9 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         with DbSession.use(readonly=False) as db:
             db.exec(
                 SqlBuilder.update.table(Card)
-                .values({Card.order: Card.order + count_cards_in_dest_column})
+                .values({Card.order: Card.order + count_cards_in_source_column})
                 .where(Card.column("project_column_id") == dest_column_id)
+                .where(Card.column("deleted_at").is_(None))
             )
 
             ordered_cards_cte = (
@@ -207,6 +638,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                     (func.row_number().over(order_by=Card.column("order")) - 1).label("new_order"),
                 )
                 .where(Card.column("project_column_id") == source_column_id)
+                .where(Card.column("deleted_at").is_(None))
                 .cte("ordered_cards")
             )
 

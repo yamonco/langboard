@@ -9,6 +9,8 @@ import { ESettingSocketTopicID, ESocketTopic } from "@langboard/core/enums";
 import { EEditorCollaborationType } from "@langboard/core/constants";
 import * as Y from "yjs";
 import Logger from "@/core/utils/Logger";
+import guardEditorConnection from "@/core/server/guardEditorConnection";
+import { resolveCardAudience } from "@/core/helpers/CardAudience";
 
 const EDITOR_SYNC_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS = 60 * 60;
 const EDITOR_SYNC_RECENT_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS = 60;
@@ -175,6 +177,14 @@ const validateDocumentAccess = async (documentName: string, user: User) => {
     }
 };
 
+const validateDocumentWrite = async (documentName: string, user: User) => {
+    await validateDocumentAccess(documentName, user);
+    const access = getDocumentAccess(documentName);
+    if (access?.topic !== ESocketTopic.BoardCard) return;
+    const editors = await resolveCardAudience([createValidatorClient(user)], [access.topicId], "edit");
+    if (!editors.has(user.uid)) throw createPermissionDeniedError("permission-denied");
+};
+
 const createValidatorClient = (user: User): ISocketClient => {
     return {
         get user() {
@@ -279,23 +289,50 @@ const Hocus = new Hocuspocus({
     async connected({ documentName }) {
         await setActiveDocument(documentName, 1);
     },
-    async onAuthenticate({ context, documentName, requestParameters, token }) {
+    async onAuthenticate({ context, documentName, requestParameters, token, connectionConfig }) {
         const user = await getAuthenticatedUser({ context, requestParameters, token });
         if (!user) {
             throw createPermissionDeniedError("unauthorized");
         }
 
         await validateDocumentAccess(documentName, user);
+        if (getDocumentAccess(documentName)?.topic === ESocketTopic.BoardCard) {
+            const access = getDocumentAccess(documentName)!;
+            const editors = await resolveCardAudience([createValidatorClient(user)], [access.topicId], "edit");
+            connectionConfig.readOnly = !editors.has(user.uid);
+        }
 
         return { user };
     },
     async onLoadDocument({ documentName, document }) {
+        if (getDocumentAccess(documentName)?.topic === ESocketTopic.BoardCard) {
+            const addConnection = document.addConnection.bind(document);
+            document.addConnection = (connection) => {
+                guardEditorConnection(connection, async () => {
+                    const user = connection.context.user as User | undefined;
+                    if (!user) throw createPermissionDeniedError("unauthorized");
+                    await validateDocumentAccess(documentName, user);
+                });
+                return addConnection(connection);
+            };
+        }
         const state = await EditorSyncStorage.load(documentName);
         if (!state) {
             return;
         }
 
         Y.applyUpdate(document, state);
+    },
+    async beforeHandleMessage({ context, documentName, connection }) {
+        const user = context.user as User | undefined;
+        if (!user) {
+            throw createPermissionDeniedError("unauthorized");
+        }
+        await validateDocumentAccess(documentName, user);
+        const access = getDocumentAccess(documentName);
+        if (access?.topic !== ESocketTopic.BoardCard) return;
+        const editors = await resolveCardAudience([createValidatorClient(user)], [access.topicId], "edit");
+        connection.readOnly = !editors.has(user.uid);
     },
     async onStoreDocument({ documentName, document }) {
         await EditorSyncStorage.save(documentName, Y.encodeStateAsUpdate(document));
@@ -338,7 +375,7 @@ export const getEditorSyncText = async (documentName: string, field: string, use
 };
 
 export const patchEditorSyncText = async (documentName: string, field: string, value: string, user: User) => {
-    await validateDocumentAccess(documentName, user);
+    await validateDocumentWrite(documentName, user);
 
     const connection = await Hocus.openDirectConnection(documentName, { user });
     try {
@@ -353,7 +390,7 @@ export const patchEditorSyncText = async (documentName: string, field: string, v
 };
 
 export const requestEditorSyncRichPatch = async (documentName: string, value: string, user: User) => {
-    await validateDocumentAccess(documentName, user);
+    await validateDocumentWrite(documentName, user);
 
     const access = getDocumentAccess(documentName);
     if (!access) {
@@ -367,7 +404,7 @@ export const requestEditorSyncRichPatch = async (documentName: string, value: st
 };
 
 export const clearInactiveEditorSyncDocument = async (documentName: string, user: User) => {
-    await validateDocumentAccess(documentName, user);
+    await validateDocumentWrite(documentName, user);
 
     if (await isEditorSyncDocumentActive(documentName)) {
         throw createPermissionDeniedError("active-document");

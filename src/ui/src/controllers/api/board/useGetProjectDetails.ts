@@ -3,9 +3,12 @@ import { api } from "@/core/helpers/Api";
 import { TQueryOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
 import { ChatTemplateModel, InternalBotModel, Project, ProjectCard, ProjectColumn } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
+import refreshProjectColumnDock from "@/controllers/api/board/refreshProjectColumnDock";
+import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 
 export interface IGetProjectDetailsForm {
     uid: string;
+    includeCards?: boolean;
 }
 
 export interface IGetProjectDetailsResponse {
@@ -21,21 +24,25 @@ const useGetProjectDetails = (form: IGetProjectDetailsForm, options?: TQueryOpti
     const getProjectDetails = async () => {
         const url = Utils.String.format(Routing.API.BOARD.DETAILS, { uid: form.uid });
         const res = await api.get(url, {
+            params: { include_cards: form.includeCards ?? true },
             env: {
                 interceptToast: options?.interceptToast,
             } as never,
         });
 
-        return {
+        const result = {
             project: Project.Model.fromOne(res.data.project),
             internal_bots: InternalBotModel.Model.fromArray(res.data.internal_bots),
             columns: ProjectColumn.Model.fromArray(res.data.columns),
             cards: ProjectCard.Model.fromArray(res.data.cards),
             chat_templates: ChatTemplateModel.Model.fromArray(res.data.chat_templates),
         };
+        // Dock enrichment must not delay settings or discard an authorized settings response.
+        void refreshProjectColumnDock(form.uid).catch((error) => setupApiErrorHandler({}).handle(error));
+        return result;
     };
 
-    const result = query([`get-project-details-${form.uid}`], getProjectDetails, {
+    const result = query([`get-project-details-${form.uid}`, form.includeCards ?? true], getProjectDetails, {
         ...options,
         retry: 0,
         refetchInterval: Infinity,

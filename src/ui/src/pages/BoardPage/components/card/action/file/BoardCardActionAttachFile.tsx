@@ -69,7 +69,7 @@ const BoardCardActionAttachFile = memo(({ buttonClassName, children }: React.Pro
             attachedFiles
                 .map((attachedFile) => attachedFile.upload?.())
                 .map((promise) => {
-                    promise?.then((result) => {
+                    return promise?.then((result) => {
                         if (!result) {
                             ++errorCount;
                         } else {

@@ -1,0 +1,7 @@
+{
+  "format_version": 1,
+  "files": {
+    "legacy-native-v1.json": "728c3d0ffb51e0b58cec889c19c08abfe410c82853c64e5fd150ed04efe5d22d"
+  },
+  "scope": "Portable tool contract only. Deployment ownership/grants and authenticated OAuth evidence must remain external."
+}

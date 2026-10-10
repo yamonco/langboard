@@ -1,0 +1,99 @@
+{
+  "My account": "我的账号",
+  "Sign out": "退出登录",
+  "Profile": "个人资料",
+  "Emails": "邮箱",
+  "Add new email": "添加新邮箱",
+  "Primary email": "主邮箱",
+  "Primary": "主要",
+  "Sub": "附加",
+  "Unverified": "未验证",
+  "Search email...": "搜索邮箱...",
+  "Resend": "重新发送",
+  "Groups": "群组",
+  "Add an email...": "添加邮箱...",
+  "Add new group": "添加新群组",
+  "Preferences": "偏好设置",
+  "Language": "语言",
+  "errors": {
+    "You must sign in before verifying your email.": "验证邮箱前请先登录。",
+    "missing": {
+      "firstname": "请输入名字。",
+      "lastname": "请输入姓氏。",
+      "new_email": "请输入新邮箱地址。",
+      "current_password": "请输入当前密码。",
+      "new_password": "请输入新密码。",
+      "password-confirm": "请输入新确认密码。"
+    },
+    "invalid": {
+      "new_email": "请输入有效的邮箱地址。",
+      "current_password": "当前密码错误。请重试。",
+      "password-confirm": "确认密码不匹配。请重试。"
+    },
+    "exists": {
+      "new_email": "邮箱已被使用。请尝试其他邮箱。"
+    },
+    "Invalid language.": "无效语言。"
+  },
+  "Default language": "默认语言",
+  "Default language description": "选择登录时使用的语言。更改将保存到您的账号。",
+  "secretInput": {
+    "title": "安全输入密钥",
+    "help": "请在此页面输入秘密值，不要在对话中输入。助手仅收到不透明的密钥引用。请求将在10分钟后过期且只能使用一次。",
+    "value": "秘密值",
+    "save": "保存密钥",
+    "completed": "已保存。可以关闭此页面并返回对话。",
+    "failed": "请求已过期、已使用或处理失败。请请求新的输入链接。",
+    "cancel": "取消请求",
+    "cancelled": "已取消。未保存密钥。",
+    "create": "创建密钥",
+    "rotate": "替换现有密钥值",
+    "reason": "更改原因"
+  },
+  "secretHistory": {
+    "title": "密钥历史",
+    "help": "此引用的审计记录。不会显示秘密值或Vault路径。",
+    "failed": "无法读取历史或访问权限已更改。",
+    "empty": "暂无历史。",
+    "older": "以前的记录",
+    "actor": "用户",
+    "actions": {
+      "created": "创建",
+      "resolved": "使用",
+      "renamed": "重命名",
+      "moved": "移动",
+      "revoked": "撤销",
+      "rotated": "替换值",
+      "bound": "已绑定",
+      "migrated": "存储迁移",
+      "copied": "已复制"
+    },
+    "reasons": {
+      "user_input": "用户明确提交网页输入",
+      "runtime_use": "已授权的运行时使用",
+      "reference_created": "创建引用",
+      "reference_renamed": "重命名引用",
+      "reference_moved": "更改引用范围",
+      "reference_revoked": "撤销引用",
+      "value_rotated": "替换秘密值",
+      "reference_bound": "已授权的应用连接绑定",
+      "provider_migrated": "密钥存储提供方已更改",
+      "integration_setup": "集成配置",
+      "routine_rotation": "定期轮换凭据",
+      "credential_expired": "替换已过期凭据",
+      "security_response": "安全响应",
+      "reference_copied": "在相同权限范围内显式复制密钥"
+    },
+    "openSource": "打开来源卡片",
+    "openSourceWiki": "打开来源 Wiki"
+  },
+  "secretCopy": {
+    "title": "复制密钥",
+    "help": "在相同权限范围内创建独立密钥。密钥值保留在安全存储中。",
+    "name": "新的逻辑名称",
+    "submit": "创建副本",
+    "completed": "副本已创建。原密钥保持不变。",
+    "open": "打开副本历史",
+    "failed": "无法确认复制结果。名称可能重复，或权限、版本已更改。重试前请检查历史，关闭并重新打开以刷新源信息。"
+  }
+}

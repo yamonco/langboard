@@ -1,0 +1,385 @@
+import { expect, test } from "@playwright/test";
+
+for (const status of [200, 422]) {
+    test(`concurrent same-session cookie refresh HTTP ${status} shares one request`, async ({ page }) => {
+        await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+        let refreshes = 0;
+        await page.route("**/auth/refresh", async (route) => {
+            refreshes += 1;
+            await route.fulfill({ status, json: { access_token: "synthetic-test-token" } });
+        });
+        await page.route("**/auth/me", (route) => route.fulfill({ status: 200, json: { user: null, bots: [] } }));
+        const result = await page.evaluate(async () => {
+            const apiPath = "/src/core/helpers/Api.ts";
+            const authPath = "/src/core/stores/AuthStore.ts";
+            const { api, refresh } = await import(apiPath);
+            const { getAuthStore } = await import(authPath);
+            api.defaults.baseURL = location.origin;
+            const before = getAuthStore().getSessionVersion();
+            const first = refresh();
+            const second = refresh();
+            const results = await Promise.all([first, second]);
+            return { same: first === second, results, changes: getAuthStore().getSessionVersion() - before };
+        });
+        expect(result).toEqual({ same: true, results: [status === 200, status === 200], changes: 1 });
+        expect(refreshes).toBe(1);
+    });
+}
+
+test("refresh remains shared during identity hydration after token rotation", async ({ page }) => {
+    await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+    let refreshes = 0;
+    let release: () => void = () => {};
+    const pending = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/auth/refresh", async (route) => {
+        refreshes += 1;
+        await route.fulfill({ status: 200, json: { access_token: "synthetic-test-token" } });
+    });
+    await page.route("**/auth/me", async (route) => {
+        await pending;
+        await route.fulfill({ status: 200, json: { user: null, bots: [] } });
+    });
+    const first = page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const { api, refresh } = await import(apiPath);
+        api.defaults.baseURL = location.origin;
+        return refresh();
+    });
+    await page.waitForRequest("**/auth/me");
+    const second = page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const { refresh } = await import(apiPath);
+        return refresh();
+    });
+    // Both page evaluations execute before the held identity response is released.
+    await page.evaluate(() => undefined);
+    release();
+    expect(await Promise.all([first, second])).toEqual([true, true]);
+    expect(refreshes).toBe(1);
+});
+
+test("a new session refresh is independent and obsolete cleanup cannot release it", async ({ page }) => {
+    await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+    let refreshes = 0;
+    let releaseOld: () => void = () => {};
+    let releaseNew: () => void = () => {};
+    const oldPending = new Promise<void>((resolve) => (releaseOld = resolve));
+    const newPending = new Promise<void>((resolve) => (releaseNew = resolve));
+    await page.route("**/auth/refresh", async (route) => {
+        const old = ++refreshes === 1;
+        await (old ? oldPending : newPending);
+        await route.fulfill({ status: old ? 401 : 200, json: { access_token: "synthetic-test-token" } });
+    });
+    await page.route("**/auth/me", (route) => route.fulfill({ status: 200, json: { user: null, bots: [] } }));
+    const oldRequest = page.waitForRequest("**/auth/refresh");
+    const old = page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const { api, refresh } = await import(apiPath);
+        api.defaults.baseURL = location.origin;
+        return refresh();
+    });
+    await oldRequest;
+    await page.evaluate(async () => {
+        const authPath = "/src/core/stores/AuthStore.ts";
+        const { getAuthStore } = await import(authPath);
+        getAuthStore().removeToken();
+    });
+    const newRequest = page.waitForRequest("**/auth/refresh");
+    const current = page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const { refresh } = await import(apiPath);
+        return refresh();
+    });
+    await newRequest;
+    releaseOld();
+    expect(await old).toBe(false);
+    const joined = page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const { refresh } = await import(apiPath);
+        return refresh();
+    });
+    await page.evaluate(() => undefined);
+    releaseNew();
+    expect(await Promise.all([current, joined])).toEqual([true, true]);
+    expect(refreshes).toBe(2);
+});
+
+test("a canceled transport does not refresh auth or cancel a sibling request", async ({ page }) => {
+    await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+    let refreshes = 0;
+    await page.route("**/__aborted-transport-proof", (route) => route.abort("aborted"));
+    await page.route("**/__sibling-transport-proof", (route) => route.fulfill({ status: 200, json: { value: "preserved" } }));
+    await page.route("**/auth/refresh", async (route) => {
+        refreshes += 1;
+        await route.fulfill({ status: 401, json: {} });
+    });
+    const result = await page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const authPath = "/src/core/stores/AuthStore.ts";
+        const { api } = await import(apiPath);
+        const { getAuthStore } = await import(authPath);
+        api.defaults.baseURL = location.origin;
+        const version = getAuthStore().getSessionVersion();
+        const [aborted, sibling] = await Promise.allSettled([api.get("/__aborted-transport-proof"), api.get("/__sibling-transport-proof")]);
+        return {
+            aborted: aborted.status,
+            sibling: sibling.status === "fulfilled" ? sibling.value.data.value : null,
+            sessionPreserved: version === getAuthStore().getSessionVersion(),
+        };
+    });
+    expect(result).toEqual({ aborted: "rejected", sibling: "preserved", sessionPreserved: true });
+    expect(refreshes).toBe(0);
+});
+
+test("a current expired token refreshes identity and replays the original HTTP request once", async ({ page }) => {
+    await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+    let reads = 0;
+    let refreshes = 0;
+    let identities = 0;
+    let replayAuthorization: string | undefined;
+    await page.route("**/__token-replay-proof", async (route) => {
+        reads += 1;
+        if (reads > 1) replayAuthorization = route.request().headers().authorization;
+        await route.fulfill({ status: reads === 1 ? 422 : 200, json: { value: "current" } });
+    });
+    await page.route("**/auth/refresh", async (route) => {
+        refreshes += 1;
+        await route.fulfill({ status: 200, json: { access_token: "synthetic-test-token" } });
+    });
+    await page.route("**/auth/me", async (route) => {
+        identities += 1;
+        await route.fulfill({
+            status: 200,
+            json: {
+                user: {
+                    uid: "token-test-user",
+                    type: "user",
+                    firstname: "Test",
+                    lastname: "User",
+                    email: "user@example.invalid",
+                    username: "synthetic-user",
+                    user_groups: [],
+                    api_key_role_actions: [],
+                    setting_role_actions: [],
+                    mcp_role_actions: [],
+                    created_at: "2026-01-01T00:00:00Z",
+                    updated_at: "2026-01-01T00:00:00Z",
+                },
+                bots: [],
+            },
+        });
+    });
+    const result = await page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const authPath = "/src/core/stores/AuthStore.ts";
+        const { api } = await import(apiPath);
+        const { getAuthStore } = await import(authPath);
+        api.defaults.baseURL = location.origin;
+        const response = await api.get(`${location.origin}/__token-replay-proof`);
+        return {
+            status: response.status,
+            value: response.data.value,
+            user: getAuthStore().currentUser?.uid,
+            version: getAuthStore().getSessionVersion(),
+        };
+    });
+    expect(result).toEqual({ status: 200, value: "current", user: "token-test-user", version: 1 });
+    expect({ reads, refreshes, identities }).toEqual({ reads: 2, refreshes: 1, identities: 1 });
+    expect(replayAuthorization).toBe("Bearer synthetic-test-token");
+});
+
+for (const status of [200, 401, 422]) {
+    test(`an old session HTTP ${status} cannot hydrate models, log out or refresh the new session`, async ({ page }) => {
+        await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+        let release: () => void = () => {};
+        const pending = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let requests = 0;
+        await page.route("**/__session-proof", async (route) => {
+            requests += 1;
+            await pending;
+            await route.fulfill({
+                status,
+                json: {
+                    project: {
+                        uid: "previous-session-project",
+                        title: "Old projection",
+                        created_at: "2026-01-01T00:00:00Z",
+                        updated_at: "2026-01-01T00:00:00Z",
+                    },
+                },
+            });
+        });
+        await page.route("**/auth/refresh", async (route) => {
+            requests += 1;
+            await route.fulfill({ status: 401, json: {} });
+        });
+        const resultPromise = page.evaluate(async () => {
+            const apiPath = "/src/core/helpers/Api.ts";
+            const modelsPath = "/src/core/models/index.ts";
+            const handlerPath = "/src/core/helpers/setupApiErrorHandler.ts";
+            const { api } = await import(apiPath);
+            api.defaults.baseURL = location.origin;
+            const { Project } = await import(modelsPath);
+            const { default: setupHandler } = await import(handlerPath);
+            let canceled = false;
+            let errorHandlers = 0;
+            try {
+                const response = await api.get(`${location.origin}/__session-proof`);
+                Project.Model.fromOne(response.data.project);
+            } catch (error) {
+                canceled = typeof error === "object" && error !== null && "code" in error && error.code === "ERR_CANCELED";
+                const handler = setupHandler({
+                    wildcard: {
+                        message: () => {
+                            errorHandlers += 1;
+                        },
+                    },
+                });
+                handler.handle(error);
+                await handler.handleAsync(error);
+            }
+            return { canceled, hydrated: !!Project.Model.getModel("previous-session-project"), errorHandlers };
+        });
+        await page.waitForRequest("**/__session-proof");
+        const version = await page.evaluate(async () => {
+            const authPath = "/src/core/stores/AuthStore.ts";
+            const { getAuthStore } = await import(authPath);
+            getAuthStore().removeToken();
+            return getAuthStore().getSessionVersion();
+        });
+        release();
+        expect.soft(await resultPromise).toEqual({ canceled: true, hydrated: false, errorHandlers: 0 });
+        expect.soft(requests).toBe(1);
+        const afterVersion = await page.evaluate(async () => {
+            const authPath = "/src/core/stores/AuthStore.ts";
+            const { getAuthStore } = await import(authPath);
+            return getAuthStore().getSessionVersion();
+        });
+        expect.soft(afterVersion).toBe(version);
+    });
+}
+
+for (const status of [200, 401, 403]) {
+    test(`same-session HTTP ${status} retains its normal success or denial behavior`, async ({ page }) => {
+        await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+        await page.route("**/__current-session-proof", (route) => route.fulfill({ status, json: { value: "current" } }));
+        const result = await page.evaluate(async () => {
+            const apiPath = "/src/core/helpers/Api.ts";
+            const authPath = "/src/core/stores/AuthStore.ts";
+            const { api } = await import(apiPath);
+            const { getAuthStore } = await import(authPath);
+            const before = getAuthStore().getSessionVersion();
+            let status = 0;
+            let value: string | null = null;
+            try {
+                const response = await api.get(`${location.origin}/__current-session-proof`);
+                status = response.status;
+                value = response.data.value;
+            } catch (error) {
+                if (typeof error === "object" && error !== null && "response" in error) status = (error.response as { status: number }).status;
+            }
+            return { status, value, versionChanged: getAuthStore().getSessionVersion() !== before };
+        });
+        expect(result).toEqual({ status, value: status === 200 ? "current" : null, versionChanged: status === 401 });
+    });
+}
+
+for (const status of [200, 401]) {
+    test(`an obsolete cookie refresh HTTP ${status} cannot restore or clear authentication`, async ({ page }) => {
+        await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+        let release: () => void = () => {};
+        const pending = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let requests = 0;
+        await page.route("**/auth/refresh", async (route) => {
+            requests += 1;
+            await pending;
+            await route.fulfill({ status, json: { access_token: "synthetic-test-token" } });
+        });
+        const resultPromise = page.evaluate(async () => {
+            const apiPath = "/src/core/helpers/Api.ts";
+            const { api, refresh } = await import(apiPath);
+            api.defaults.baseURL = location.origin;
+            return refresh();
+        });
+        const request = await page.waitForRequest("**/auth/refresh");
+        expect(request.headers().authorization).toBeUndefined();
+        const version = await page.evaluate(async () => {
+            const authPath = "/src/core/stores/AuthStore.ts";
+            const { getAuthStore } = await import(authPath);
+            getAuthStore().removeToken();
+            return getAuthStore().getSessionVersion();
+        });
+        release();
+        expect(await resultPromise).toBe(false);
+        const after = await page.evaluate(async () => {
+            const authPath = "/src/core/stores/AuthStore.ts";
+            const { getAuthStore } = await import(authPath);
+            return { version: getAuthStore().getSessionVersion(), token: getAuthStore().getToken() };
+        });
+        expect(after).toEqual({ version, token: null });
+        expect(requests).toBe(1);
+    });
+}
+
+test("expired cookie refresh terminates once and rejects the original request", async ({ page }) => {
+    await page.goto("/src/core/helpers/auth-refresh.fixture.html");
+    await page.getByRole("button", { name: "Run expired refresh" }).click();
+    await expect(page.locator("#result")).toContainText(/"refreshes": 1/);
+    const result = JSON.parse((await page.locator("#result").textContent())!);
+    expect(result).toEqual({ reads: 1, refreshes: 1, rejected: true, status: 422, signedOut: true, sessionChanges: 1 });
+});
+
+test("a replayed 422 terminates without recursively refreshing again", async ({ page }) => {
+    await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+    let reads = 0;
+    let refreshes = 0;
+    let identities = 0;
+    await page.route("**/__token-replay-proof", async (route) => {
+        reads += 1;
+        await route.fulfill({ status: reads < 4 ? 422 : 401, json: { value: "current" } });
+    });
+    await page.route("**/auth/refresh", async (route) => {
+        refreshes += 1;
+        await route.fulfill({ status: 200, json: { access_token: "synthetic-test-token" } });
+    });
+    await page.route("**/auth/me", async (route) => {
+        identities += 1;
+        await route.fulfill({
+            status: 200,
+            json: {
+                user: {
+                    uid: "token-test-user",
+                    type: "user",
+                    firstname: "Test",
+                    lastname: "User",
+                    email: "user@example.invalid",
+                    username: "synthetic-user",
+                    user_groups: [],
+                    api_key_role_actions: [],
+                    setting_role_actions: [],
+                    mcp_role_actions: [],
+                    created_at: "2026-01-01T00:00:00Z",
+                    updated_at: "2026-01-01T00:00:00Z",
+                },
+                bots: [],
+            },
+        });
+    });
+    const result = await page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const { api } = await import(apiPath);
+        api.defaults.baseURL = location.origin;
+        try {
+            await api.get(`${location.origin}/__token-replay-proof`);
+            return { rejected: false, status: 0 };
+        } catch (error) {
+            return { rejected: true, status: (error as { response?: { status: number } }).response?.status };
+        }
+    });
+    expect(result).toEqual({ rejected: true, status: 422 });
+    expect({ reads, refreshes, identities }).toEqual({ reads: 2, refreshes: 1, identities: 1 });
+});

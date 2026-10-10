@@ -8,6 +8,7 @@ export interface IGetNotificationListForm {
     time_range?: IUserSettings["notifications_time_range"];
     page?: number;
     limit?: number;
+    unread_only?: boolean;
 }
 
 export interface IGetNotificationListResponse {
@@ -25,6 +26,7 @@ const useGetNotificationList = (options?: TMutationOptions<IGetNotificationListF
                 time_range: params.time_range || "3d",
                 page: params.page || 1,
                 limit: params.limit || 20,
+                unread_only: params.unread_only || false,
             },
             env: {
                 interceptToast: options?.interceptToast,

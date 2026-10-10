@@ -1,3 +1,4 @@
+from fastapi import Request
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -14,11 +15,12 @@ from langboard_shared.core.routing import (
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.core.utils.Converter import convert_python_data
-from langboard_shared.domain.models import Bot, ProjectRole, User
+from langboard_shared.domain.models import Bot, Checkitem, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
+from .CardAccess import require_card_child, require_visible_card
 from .forms import (
     CardCheckRelatedForm,
     CardifyCheckitemForm,
@@ -49,11 +51,14 @@ from .forms import (
 def change_checkitem_title(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checkitem_uid: str,
     form: CardCheckRelatedForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checkitem, checkitem_uid)
     result = service.checkitem.change_title(user_or_bot, project_uid, card_uid, checkitem_uid, form.title)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2011)
@@ -82,10 +87,14 @@ def change_checkitem_title(
 def change_checkitem_deadline(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checkitem_uid: str,
     form: ChangeCardCheckitemDeadlineForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checkitem, checkitem_uid)
     deadline_at = None
     if form.deadline_at:
         deadline_at = SafeDateTime.fromisoformat(form.deadline_at)
@@ -111,10 +120,14 @@ def change_checkitem_deadline(
 def change_checkitem_order_or_move_checklist(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checkitem_uid: str,
     form: ChangeChildOrderForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checkitem, checkitem_uid)
     result = service.checkitem.change_order(project_uid, card_uid, checkitem_uid, form.order, form.parent_uid)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2011)
@@ -126,24 +139,44 @@ def change_checkitem_order_or_move_checklist(
     "/board/{project_uid}/card/{card_uid}/checkitem/{checkitem_uid}/status",
     tags=["Board.Card.Checkitem"],
     description="Change checkitem status.",
-    responses=OpenApiSchema().auth().forbidden().err(403, ApiErrorCode.PE2003).err(404, ApiErrorCode.NF2011).get(),
+    responses=(
+        OpenApiSchema()
+        .auth()
+        .forbidden()
+        .err(403, ApiErrorCode.PE2003)
+        .err(409, ApiErrorCode.EX2002)
+        .err(404, ApiErrorCode.NF2011)
+        .get()
+    ),
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 @AuthFilter.add("user")
 def change_checkitem_status(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checkitem_uid: str,
     form: ChangeCardCheckitemStatusForm,
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user, service)
+    require_card_child(card, Checkitem, checkitem_uid)
     checkitem = service.checkitem.get_by_id_like(checkitem_uid)
     if not checkitem:
         raise ApiException.NotFound_404(ApiErrorCode.NF2011)
 
     if checkitem.user_id and checkitem.user_id != user.id:
         raise ApiException.Forbidden_403(ApiErrorCode.PE2003)
+
+    if form.status.value == "started":
+        other_active = [
+            work
+            for work in service.checkitem.get_active_work(user)
+            if work["checkitem"]["uid"] != checkitem.get_uid()
+        ]
+        if other_active and not form.replace_active:
+            raise ApiException.Conflict_409(ApiErrorCode.EX2002)
 
     result = service.checkitem.change_status(user, project_uid, card_uid, checkitem, form.status, from_api=True)
     if not result:
@@ -164,11 +197,14 @@ def change_checkitem_status(
 def cardify_checkitem(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checkitem_uid: str,
     form: CardifyCheckitemForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checkitem, checkitem_uid)
     checkitem = service.checkitem.get_by_id_like(checkitem_uid)
     if not checkitem:
         raise ApiException.NotFound_404(ApiErrorCode.NF2011)
@@ -195,10 +231,13 @@ def cardify_checkitem(
 def toggle_checkitem_checked(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checkitem_uid: str,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checkitem, checkitem_uid)
     checkitem = service.checkitem.get_by_id_like(checkitem_uid)
     if not checkitem:
         raise ApiException.NotFound_404(ApiErrorCode.NF2011)
@@ -237,10 +276,13 @@ def toggle_checkitem_checked(
 def delete_checkitem(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checkitem_uid: str,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checkitem, checkitem_uid)
     checkitem = service.checkitem.get_by_id_like(checkitem_uid)
     if not checkitem:
         raise ApiException.NotFound_404(ApiErrorCode.NF2011)

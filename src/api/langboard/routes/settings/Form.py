@@ -59,6 +59,15 @@ class UpdateUserForm(BaseFormModel):
 
 
 @form_model
+class LinkOidcIdentityForm(BaseFormModel):
+    """Explicit issuer-subject mapping for one existing Langboard user."""
+
+    issuer: str
+    subject: str
+    email: str | None = None
+
+
+@form_model
 class DeleteSelectedUsersForm(BaseFormModel):
     user_uids: list[str]
 
@@ -84,19 +93,18 @@ class UpdateBotForm(BaseFormModel):
 
 
 class BotActionSuggestionForm(BaseModel):
-    prompt: str = Field(min_length=1, max_length=30_000)
-    value: dict[str, Any] = Field(default_factory=dict)
-    selected_api_names: list[str] = Field(default_factory=list, max_length=100)
-    selected_comfort_tool_names: list[str] = Field(default_factory=list, max_length=100)
+    prompt: str = ""
+    selected_api_names: list[str] = Field(default_factory=list)
+    selected_comfort_tool_names: list[str] = Field(default_factory=list)
     include_mcp: bool = True
-    limit: int = Field(default=8, ge=1, le=20)
+    limit: int = 8
 
 
 class BotDraftForm(BaseModel):
-    instruction: str = Field(min_length=1, max_length=30_000)
+    instruction: str
     value: dict[str, Any] = Field(default_factory=dict)
-    selected_api_names: list[str] = Field(default_factory=list, max_length=100)
-    selected_comfort_tool_names: list[str] = Field(default_factory=list, max_length=100)
+    selected_api_names: list[str] = Field(default_factory=list)
+    selected_comfort_tool_names: list[str] = Field(default_factory=list)
     include_mcp: bool = True
 
 
@@ -291,6 +299,22 @@ class DeleteSelectedWebhooksForm(BaseFormModel):
     webhook_uids: list[str]
 
 
+class ProjectTemplateColumnForm(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=4096)
+    workflow_stage: str | None = None
+    translations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+@form_model
+class SaveProjectTemplateForm(BaseFormModel):
+    internal_bot_uids: list[str] | None = Field(default=None, max_length=3)
+    description: str | None = Field(default=None, max_length=4096)
+    global_label_uids: list[str] | None = Field(default=None, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
+    columns: list[ProjectTemplateColumnForm] = Field(min_length=1, max_length=100)
+
+
 @form_model
 class SetDefaultProjectTemplateForm(BaseFormModel):
     template_name: str
@@ -327,3 +351,41 @@ class UpdateNotificationScheduleRuleForm(BaseFormModel):
 @form_model
 class DeleteSelectedNotificationScheduleRulesForm(BaseFormModel):
     rule_uids: list[str]
+
+
+@form_model
+class SaveGlobalLabelForm(BaseFormModel):
+    aliases: list[str] | None = Field(default=None, max_length=30)
+    emoji: str | None = Field(default=None, max_length=32)
+    translations: dict[str, dict[str, str]] = Field(default_factory=dict)
+    name: str = Field(min_length=1, max_length=100)
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    description: str = Field(default="", max_length=4000)
+
+    @field_validator("name")
+    @classmethod
+    def clean_label_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Label name is required")
+        return value
+
+
+@form_model
+class SaveWorkflowStageForm(BaseFormModel):
+    expected_revision: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=4000)
+    color: str = Field(default="#64748B", pattern=r"^#[0-9a-fA-F]{6}$")
+    order: int = Field(default=0, ge=0, le=100000)
+    counts_as_completed: bool = False
+    active_queue_policy: str = Field(default="conditional", pattern=r"^(include|exclude|conditional)$")
+    overdue_policy: str = Field(default="normal", pattern=r"^(normal|suppress)$")
+    entry_effects: list[str] = Field(default_factory=list, max_length=2)
+    translations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+@form_model
+class DeactivateWorkflowStageForm(BaseFormModel):
+    expected_revision: str = Field(pattern=r"^[a-f0-9]{64}$")

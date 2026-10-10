@@ -14,10 +14,22 @@ from ...domain.models import WebhookSetting
 from ...helpers import InfraHelper
 from ...infrastructure.repositories import Repository
 from ...publishers import AppSettingPublisher
-from .utils import WebhookModel, ensure_public_webhook_url
+from .utils import (
+    WORK_EVENT_NAME,
+    WORK_EXECUTION_EVENTS,
+    ExecutionEventData,
+    WebhookModel,
+    WorkEventData,
+    cloudevents_fields,
+    ensure_public_webhook_url,
+)
+from .utils.WorkEventModel import can_dispatch_work_event
 
 
 WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0)
+# Execution ingress verifies the current card (up to 20s) before persisting its
+# dispatch. Keep the acknowledgment budget below the outbox's 300s lease.
+EXECUTION_WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0, read=60.0)
 WEBHOOK_FANOUT_BATCH_SIZE = 100
 _SAFE_EVENT_FIELDS = frozenset(
     {
@@ -84,6 +96,13 @@ async def webhook_delivery_task(model: WebhookModel, webhook_uid: str) -> None:
 async def run_webhook(model: WebhookModel) -> None:
     """Schedule one delivery task for each endpoint that accepts the event."""
 
+    if model.event in WORK_EXECUTION_EVENTS:
+        Broker.logger.error("Execution event requires the transactional outbox path: event=%s", model.event_id)
+        return
+
+    if model.event == WORK_EVENT_NAME and not can_dispatch_work_event(model):
+        return
+
     after_id: SnowflakeID | None = None
     while True:
         settings = _get_webhook_settings() if after_id is None else _get_webhook_settings(after_id)
@@ -111,6 +130,24 @@ async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
     setting = _get_webhook_setting(webhook_uid)
     if not setting or not _accepts_event(setting, model.event):
         return
+    await post_signed_webhook(model, webhook_uid, setting)
+
+
+async def post_signed_webhook(model: WebhookModel, webhook_uid: str, setting: WebhookSetting | None = None) -> None:
+    """Sign and POST one event to the endpoint's current target, then record success.
+
+    Raises WebhookDeliveryError when the endpoint is unavailable or rejects the
+    delivery, so callers with a retry budget can retry; execution outbox claims
+    rely on this to release and eventually mark the attempt as failed.
+    """
+
+    if model.event == WORK_EVENT_NAME and not can_dispatch_work_event(model):
+        return
+
+    if setting is None:
+        setting = _get_webhook_setting(webhook_uid)
+        if not setting or not _accepts_event(setting, model.event):
+            raise WebhookDeliveryError(f"Webhook endpoint unavailable: endpoint={webhook_uid}")
 
     try:
         secret = KeyVault.get_key(setting.secret_id) if setting.secret_id else None
@@ -118,15 +155,8 @@ async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
             raise ValueError("Webhook signing secret is unavailable")
         body, headers = signed_request(model, secret)
         target = await ensure_public_webhook_url(setting.url)
-        headers["Host"] = target.host_header
-        async with AsyncClient(timeout=WEBHOOK_TIMEOUT, follow_redirects=False) as client:
-            response = await client.post(
-                target.url,
-                content=body,
-                headers=headers,
-                extensions={"sni_hostname": target.sni_hostname},
-            )
-            response.raise_for_status()
+        timeout = EXECUTION_WEBHOOK_TIMEOUT if model.event in WORK_EXECUTION_EVENTS else WEBHOOK_TIMEOUT
+        await post_resolved_webhook_bytes(target, body, headers, timeout=timeout)
     except Exception as error:
         Broker.logger.error(
             "Webhook delivery failed: endpoint=%s error=%s",
@@ -148,6 +178,19 @@ async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
     )
 
 
+async def post_resolved_webhook_bytes(target, body, headers, *, timeout=WEBHOOK_TIMEOUT):
+    """Send exact signed bytes to a DNS-pinned public target without redirects."""
+    headers = {**headers, "Host": target.host_header}
+    async with AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        response = await client.post(
+            target.url,
+            content=body,
+            headers=headers,
+            extensions={"sni_hostname": target.sni_hostname},
+        )
+        response.raise_for_status()
+
+
 def signed_request(
     model: WebhookModel,
     secret: str | None,
@@ -156,25 +199,40 @@ def signed_request(
 ) -> tuple[bytes, dict[str, str]]:
     """Serialize one canonical payload and add optional HMAC headers."""
 
-    payload = {
-        "schema_version": model.schema_version,
-        "event_id": model.event_id,
-        "occurred_at": model.occurred_at,
-        "event": model.event,
-        "data": minimal_event_data(model.data),
-    }
+    if model.event in WORK_EXECUTION_EVENTS:
+        payload = cloudevents_fields(
+            model.event,
+            model.event_id,
+            model.occurred_at,
+            ExecutionEventData.model_validate(model.data),
+        )
+    else:
+        payload = {
+            "schema_version": model.schema_version,
+            "event_id": model.event_id,
+            "occurred_at": model.occurred_at,
+            "event": model.event,
+            "data": minimal_event_data(model.data, event=model.event),
+        }
     body = json_dumps(
         payload,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+    return sign_webhook_bytes(body, model.event_id, secret, timestamp=timestamp, version=model.schema_version)
+
+
+def sign_webhook_bytes(
+    body: bytes, event_id: str, secret: str | None, *, timestamp: int | None = None, version: str = "1"
+) -> tuple[bytes, dict[str, str]]:
+    """Sign exact canonical bytes; payload projection belongs to the caller."""
     delivered_at = str(timestamp if timestamp is not None else int(time()))
     headers = {
         "Content-Type": "application/json",
-        "X-Langboard-Webhook-Id": model.event_id,
+        "X-Langboard-Webhook-Id": event_id,
         "X-Langboard-Webhook-Timestamp": delivered_at,
-        "X-Langboard-Webhook-Version": model.schema_version,
+        "X-Langboard-Webhook-Version": version,
     }
     if secret:
         signature = hmac_new(
@@ -186,8 +244,13 @@ def signed_request(
     return body, headers
 
 
-def minimal_event_data(data: dict[str, Any]) -> dict[str, Any]:
+def minimal_event_data(data: dict[str, Any], *, event: str | None = None) -> dict[str, Any]:
     """Project bot-trigger data to non-PII webhook routing metadata."""
+
+    if event == WORK_EVENT_NAME:
+        return WorkEventData.model_validate(data).model_dump()
+    if event in WORK_EXECUTION_EVENTS:
+        return ExecutionEventData.model_validate(data).model_dump()
 
     result = {
         key: convert_python_data(value, recursive=True)
@@ -222,11 +285,11 @@ def _executor_display_name(executor: dict[str, Any], executor_type: str) -> str:
         if full_name:
             return full_name
         username = executor.get("username")
-        return username.strip() if isinstance(username, str) and username.strip() else "Unknown"
+        return username.strip() if isinstance(username, str) and username.strip() else "알 수 없음"
     if executor_type == "bot":
         name = executor.get("name")
         return name.strip() if isinstance(name, str) and name.strip() else "Langboard"
-    return "Unknown"
+    return "알 수 없음"
 
 
 def _get_webhook_settings(after_id: SnowflakeID | None = None) -> list[WebhookSetting]:
@@ -244,4 +307,6 @@ def _get_webhook_setting(webhook_uid: str) -> WebhookSetting | None:
 
 def _accepts_event(setting: WebhookSetting, event: str) -> bool:
     events = setting.events
+    if event == WORK_EVENT_NAME or event in WORK_EXECUTION_EVENTS:
+        return events is not None and event in events
     return events is None or event in events

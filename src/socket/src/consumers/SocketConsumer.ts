@@ -14,6 +14,7 @@ type TNotificationPublishData = {
     event: string;
     data_keys?: string | string[];
     custom_data?: Record<string, unknown>;
+    card_uids?: string[];
 };
 
 Consumer.register("socket_publish", async (data: unknown) => {
@@ -53,7 +54,8 @@ Consumer.register("socket_publish", async (data: unknown) => {
             Utils.String.convertSafeEnum(ESocketTopic, publishModel.topic),
             publishModel.topic_id,
             publishModel.event,
-            publishData
+            publishData,
+            publishModel.card_uids
         );
     }
 });

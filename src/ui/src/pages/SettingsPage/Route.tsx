@@ -33,6 +33,12 @@ const routes: RouteObject[] = [
                 path: ROUTES.SETTINGS.API_KEYS,
                 element: <></>,
             },
+            { path: ROUTES.SETTINGS.WORKFLOW_STAGES, element: <></> },
+            { path: ROUTES.SETTINGS.APPS, element: <></> },
+            {
+                path: ROUTES.SETTINGS.GLOBAL_LABELS,
+                element: <></>,
+            },
             {
                 path: ROUTES.SETTINGS.PROJECT_TEMPLATES,
                 element: <></>,
@@ -119,4 +125,5 @@ const routes: RouteObject[] = [
 
 export default {
     routes,
+    workbench: true,
 };

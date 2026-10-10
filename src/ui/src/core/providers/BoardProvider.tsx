@@ -1,4 +1,4 @@
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
     AuthUser,
     GlobalRelationshipType,
@@ -27,6 +27,12 @@ import { ESocketTopic } from "@langboard/core/enums";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import useBoardCardMetadataDeletedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataDeletedHandlers";
 import useBoardCardMetadataUpdatedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataUpdatedHandlers";
+import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
+import useBoardChecklistProgressChangedHandlers from "@/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers";
+import { matchesCardCreator } from "@/core/utils/CardCreatorFilter";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { matchesWorkload } from "@/pages/DashboardPage/components/ProjectWorkload";
 
 const DEFAULT_ARCHIVE_CARD_VISIBLE_DAYS = 3;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -34,12 +40,26 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 export interface IFilterMap extends ISearchFilterMap {
     keyword?: string[];
     members?: string[];
+    creators?: string[];
     labels?: string[];
     parents?: string[];
     children?: string[];
+    columns?: string[];
+    workflow_stages?: string[];
+    unfinished?: string[];
 }
 
-export const BOARD_FILTER_KEYS = ["keyword", "members", "labels", "parents", "children"] as (keyof IFilterMap)[];
+export const BOARD_FILTER_KEYS = [
+    "keyword",
+    "members",
+    "creators",
+    "labels",
+    "parents",
+    "children",
+    "columns",
+    "workflow_stages",
+    "unfinished",
+] as (keyof IFilterMap)[];
 
 export interface IBoardContext {
     socket: ISocketContext;
@@ -56,10 +76,13 @@ export interface IBoardContext {
     filterLabel: (label: ProjectLabel.TModel) => bool;
     filterCard: (card: ProjectCard.TModel) => bool;
     shouldShowArchivedCard: (card: ProjectCard.TModel) => bool;
+    filterCardCreator: (card: ProjectCard.TModel) => bool;
     filterCardMember: (card: ProjectCard.TModel) => bool;
     filterCardLabels: (card: ProjectCard.TModel) => bool;
     filterCardRelationships: (card: ProjectCard.TModel) => bool;
     canDragAndDrop: bool;
+    canDragCards: bool;
+    deadlineClock: Date;
 }
 
 interface IBoardProviderProps {
@@ -83,10 +106,13 @@ const initialContext = {
     filterLabel: () => true,
     filterCard: () => true,
     shouldShowArchivedCard: () => true,
+    filterCardCreator: () => true,
     filterCardMember: () => true,
     filterCardLabels: () => true,
     filterCardRelationships: () => true,
     canDragAndDrop: false,
+    canDragCards: false,
+    deadlineClock: new Date(),
 };
 
 const BoardContext = createContext<IBoardContext>(initialContext);
@@ -94,6 +120,12 @@ const BoardContext = createContext<IBoardContext>(initialContext);
 export const BoardProvider = memo(({ project, currentUser, children }: IBoardProviderProps): React.ReactNode => {
     const navigate = usePageNavigateRef();
     const socket = useSocket();
+    const queryClient = useQueryClient();
+    const [deadlineClock, setDeadlineClock] = useState(() => new Date());
+    useEffect(() => {
+        const timer = window.setInterval(() => setDeadlineClock(new Date()), 60 * 1000);
+        return () => window.clearInterval(timer);
+    }, []);
     const { selectCardViewType } = useBoardController();
     const [t] = useTranslation();
     const members = project.useForeignFieldArray("all_members");
@@ -110,6 +142,7 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     const currentUserRoleActions = project.useField("current_auth_role_actions");
     const archiveVisibleDays = project.useField("archive_visible_days");
     const { hasRoleAction } = useRoleActionFilter(currentUserRoleActions);
+    const [, refreshColumnFilters] = useReducer((value: number) => value + 1, 0);
     const columns = ProjectColumn.Model.useModels((model) => model.project_uid === project.uid);
     const cards = ProjectCard.Model.useModels((model) => model.project_uid === project.uid);
     const cardUIDs = useMemo(() => cards.map((card) => card.uid), [cards]);
@@ -131,6 +164,29 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
             ]),
         [cardUIDs, handleMetadataChanged]
     );
+    const linkedCardUIDs = useMemo(() => cards.filter((card) => card.source_type === "project_wiki").map((card) => card.uid), [cards]);
+    const linkedResourceHandlers = useMemo(
+        () =>
+            linkedCardUIDs.map((cardUID) =>
+                useCardLinkedResourceChangedHandlers({
+                    projectUID: project.uid,
+                    cardUID,
+                    callback: () => queryClient.invalidateQueries({ queryKey: [`get-cards-${project.uid}`] }),
+                })
+            ),
+        [linkedCardUIDs, project, queryClient]
+    );
+    const boardSocketHandlers = useMemo(
+        () => [
+            ...boardCardMetadataHandlers,
+            ...linkedResourceHandlers,
+            useBoardChecklistProgressChangedHandlers({
+                projectUID: project.uid,
+                callback: () => queryClient.invalidateQueries({ queryKey: [`get-cards-${project.uid}`] }),
+            }),
+        ],
+        [boardCardMetadataHandlers, linkedResourceHandlers, project.uid, queryClient]
+    );
     const cardMetadataRecords = MetadataModel.Model.useModels((model) => model.type === "card", [cards, metadataUpdated]);
     const forbiddenMessageIdRef = useRef<string | number | null>(null);
     const cardsMap = useMemo(() => {
@@ -149,6 +205,7 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     }, [cardMetadataRecords, metadataUpdated]);
     const globalRelationshipTypes = GlobalRelationshipType.Model.useModels(() => true, [selectCardViewType, filters]);
     const canDragAndDrop = useMemo(() => hasRoleAction(ProjectRole.EAction.Update) && !selectCardViewType, [hasRoleAction, selectCardViewType]);
+    const canDragCards = (isAdmin || hasRoleAction(ProjectRole.EAction.CardUpdate)) && !selectCardViewType;
 
     useEffect(() => {
         if (isAdmin || !members.length || members.some((member) => member.uid === currentUser.uid) || forbiddenMessageIdRef.current) {
@@ -180,8 +237,8 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
 
     useSwitchSocketHandlers({
         socket,
-        handlers: boardCardMetadataHandlers,
-        dependencies: boardCardMetadataHandlers,
+        handlers: boardSocketHandlers,
+        dependencies: boardSocketHandlers,
     });
 
     const navigateWithFilters = (to?: To, options?: IPageNavigateOptions) => {
@@ -231,6 +288,19 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     };
 
     const filterCard = (card: ProjectCard.TModel) => {
+        if (filters.columns?.length && !filters.columns.includes(card.project_column_uid)) return false;
+        if (filters.workflow_stages?.length) {
+            const stage = columns.find((column) => column.uid === card.project_column_uid)?.workflow_stage;
+            if (!stage || !filters.workflow_stages.includes(stage)) return false;
+        }
+        if (
+            filters.unfinished?.includes("yes") &&
+            !matchesWorkload(
+                card,
+                columns.find((column) => column.uid === card.project_column_uid)
+            )
+        )
+            return false;
         const keyword = filters.keyword?.join(",");
         if (!keyword) {
             return true;
@@ -275,7 +345,18 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
             card.description.content.toLowerCase().includes(keyword.toLowerCase()) ||
             searchableTaskText.includes(keyword.toLowerCase()) ||
             parseDoclingMetadata(cardMetadataMap[card.uid]).some((document) => {
-                const searchableDocumentText = [document.document_type, document.status, document.content.filename, document.content.markdown]
+                const attributes = document.content.search_keywords;
+                const terms =
+                    attributes && typeof attributes === "object" && !Array.isArray(attributes)
+                        ? Object.values(attributes).flatMap((value) => (Array.isArray(value) ? value.filter((term) => typeof term === "string") : []))
+                        : [];
+                const searchableDocumentText = [
+                    document.document_type,
+                    document.status,
+                    document.content.filename,
+                    document.content.markdown,
+                    ...terms,
+                ]
                     .join(" ")
                     .toLowerCase();
                 return searchableDocumentText.includes(keyword.toLowerCase());
@@ -297,6 +378,8 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
         const visibleDays = archiveVisibleDays ?? DEFAULT_ARCHIVE_CARD_VISIBLE_DAYS;
         return Date.now() - card.archived_at.getTime() <= visibleDays * DAY_IN_MS;
     };
+
+    const filterCardCreator = (card: ProjectCard.TModel) => matchesCardCreator(card.creator, filters.creators, currentUser.uid);
 
     const filterCardMember = (card: ProjectCard.TModel) => {
         if (!filters.members?.length) {
@@ -379,12 +462,21 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
                 filterLabel,
                 filterCard,
                 shouldShowArchivedCard,
+                filterCardCreator,
                 filterCardMember,
                 filterCardLabels,
                 filterCardRelationships,
                 canDragAndDrop,
+                canDragCards,
+                deadlineClock,
             }}
         >
+            {columns.map((column) => (
+                <ColumnFilterSubscription key={column.uid} column={column} refresh={refreshColumnFilters} />
+            ))}
+            {cards.map((card) => (
+                <CardPolicySubscription key={card.uid} card={card} refresh={refreshColumnFilters} />
+            ))}
             {children}
         </BoardContext.Provider>
     );
@@ -397,3 +489,17 @@ export const useBoard = () => {
     }
     return context;
 };
+
+/** Reevaluate every board filter consumer when column classification changes. */
+function ColumnFilterSubscription({ column, refresh }: { column: ProjectColumn.TModel; refresh: () => void }) {
+    column.useField("workflow_stage", refresh);
+    column.useField("is_archive", refresh);
+    column.useField("name", refresh);
+    return null;
+}
+
+/** Refresh board filters when the server reinterprets a global workflow policy. */
+function CardPolicySubscription({ card, refresh }: { card: ProjectCard.TModel; refresh: () => void }) {
+    card.useField("work_state", refresh);
+    return null;
+}

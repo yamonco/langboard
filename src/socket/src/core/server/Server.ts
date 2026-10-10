@@ -5,6 +5,7 @@ import Logger from "@/core/utils/Logger";
 import Routes from "@/core/server/Routes";
 import SocketManager from "@/core/server/SocketManager";
 import Hocus from "@/core/server/Hocus";
+import flushEditorSyncDocuments from "@/core/server/flushEditorSyncDocuments";
 import { ESocketStatus } from "@langboard/core/enums";
 
 class _Server {
@@ -59,6 +60,7 @@ class _Server {
             await new Promise<void>((resolve) => server.close(() => resolve()));
             this.#httpServer = null!;
         }
+        await flushEditorSyncDocuments(Hocus);
     }
 
     #createServers() {

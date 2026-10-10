@@ -1,14 +1,16 @@
-from typing import Any
-from fastapi import Depends
+from typing import Any, Literal
+from fastapi import Depends, Query, Request
 from langboard_shared.core.filter import AuthFilter
-from langboard_shared.core.routing import ApiPermission, AppRouter, JsonResponse
+from langboard_shared.core.routing import ApiErrorCode, ApiException, ApiPermission, AppRouter, JsonResponse
 from langboard_shared.core.schema import InfiniteRefreshableList, OpenApiSchema
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import Bot, ProjectRole, ProjectWikiActivity, User, UserActivity
 from langboard_shared.domain.models.bases import BaseActivityModel
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
+from ..board.CardAccess import require_visible_card
 from .ActivityForm import ActivityPagination
 
 
@@ -23,6 +25,32 @@ USER_ACTIVITY_SCHEMA = InfiniteRefreshableList.api_schema(
         },
     )
 )
+
+
+@AppRouter.api.get("/activity/user/{user_uid}/shared", tags=["Activity"], response_model=None)
+@AuthFilter.add("user")
+def get_shared_user_activities(
+    user_uid: str,
+    request: Request,
+    pagination: ActivityPagination = Depends(),
+    activity_uid: str | None = None,
+    scope: Literal["project", "wiki"] | None = None,
+    offset: int = Query(default=0, ge=0),
+    max_chars: int = Query(default=4000, ge=1, le=8000),
+    project_uid: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        result = service.activity.get_shared_user_activities(
+            user, user_uid, pagination, activity_uid, scope, offset, max_chars, project_uid, since, until,
+            channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+        )
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    return JsonResponse(content=result)
 
 
 def _create_project_activity_schema(
@@ -44,15 +72,16 @@ def _create_project_activity_schema(
 )
 @AuthFilter.add("user")
 def get_current_user_activities(
+    request: Request,
     pagination: ActivityPagination = Depends(),
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     if pagination.only_count:
-        result = service.activity.get_api_list_by_user(user, pagination, only_count=True)
+        result = service.activity.get_api_list_by_user(user, pagination, only_count=True, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
         return JsonResponse(content={"count_new_records": result or 0})
 
-    result = service.activity.get_api_list_by_user(user, pagination)
+    result = service.activity.get_api_list_by_user(user, pagination, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not result:
         return JsonResponse(content=InfiniteRefreshableList())
     activities, count_new_records, _ = result
@@ -68,6 +97,7 @@ def get_current_user_activities(
 @AuthFilter.add()
 def get_project_activities(
     project_uid: str,
+    request: Request,
     pagination: ActivityPagination = Depends(),
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
@@ -78,11 +108,11 @@ def get_project_activities(
 
     if pagination.only_count:
         result = service.activity.get_api_list_by_project(
-            project_uid, pagination, only_count=True, assignee=pagination.assignee_uid
+            project_uid, pagination, only_count=True, assignee=pagination.assignee_uid, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api)
         )
         return JsonResponse(content=InfiniteRefreshableList(count_new_records=result or 0))
 
-    result = service.activity.get_api_list_by_project(project_uid, pagination, assignee=pagination.assignee_uid)
+    result = service.activity.get_api_list_by_project(project_uid, pagination, assignee=pagination.assignee_uid, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not result:
         return JsonResponse(content=InfiniteRefreshableList())
     activities, count_new_records, project = result
@@ -109,6 +139,7 @@ def get_project_activities(
 @AuthFilter.add()
 def get_project_column_activities(
     project_uid: str,
+    request: Request,
     column_uid: str,
     pagination: ActivityPagination = Depends(),
     user: User = Auth.scope("user"),
@@ -120,11 +151,11 @@ def get_project_column_activities(
 
     if pagination.only_count:
         result = service.activity.get_api_list_by_column(
-            project_uid, column_uid, pagination, only_count=True, assignee=assignee
+            project_uid, column_uid, pagination, only_count=True, assignee=assignee, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api)
         )
         return JsonResponse(content=InfiniteRefreshableList(count_new_records=result or 0))
 
-    result = service.activity.get_api_list_by_column(project_uid, column_uid, pagination, assignee=assignee)
+    result = service.activity.get_api_list_by_column(project_uid, column_uid, pagination, assignee=assignee, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not result:
         return JsonResponse(content=InfiniteRefreshableList())
     activities, count_new_records, project, column = result
@@ -160,21 +191,23 @@ def get_project_column_activities(
 def get_card_activities(
     project_uid: str,
     card_uid: str,
+    request: Request,
     pagination: ActivityPagination = Depends(),
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    require_visible_card(project_uid, card_uid, request, user, service)
     assignee = service.activity.get_user_or_bot(pagination.assignee_uid) if pagination.assignee_uid else None
     if not _can_view_other_assignee_activities(project_uid, user, assignee, service):
         return JsonResponse(content=InfiniteRefreshableList())
 
     if pagination.only_count:
         result = service.activity.get_api_list_by_card(
-            project_uid, card_uid, pagination, only_count=True, assignee=assignee
+            project_uid, card_uid, pagination, only_count=True, assignee=assignee, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api)
         )
         return JsonResponse(content=InfiniteRefreshableList(count_new_records=result or 0))
 
-    result = service.activity.get_api_list_by_card(project_uid, card_uid, pagination, assignee=assignee)
+    result = service.activity.get_api_list_by_card(project_uid, card_uid, pagination, assignee=assignee, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not result:
         return JsonResponse(content=InfiniteRefreshableList())
     activities, count_new_records, project, card = result
@@ -191,6 +224,21 @@ def get_card_activities(
             },
         }
     )
+
+
+@AppRouter.api.get("/activity/project/{project_uid}/card/{card_uid}/column-history", tags=["Activity"])
+@AppRouter.schema(permission=ApiPermission.Read)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_card_column_history(
+    project_uid: str,
+    card_uid: str,
+    request: Request,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    require_visible_card(project_uid, card_uid, request, user, service)
+    return JsonResponse(content={"records": service.activity.get_card_column_history(project_uid, card_uid)})
 
 
 @AppRouter.api.get(

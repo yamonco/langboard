@@ -10,6 +10,9 @@ from ..middlewares.McpAuthMiddleware import mcp_auth_context
 class ToolGroupMiddleware(Middleware):
     """Expose and execute only tools granted to the authenticated tool group."""
 
+    def __init__(self, discovery_tools: frozenset[str] = frozenset()):
+        self.discovery_tools = discovery_tools
+
     async def on_list_tools(
         self,
         context: MiddlewareContext[ListToolsRequest],
@@ -18,7 +21,7 @@ class ToolGroupMiddleware(Middleware):
         """Filter discovery through the validated Langboard tool group."""
 
         allowed = self._allowed_tools()
-        return [tool for tool in await call_next(context) if tool.name in allowed]
+        return [tool for tool in await call_next(context) if tool.name in allowed or tool.name in self.discovery_tools]
 
     async def on_call_tool(
         self,
@@ -27,7 +30,8 @@ class ToolGroupMiddleware(Middleware):
     ) -> Any:
         """Reject calls that are outside the validated Langboard tool group."""
 
-        if context.message.name not in self._allowed_tools():
+        allowed = self._allowed_tools()
+        if context.message.name not in allowed and context.message.name not in self.discovery_tools:
             raise AuthorizationError(f"Tool '{context.message.name}' is not allowed")
         return await call_next(context)
 

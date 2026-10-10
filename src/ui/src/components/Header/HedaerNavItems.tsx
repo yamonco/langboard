@@ -112,6 +112,7 @@ function DropdownMenuNav({ item, setIsOpen, activatedClass, deactivatedClass, sh
 }
 
 function AccordionNavItem({ item, setIsOpen, activatedClass, deactivatedClass, shardClass }: IHeaderNavItemProps): React.JSX.Element {
+    const NavigationElement = item.href ? "a" : "button";
     const ariaCurrent = item.active ? "page" : undefined;
     const handleClick = useCallback(() => {
         setIsOpen!(false);
@@ -119,14 +120,16 @@ function AccordionNavItem({ item, setIsOpen, activatedClass, deactivatedClass, s
     }, [setIsOpen, item.onClick]);
 
     return (
-        <a
+        <NavigationElement
+            type={item.href ? undefined : "button"}
             aria-current={ariaCurrent}
             href={item.href}
-            className={cn(item.active ? activatedClass : deactivatedClass, shardClass, "cursor-pointer")}
+            className={cn(item.active ? activatedClass : deactivatedClass, shardClass, "block w-full cursor-pointer text-left")}
             onClick={handleClick}
+            hidden={item.hidden}
         >
             <h3 className="py-2 text-base">{item.name}</h3>
-        </a>
+        </NavigationElement>
     );
 }
 

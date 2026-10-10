@@ -27,7 +27,7 @@ function RuleSelect({ label, remoteMeta, value, values, disabled, onChange }: IR
             labelClassName="absolute right-2 z-[9999] max-w-32 truncate"
             labelStyle={{ top: "-0.75rem" }}
             name={remoteMeta.name}
-            title={`${remoteMeta.name} changed ${remoteMeta.value.label}`}
+            title={t("common.User changed field", { name: remoteMeta.name, field: remoteMeta.value.label })}
         />
     ) : null;
 

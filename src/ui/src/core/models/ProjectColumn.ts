@@ -1,32 +1,56 @@
 import useBoardColumnDeletedHandlers from "@/controllers/socket/board/column/useBoardColumnDeletedHandlers";
+import useBoardColumnDescriptionChangedHandlers from "@/controllers/socket/board/column/useBoardColumnDescriptionChangedHandlers";
+import useBoardColumnWorkflowStageChangedHandlers from "@/controllers/socket/board/column/useBoardColumnWorkflowStageChangedHandlers";
 import useBoardCardCreatedHandlers from "@/controllers/socket/board/useBoardCardCreatedHandlers";
 import { BaseModel, IBaseModel } from "@/core/models/Base";
-import { registerModel } from "@/core/models/ModelRegistry";
+import { IModelMap, registerModel, TPickedModel } from "@/core/models/ModelRegistry";
+import { preserveProjectDockMetadata } from "@/core/models/projectDock";
 
 export interface Interface extends IBaseModel {
     project_uid: string;
     name: string;
+    description?: string;
+    translations?: Record<string, { name: string; description: string }>;
+    workflow_stage?: string | null;
+    workflow_counts_as_completed?: boolean | null;
     order: number;
+    dock_order?: number | null;
     is_archive: bool;
 }
 
 export interface IStore extends Interface {
     count: number;
+    incomplete_count?: number;
+    open_count?: number;
 }
 
 class ProjectColumn extends BaseModel<IStore> {
+    protected override update<TUpdateModel extends Partial<IStore | TPickedModel<keyof IModelMap>>>(model: TUpdateModel) {
+        // Metadata hydration is not a coherent Dock snapshot. Field setters remain
+        // available to the revision-checked snapshot projection.
+        super.update("uid" in model && "dock_order" in model ? preserveProjectDockMetadata(model, this.dock_order) : model);
+    }
+
     public static get MODEL_NAME() {
         return "ProjectColumn" as const;
     }
 
     constructor(model: Record<string, unknown>) {
-        super(model);
+        super({ ...model, dock_order: null });
 
-        this.subscribeSocketEvents([useBoardCardCreatedHandlers, useBoardColumnDeletedHandlers], {
-            projectUID: this.project_uid,
-            columnUID: this.uid,
-            column: this,
-        });
+        this.subscribeSocketEvents(
+            [
+                useBoardCardCreatedHandlers,
+                useBoardColumnDeletedHandlers,
+                useBoardColumnDescriptionChangedHandlers,
+                useBoardColumnWorkflowStageChangedHandlers,
+            ],
+            {
+                projectUID: this.project_uid,
+                columnUID: this.uid,
+                column: this,
+            }
+        );
     }
 
     public get project_uid() {
@@ -46,12 +70,49 @@ class ProjectColumn extends BaseModel<IStore> {
     public get order() {
         return this.getValue("order");
     }
+
+    public get description() {
+        return this.getValue("description") ?? "";
+    }
+    public set description(value) {
+        this.update({ description: value });
+    }
+    public get workflow_stage() {
+        return this.getValue("workflow_stage") ?? null;
+    }
+    public set workflow_stage(value) {
+        this.update({ workflow_stage: value });
+    }
+    public get workflow_counts_as_completed() {
+        return this.getValue("workflow_counts_as_completed");
+    }
+    public set workflow_counts_as_completed(value) {
+        this.update({ workflow_counts_as_completed: value });
+    }
     public set order(value) {
         this.update({ order: value });
     }
 
     public get count() {
         return this.getValue("count");
+    }
+
+    public get open_count() {
+        return this.getValue("open_count");
+    }
+
+    public get incomplete_count() {
+        return this.getValue("incomplete_count");
+    }
+    public set incomplete_count(value) {
+        this.update({ incomplete_count: value });
+    }
+
+    public get dock_order() {
+        return this.getValue("dock_order") ?? null;
+    }
+    public set dock_order(value) {
+        this.update({ dock_order: value });
     }
     public set count(value) {
         this.update({ count: value });

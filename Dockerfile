@@ -9,6 +9,7 @@ ENV UV_HTTP_TIMEOUT=120
 COPY --from=uv /uv /uvx /bin/
 
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         build-essential \
         ca-certificates \
@@ -21,6 +22,7 @@ RUN apt-get update \
 RUN uv --version
 
 COPY ./src/shared/py ./src/shared/py
+COPY ./src/sdk/vendor ./src/sdk/vendor
 COPY pyproject.toml uv.lock README.md alembic.ini ./
 
 RUN cd /app/src/shared/py && uv venv && uv sync --locked --no-dev
@@ -28,11 +30,34 @@ RUN cd /app && uv venv && uv sync --locked --no-dev --no-install-project
 
 COPY ./src/api ./src/api
 
-RUN cd /app && uv sync --locked --no-dev
+RUN cd /app && uv sync --locked --no-dev --extra document-retrieval
+
+# Runtime writes stay in the dedicated application data directory.
+RUN groupadd --gid 10001 langboard \
+    && useradd --uid 10001 --gid 10001 --create-home langboard \
+    && mkdir -p /app/local /app/.fastmcp \
+    && chown -R langboard:langboard /app/local /app/.fastmcp
+
+FROM base AS with-aws
+
+RUN cd /app && uv sync --locked --no-dev --extra aws --extra document-retrieval
+
+FROM base AS with-azure-vault
+
+RUN cd /app && uv sync --locked --no-dev --extra azure-vault --extra document-retrieval
 
 FROM base AS with-document-processing
 
-RUN cd /app && uv sync --locked --no-dev --extra document-processing
+# PDF font substitution requires installed CJK glyphs, even with remote inference.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk \
+    && fc-cache -f \
+    && fc-match -f '%{family}\n' ':lang=ko' | grep -q 'Noto.*CJK' \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN cd /app && uv sync --locked --no-dev --extra document-processing --extra document-retrieval
+ENV UV_NO_SYNC=1
+USER 10001:10001
 
 FROM base AS with-cron
 
@@ -40,3 +65,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends cron \
     && rm -rf /var/lib/apt/lists/* \
     && printf '' | crontab -
+
+ENV UV_NO_SYNC=1
+USER 10001:10001

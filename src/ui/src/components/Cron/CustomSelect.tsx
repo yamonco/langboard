@@ -44,8 +44,8 @@ function CustomSelect(props: CustomSelectProps) {
         const cronValue = partToString(parsedArray, unit, humanizeLabels, leadingZero, clockFormat);
         const testEveryValue = cronValue.match(/^\*\/([0-9]+),?/) || [];
 
-        return testEveryValue[1] ? `${t("cron.Every")} ${testEveryValue[1]}` : cronValue;
-    }, [value, unit, humanizeLabels, leadingZero, clockFormat]);
+        return testEveryValue[1] ? t("cron.Every interval", { count: Number(testEveryValue[1]) }) : cronValue;
+    }, [value, unit, humanizeLabels, leadingZero, clockFormat, t]);
 
     const options = useMemo(() => {
         if (optionsList) {

@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBoardColumnCardHierarchy, isRelationshipRenderedInHierarchy } from "./BoardColumnCardHierarchy.ts";
+import {
+    buildBoardColumnCardHierarchy,
+    buildCardRelationshipIndex,
+    canCreateCardRelationship,
+    isRelationshipRenderedInHierarchy,
+    hasContainmentCycle,
+} from "./BoardColumnCardHierarchy.ts";
 
 interface IRelationship {
     parent_card_uid: string;
     child_card_uid: string;
+    machine_semantic?: "contains" | "blocks" | "references";
 }
 
 const card = (uid: string, order: number, relationships: IRelationship[] = []) =>
@@ -118,6 +125,22 @@ test("renders a converging descendant once inside the same top-level group", () 
     );
 });
 
+test("rejects duplicate, self, and cyclic blocking relationship candidates", () => {
+    const relationships = [
+        { parent_card_uid: "a", child_card_uid: "b", machine_semantic: "blocks" as const },
+        { parent_card_uid: "b", child_card_uid: "c", machine_semantic: "blocks" as const },
+    ];
+    const cards = [card("a", 0, relationships), card("b", 1, relationships), card("c", 2, relationships), card("d", 3)];
+    const relationshipIndex = buildCardRelationshipIndex(cards);
+
+    assert.equal(canCreateCardRelationship(cards, "a", "a", "children"), false);
+    assert.equal(canCreateCardRelationship(cards, "a", "b", "children"), false);
+    assert.equal(canCreateCardRelationship(cards, "c", "a", "children", undefined, "blocks"), false);
+    assert.equal(canCreateCardRelationship(cards, "a", "d", "children"), true);
+    assert.equal(canCreateCardRelationship(cards, "d", "c", "parents"), true);
+    assert.equal(canCreateCardRelationship(cards, "c", "a", "children", relationshipIndex, "blocks"), false);
+});
+
 test("preserves a deep relationship chain without recursive stack overflow", () => {
     const cards = Array.from({ length: 10_000 }, (_, index) =>
         card(String(index), index, index ? [{ parent_card_uid: String(index - 1), child_card_uid: String(index) }] : [])
@@ -130,4 +153,56 @@ test("preserves a deep relationship chain without recursive stack overflow", () 
         assert.equal(item.uid, String(index + 1));
         assert.equal(depth, index + 1);
     });
+});
+
+test("rejects duplicate, self, and cyclic blocking relationship candidates", () => {
+    const relationships = [
+        { parent_card_uid: "a", child_card_uid: "b", machine_semantic: "blocks" as const },
+        { parent_card_uid: "b", child_card_uid: "c", machine_semantic: "blocks" as const },
+    ];
+    const cards = [card("a", 0, relationships), card("b", 1, relationships), card("c", 2, relationships), card("d", 3)];
+    const relationshipIndex = buildCardRelationshipIndex(cards);
+
+    assert.equal(canCreateCardRelationship(cards, "a", "a", "children"), false);
+    assert.equal(canCreateCardRelationship(cards, "a", "b", "children"), false);
+    assert.equal(canCreateCardRelationship(cards, "c", "a", "children", undefined, "blocks"), false);
+    assert.equal(canCreateCardRelationship(cards, "a", "d", "children"), true);
+    assert.equal(canCreateCardRelationship(cards, "d", "c", "parents"), true);
+    assert.equal(canCreateCardRelationship(cards, "c", "a", "children", relationshipIndex, "blocks"), false);
+});
+
+
+test("only contains and unchanged legacy links group cards", () => {
+    for (const semantic of ["blocks", "references"] as const) {
+        const edge = { parent_card_uid: "a", child_card_uid: "b", machine_semantic: semantic };
+        const groups = buildBoardColumnCardHierarchy([card("a", 0, [edge]), card("b", 1, [edge])]);
+        assert.equal(groups.length, 2);
+        assert.ok(groups.every((group) => !group.descendants.length && !group.hasContainmentCycle));
+    }
+});
+
+test("contains cycles warn without blocking relationship creation", () => {
+    const edges: IRelationship[] = [
+        { parent_card_uid: "a", child_card_uid: "b", machine_semantic: "contains" },
+        { parent_card_uid: "b", child_card_uid: "a", machine_semantic: "contains" },
+    ];
+    const cards = [card("a", 0, edges), card("b", 1, edges)];
+    assert.equal(hasContainmentCycle(cards), true);
+    assert.equal(hasContainmentCycle([...cards, card("unrelated", 2)], "unrelated"), false);
+    const groups = buildBoardColumnCardHierarchy(cards);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].hasContainmentCycle, true);
+    assert.equal(groups[0].descendants.length, 1);
+    assert.equal(canCreateCardRelationship([card("a", 0, [edges[0]]), card("b", 1)], "b", "a", "children", undefined, "contains"), true);
+    assert.equal(canCreateCardRelationship([card("a", 0, [edges[0]]), card("b", 1)], "b", "a", "children", undefined, "references"), true);
+    assert.equal(canCreateCardRelationship([card("a", 0, [edges[0]]), card("b", 1)], "b", "a", "children", undefined, "blocks"), true);
+});
+
+test("shared descendants and legacy cycles are not contains-cycle warnings", () => {
+    const contains: IRelationship[] = [
+        { parent_card_uid: "a", child_card_uid: "c", machine_semantic: "contains" },
+        { parent_card_uid: "b", child_card_uid: "c", machine_semantic: "contains" },
+    ];
+    assert.equal(hasContainmentCycle([card("a", 0, contains), card("b", 1, contains), card("c", 2, contains)]), false);
+    assert.equal(hasContainmentCycle([card("a", 0, [{ parent_card_uid: "a", child_card_uid: "a" }])]), false);
 });

@@ -1,0 +1,285 @@
+import Button from "@/components/base/Button";
+import Input from "@/components/base/Input";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+
+type Settings = Record<string, unknown>;
+
+export default function DocumentRetrievalSettings({
+    value,
+    disabled,
+    onSave,
+}: {
+    value: Settings;
+    disabled: boolean;
+    onSave: (retrieval: Settings) => void;
+}): React.JSX.Element {
+    const [t] = useTranslation();
+    const [error, setError] = useState("");
+    const settings = value.retrieval && typeof value.retrieval === "object" ? (value.retrieval as Settings) : {};
+    const splitter = settings.splitter && typeof settings.splitter === "object" ? (settings.splitter as Settings) : {};
+    const [splitterType, setSplitterType] = useState(String(splitter.type ?? "recursive"));
+    const [lengthUnit, setLengthUnit] = useState(String(splitter.length_unit ?? "characters"));
+    const [storeType, setStoreType] = useState(String(settings.store ?? "sqlite"));
+    const [searchType, setSearchType] = useState(String(settings.search_type ?? "similarity"));
+    const numeric = (name: string, fallback: number, min: number, max: number, step = 1, optional = false) => (
+        <label className="grid gap-1 text-xs" key={name}>
+            {t(`internalBot.retrieval.${name}`)}
+            <Input
+                name={name}
+                onInput={(event) => event.currentTarget.setCustomValidity("")}
+                type="number"
+                required={!optional}
+                min={min}
+                max={max}
+                step={step}
+                defaultValue={
+                    optional && settings[name] == null
+                        ? ""
+                        : Number((name.startsWith("splitter.") ? splitter[name.slice(9)] : settings[name]) ?? fallback)
+                }
+            />
+        </label>
+    );
+    const select = (name: string, fallback: string, options: string[]) => (
+        <label className="grid gap-1 text-xs" key={name}>
+            {t(`internalBot.retrieval.${name}`)}
+            <select
+                name={name}
+                className="select select-sm h-9 w-full rounded-md border bg-background px-2 text-sm"
+                value={name === "search_type" ? searchType : undefined}
+                defaultValue={
+                    name === "search_type" ? undefined : String((name.startsWith("splitter.") ? splitter[name.slice(9)] : settings[name]) ?? fallback)
+                }
+                onChange={(event) => {
+                    if (name === "splitter.type") setSplitterType(event.target.value);
+                    if (name === "splitter.length_unit") setLengthUnit(event.target.value);
+                    if (name === "search_type") setSearchType(event.target.value);
+                }}
+            >
+                {options.map((option) => (
+                    <option key={option} value={option}>
+                        {name === "search_type" ? t(`internalBot.retrieval.mode_${option}`) : option}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+    return (
+        <form
+            key={JSON.stringify(settings)}
+            className="mb-4 rounded-lg border p-3"
+            onInput={(event) => {
+                setError("");
+                const overlap = event.currentTarget.elements.namedItem("splitter.chunk_overlap") as HTMLInputElement;
+                overlap.setCustomValidity("");
+                const fetch = event.currentTarget.elements.namedItem("fetch_k") as HTMLInputElement | null;
+                fetch?.setCustomValidity("");
+            }}
+            onSubmit={(event) => {
+                event.preventDefault();
+                if (disabled) return;
+                const form = new FormData(event.currentTarget);
+                const size = Number(form.get("splitter.chunk_size"));
+                const overlap = Number(form.get("splitter.chunk_overlap"));
+                const overlapInput = event.currentTarget.elements.namedItem("splitter.chunk_overlap") as HTMLInputElement;
+                overlapInput.setCustomValidity(overlap >= size ? t("internalBot.retrieval.overlap_error") : "");
+                const fetch = event.currentTarget.elements.namedItem("fetch_k") as HTMLInputElement | null;
+                fetch?.setCustomValidity(Number(form.get("fetch_k")) < Number(form.get("k")) ? t("internalBot.retrieval.fetch_error") : "");
+                if (!event.currentTarget.reportValidity()) return;
+                const next = { ...settings };
+                const nextSplitter = { ...splitter };
+                for (const [name, input] of form) {
+                    if (
+                        [
+                            "enabled",
+                            "splitter.separators",
+                            "splitter.markdown_headers",
+                            "splitter.strip_headers",
+                            "splitter.strip_whitespace",
+                        ].includes(name)
+                    )
+                        continue;
+                    const raw = String(input);
+                    const field = name.startsWith("splitter.") ? name.slice(9) : name;
+                    const target = name.startsWith("splitter.") ? nextSplitter : next;
+                    target[field] = [
+                        "type",
+                        "length_unit",
+                        "encoding",
+                        "separator",
+                        "keep_separator",
+                        "store",
+                        "external_url",
+                        "external_api_key",
+                        "search_type",
+                    ].includes(field)
+                        ? field === "keep_separator" && raw === "false"
+                            ? false
+                            : raw
+                        : raw === "" && field === "score_threshold"
+                          ? null
+                          : Number(raw);
+                }
+                nextSplitter.strip_whitespace = form.has("splitter.strip_whitespace");
+                if (splitterType === "markdown") {
+                    nextSplitter.strip_headers = form.has("splitter.strip_headers");
+                    nextSplitter.markdown_headers = form.getAll("splitter.markdown_headers").map(Number);
+                    if (!(nextSplitter.markdown_headers as number[]).length) {
+                        setError(t("internalBot.retrieval.headers_error"));
+                        return;
+                    }
+                }
+                if (splitterType !== "character") {
+                    try {
+                        const separators: unknown = JSON.parse(String(form.get("splitter.separators")));
+                        if (
+                            !Array.isArray(separators) ||
+                            !separators.length ||
+                            separators.length > 16 ||
+                            separators.at(-1) !== "" ||
+                            separators.some((item) => typeof item !== "string" || item.length > 32)
+                        )
+                            throw new Error();
+                        nextSplitter.separators = separators;
+                    } catch {
+                        const input = event.currentTarget.elements.namedItem("splitter.separators") as HTMLTextAreaElement;
+                        input.setCustomValidity(t("internalBot.retrieval.separators_error"));
+                        input.reportValidity();
+                        return;
+                    }
+                }
+                next.enabled = form.has("enabled");
+                if (storeType === "sqlite") {
+                    delete next.external_url;
+                    delete next.external_api_key;
+                    next.search_type = "similarity";
+                } else if (!next.external_api_key) delete next.external_api_key;
+                if (storeType === "qdrant" && searchType === "mmr") delete next.score_threshold;
+                next.splitter = nextSplitter;
+                onSave(next);
+            }}
+        >
+            <fieldset disabled={disabled} className="grid gap-3">
+                <legend className="mb-2 text-sm font-medium">{t("internalBot.retrieval.title")}</legend>
+                <label className="flex items-center gap-2 text-sm">
+                    <input name="enabled" type="checkbox" className="size-4 accent-primary" defaultChecked={settings.enabled === true} />
+                    {t("internalBot.retrieval.enabled")}
+                </label>
+                <p className="text-xs text-muted-foreground">{t("internalBot.Existing attachments require explicit processing")}</p>
+                <label className="grid gap-1 text-xs">
+                    {t("internalBot.retrieval.store")}
+                    <select
+                        name="store"
+                        defaultValue={storeType}
+                        onChange={(event) => {
+                            setStoreType(event.target.value);
+                            if (event.target.value === "sqlite") setSearchType("similarity");
+                        }}
+                        className="h-9 rounded-md border bg-background px-2 text-sm"
+                    >
+                        <option value="sqlite">{t("internalBot.retrieval.store_sqlite")}</option>
+                        <option value="qdrant">{t("internalBot.retrieval.store_qdrant")}</option>
+                    </select>
+                </label>
+                {storeType === "qdrant" && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="grid gap-1 text-xs">
+                            {t("internalBot.retrieval.external_url")}
+                            <Input name="external_url" type="url" required defaultValue={String(settings.external_url ?? "")} />
+                        </label>
+                        <label className="grid gap-1 text-xs">
+                            {t("internalBot.retrieval.external_api_key")}
+                            <Input
+                                name="external_api_key"
+                                type="password"
+                                autoComplete="off"
+                                defaultValue={String(settings.external_api_key ?? "")}
+                            />
+                        </label>
+                    </div>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                    {numeric("dimensions", 1536, 1, 65536)}
+                    {select("splitter.type", "recursive", ["recursive", "character", "markdown"])}
+                    {numeric("splitter.chunk_size", 1000, 64, 8192)}
+                    {numeric("splitter.chunk_overlap", 150, 0, 2048)}
+                    {select("splitter.length_unit", "characters", ["characters", "tokens"])}
+                    {lengthUnit === "tokens" && select("splitter.encoding", "cl100k_base", ["cl100k_base", "o200k_base"])}
+                    {select("splitter.keep_separator", "start", ["false", "start", "end"])}
+                    {numeric("k", 5, 1, 25)}
+                    {storeType === "qdrant" && select("search_type", "similarity", ["similarity", "mmr"])}
+                    {storeType === "qdrant" && searchType === "mmr" ? (
+                        <>
+                            {numeric("fetch_k", 20, 1, 100)}
+                            {numeric("lambda_mult", 0.5, 0, 1, 0.1)}
+                        </>
+                    ) : (
+                        numeric("score_threshold", 0, -1, 1, 0.01, true)
+                    )}
+                    {numeric("max_return_tokens", 4000, 128, 16000)}
+                    {numeric("timeout_seconds", 10, 1, 30, 0.1)}
+                </div>
+                <p className="text-xs text-muted-foreground">{t("internalBot.retrieval.search_help")}</p>
+                <label className="flex items-center gap-2 text-sm">
+                    <input name="splitter.strip_whitespace" type="checkbox" defaultChecked={splitter.strip_whitespace !== false} />
+                    {t("internalBot.retrieval.splitter.strip_whitespace")}
+                </label>
+                <label className="grid gap-1 text-xs">
+                    {t(`internalBot.retrieval.splitter.${splitterType === "character" ? "separator" : "separators"}`)}
+                    {splitterType === "character" ? (
+                        <textarea
+                            key="character-separator"
+                            name="splitter.separator"
+                            maxLength={32}
+                            className="min-h-16 rounded-md border bg-background p-2 font-mono text-sm"
+                            defaultValue={String(splitter.separator ?? "\n\n")}
+                        />
+                    ) : (
+                        <textarea
+                            key="recursive-separators"
+                            name="splitter.separators"
+                            required
+                            className="min-h-16 rounded-md border bg-background p-2 font-mono text-sm"
+                            defaultValue={JSON.stringify(splitter.separators ?? ["\n\n", "\n", "。", "．", ".", "，", "、", ",", " ", ""])}
+                            onInput={(event) => event.currentTarget.setCustomValidity("")}
+                        />
+                    )}
+                </label>
+                {splitterType === "markdown" && (
+                    <fieldset className="grid gap-2 rounded-md border p-2">
+                        <legend className="text-xs">{t("internalBot.retrieval.splitter.markdown_headers")}</legend>
+                        <div className="flex flex-wrap gap-3">
+                            {[1, 2, 3, 4, 5, 6].map((level) => (
+                                <label key={level} className="flex items-center gap-1 text-sm">
+                                    <input
+                                        type="checkbox"
+                                        name="splitter.markdown_headers"
+                                        value={level}
+                                        defaultChecked={(Array.isArray(splitter.markdown_headers) ? splitter.markdown_headers : [1, 2, 3]).includes(
+                                            level
+                                        )}
+                                    />
+                                    {t("internalBot.retrieval.header_level", { level })}
+                                </label>
+                            ))}
+                        </div>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input name="splitter.strip_headers" type="checkbox" defaultChecked={splitter.strip_headers === true} />
+                            {t("internalBot.retrieval.splitter.strip_headers")}
+                        </label>
+                    </fieldset>
+                )}
+                <p className="text-xs text-muted-foreground">{t("internalBot.retrieval.overlap_help")}</p>
+                {error && (
+                    <p role="alert" className="text-sm text-destructive">
+                        {error}
+                    </p>
+                )}
+                <Button type="submit" size="sm" className="justify-self-start">
+                    {t("common.Save")}
+                </Button>
+            </fieldset>
+        </form>
+    );
+}

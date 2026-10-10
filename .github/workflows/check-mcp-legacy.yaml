@@ -1,0 +1,123 @@
+name: Check MCP Legacy Contracts
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/check-mcp-legacy.yaml
+      - scripts/mcp_contracts/**
+      - src/api/tests/mcp_integration/**
+      - src/api/tests/card_workspace/test_attachment_mcp_read.py
+      - docker/docker-compose.server.yaml
+      - docker/envs/server.env.template
+      - scripts/utils/update-docker-envs.sh
+      - src/api/langboard/mcp_tools/**
+      - src/api/langboard/mcp_integration/**
+      - src/api/langboard/middlewares/McpAuthMiddleware.py
+      - src/shared/py/langboard_shared/**
+      - src/shared/py/pyproject.toml
+      - src/shared/py/uv.lock
+      - Dockerfile
+      - pyproject.toml
+      - uv.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vault-dependencies:
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
+    env:
+      PROJECT_NAME: langboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify default installation excludes optional cloud SDKs
+        run: |
+          uv sync --frozen --no-dev --no-install-project
+          uv run --no-sync python - <<'PY'
+          from importlib.metadata import PackageNotFoundError, distribution
+          for name in ("azure-identity", "azure-keyvault-keys", "boto3", "botocore", "s3transfer"):
+              try:
+                  distribution(name)
+              except PackageNotFoundError:
+                  continue
+              raise AssertionError(f"{name} unexpectedly installed by default")
+          distribution("hvac")
+          PY
+      - name: Verify selected AWS provider installation
+        run: |
+          uv sync --frozen --no-dev --no-install-project --extra aws
+          uv run --no-sync python - <<'PY'
+          from boto3 import client
+          from botocore.exceptions import ClientError
+          from langboard_shared.core.storage.S3Storage import S3Storage
+          PY
+      - name: Verify selected Azure provider installation
+        run: |
+          uv sync --frozen --no-dev --no-install-project --extra azure-vault
+          uv run --no-sync python - <<'PY'
+          from azure.identity import ClientSecretCredential
+          from azure.keyvault.keys import KeyClient
+          PY
+  document-vision:
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --extra document-processing
+      - name: Install document worker CJK fonts
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk && fc-cache -f
+      - name: Verify native remote VLM without local model packages
+        run: |
+          uv run --no-sync python - <<'PY'
+          from importlib.metadata import distributions
+          names = {d.metadata["Name"].lower().replace("_", "-") for d in distributions()}
+          assert not {"torch", "torchvision", "docling-ibm-models", "rapidocr", "triton"} & names
+          assert not any(name.startswith(("nvidia-", "cuda-")) for name in names)
+          PY
+          VERIFY_DOCUMENT_FONTS=1 PYTHONPATH=src/shared/py uv run --no-sync pytest -q -p no:tach src/shared/py/langboard_shared/tasks/docling/DocumentVision_test.py
+  catalog:
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
+    env:
+      PROJECT_NAME: langboard
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --extra document-retrieval
+      - name: Verify immutable artifacts and rejection behavior
+        run: uv run --no-sync python scripts/mcp_contracts/test_legacy.py
+      - name: Verify native protocol and authorization contracts
+        run: uv run --no-sync pytest -q src/api/tests/mcp_integration src/api/tests/identity src/api/tests/scim/test_project_role_projection.py src/shared/py/langboard_shared/core/security/KeyVault_isolation_test.py src/shared/py/langboard_shared/core/storage/Storage_isolation_test.py src/shared/py/langboard_shared/tasks/docling/DoclingMetadataTask_test.py src/shared/py/langboard_shared/tasks/docling/DocumentKeywords_test.py src/shared/py/langboard_shared/tasks/docling/DocumentSplitter_test.py src/shared/py/langboard_shared/domain/services/factory/DoclingMetadataService_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardRepository_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/DocumentSearchMigration_test.py src/api/langboard/mcp_tools/UserMcp_search_test.py src/api/tests/card_workspace/test_attachment_document_http.py src/api/tests/card_workspace/test_document_mcp_read.py src/api/tests/card_workspace/test_attachment_mcp_read.py
+      - name: Capture candidate catalog without deployed database access
+        run: uv run --no-sync python scripts/mcp_contracts/capture_native.py --catalog-only > candidate.json
+      - name: Preserve all legacy tool schemas and annotations
+        run: >-
+          uv run --no-sync python scripts/mcp_contracts/check_legacy.py --catalog-only
+          src/api/tests/mcp_integration/fixtures/legacy-native-v1.json candidate.json

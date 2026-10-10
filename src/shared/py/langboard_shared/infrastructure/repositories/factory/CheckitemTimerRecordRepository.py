@@ -20,9 +20,9 @@ class CheckitemTimerRecordRepository(BaseRepository[CheckitemTimerRecord]):
     def get_by_checkitem_and_arc_type(self, checkitem: TCheckitemParam, arc_type: Literal["first", "last"]):
         checkitem_id = InfraHelper.convert_id(checkitem)
         order_by = (
-            CheckitemTimerRecord.column("created_at").asc()
+            (CheckitemTimerRecord.column("created_at").asc(), CheckitemTimerRecord.column("id").asc())
             if arc_type == "first"
-            else CheckitemTimerRecord.column("created_at").desc()
+            else (CheckitemTimerRecord.column("created_at").desc(), CheckitemTimerRecord.column("id").desc())
         )
 
         record = None
@@ -30,7 +30,7 @@ class CheckitemTimerRecordRepository(BaseRepository[CheckitemTimerRecord]):
             result = db.exec(
                 SqlBuilder.select.table(CheckitemTimerRecord)
                 .where(CheckitemTimerRecord.column("checkitem_id") == checkitem_id)
-                .order_by(order_by)
+                .order_by(*order_by)
                 .limit(1)
             )
             record = result.first()
@@ -87,4 +87,4 @@ class CheckitemTimerRecordRepository(BaseRepository[CheckitemTimerRecord]):
 
         with DbSession.use(readonly=True) as db:
             rows = db.exec(SqlBuilder.select.column(ranked.c.id).where(ranked.c.row_number == 1)).all()
-        return [SnowflakeID(row[0]) for row in rows]
+        return [SnowflakeID(row) for row in rows]

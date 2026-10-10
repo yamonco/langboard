@@ -1,0 +1,26 @@
+{
+  "Password recovery": "비밀번호 찾기",
+  "Please enter your name to verify your account.": "계정 확인을 위해 이름을 입력해 주세요.",
+  "Password Reset Link Sent": "비밀번호 재설정 링크 전송됨",
+  "A password reset link has been successfully sent to your registered email address.": "등록된 이메일 주소로 비밀번호 재설정 링크를 보냈습니다.",
+  "Please check your inbox (and spam/junk folder) for the email. Follow the instructions in the email to reset your password.": "받은편지함과 스팸 폴더를 확인해 주세요. 메일의 안내에 따라 비밀번호를 재설정하세요.",
+  "If you do not receive the email within a few minutes, please try again or contact support for assistance.": "몇 분 안에 메일을 받지 못하면 다시 시도하거나 지원팀에 문의해 주세요.",
+  "Please enter your new password.": "새 비밀번호를 입력해 주세요.",
+  "Resend Link": "링크 다시 보내기",
+  "Resent link successfully.": "링크를 다시 보냈습니다.",
+  "Password Reset Successful": "비밀번호 재설정 완료",
+  "Your password has been successfully reset.": "비밀번호가 재설정되었습니다.",
+  "You can now sign in with your new password.": "이제 새 비밀번호로 로그인할 수 있습니다.",
+  "errors": {
+    "missing": {
+      "firstname": "이름을 입력해 주세요.",
+      "lastname": "성을 입력해 주세요.",
+      "password": "새 비밀번호를 입력해 주세요.",
+      "password-confirm": "비밀번호 확인을 입력해 주세요."
+    },
+    "invalid": {
+      "name": "이름이 일치하지 않습니다. 다시 시도해 주세요.",
+      "password-confirm": "비밀번호 확인이 일치하지 않습니다. 다시 시도해 주세요."
+    }
+  }
+}

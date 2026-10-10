@@ -1,0 +1,463 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { api } from "@/core/helpers/Api";
+import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
+import Button from "@/components/base/Button";
+
+interface Connection {
+    connection_uid: string;
+    installation_url?: string;
+}
+interface HealthJobs {
+    items: { job_uid: string; state: "pending" | "processing" | "completed" | "blocked" | "failed" }[];
+    next_cursor: string | null;
+}
+interface ConnectionHealth {
+    state: string;
+    next_cursor: string | null;
+    items: {
+        installation_id: string;
+        account_id: string;
+        selected_count: number;
+        healthy_count: number;
+        degraded_count: number;
+        unavailable_count: number;
+        unverified_count: number;
+    }[];
+}
+interface Installation {
+    id: number;
+    account: { id: number; login: string; type: string };
+    suspended: boolean;
+}
+interface Authorization {
+    installations: Installation[];
+    installation_proof: string;
+    has_more: boolean;
+    page: number;
+    next_page: number | null;
+}
+interface Repository {
+    id: number;
+    name: string;
+    archived: boolean;
+}
+interface Snapshot {
+    revision: string;
+    items: { repository_id: string; connection_uid: string; selected: boolean }[];
+}
+
+export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange?: () => void }) {
+    const [t, i18n] = useTranslation();
+    const { project, currentUser, canEditBasicInfo } = useBoardSettings();
+    const root = `/board/${project.uid}/settings/apps/github`;
+    const key = `github-onboarding:${currentUser.uid}:${project.uid}`;
+    const [connection, setConnection] = useState<Connection | null>(() => {
+        try {
+            return JSON.parse(sessionStorage.getItem(key) ?? "null");
+        } catch {
+            return null;
+        }
+    });
+    const [connections, setConnections] = useState<{ connection_uid: string; app_id: string; state: string }[]>([]);
+    const [connectionCursor, setConnectionCursor] = useState<string | null>(null);
+    const [connectionsError, setConnectionsError] = useState(false);
+    const [organization, setOrganization] = useState("");
+    const [authorization, setAuthorization] = useState<Authorization | null>(null);
+    const [installation, setInstallation] = useState<Installation | null>(null);
+    const [repositories, setRepositories] = useState<Repository[]>([]);
+    const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+    const [selected, setSelected] = useState<number[]>([]);
+    const [nextPage, setNextPage] = useState<number | null>(null);
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [healthCursor, setHealthCursor] = useState<string | null>(null);
+    const [healthJobs, setHealthJobs] = useState<HealthJobs | null>(null);
+    const [connectionHealth, setConnectionHealth] = useState<ConnectionHealth | null>(null);
+    const [refreshed, setRefreshed] = useState(false);
+    const callbackStarted = useRef(false);
+    const text = (name: string) => t(`project.settings.${name}`);
+    const run = async (action: () => Promise<void>) => {
+        setPending(true);
+        setError(false);
+        setSaved(false);
+        setRefreshed(false);
+        try {
+            await action();
+        } catch {
+            setError(true);
+            setHealthCursor(null);
+        } finally {
+            setPending(false);
+        }
+    };
+    const loadConnections = async (after?: string) => {
+        setConnectionsError(false);
+        try {
+            const result = (
+                await api.get<{ items: typeof connections; next_cursor: string | null }>(`${root}/connections`, { params: after ? { after } : {} })
+            ).data;
+            setConnections((previous) =>
+                after
+                    ? [...previous, ...result.items.filter((row) => !previous.some((old) => old.connection_uid === row.connection_uid))]
+                    : result.items
+            );
+            setConnectionCursor(result.next_cursor);
+        } catch {
+            setConnectionsError(true);
+        }
+    };
+    useEffect(() => {
+        if (canEditBasicInfo) void loadConnections();
+    }, [root, canEditBasicInfo]);
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code"),
+            state = params.get("state");
+        if (!code || !state || callbackStarted.current || !canEditBasicInfo) return;
+        const kind = sessionStorage.getItem(`${key}:kind`);
+        if (kind !== "manifest" && kind !== "authorization") return;
+        callbackStarted.current = true;
+        // Remove one-time values before network IO; ambiguous exchanges are never retried.
+        params.delete("code");
+        params.delete("state");
+        params.delete("github_app_manifest");
+        history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+        sessionStorage.removeItem(`${key}:kind`);
+        void run(async () => {
+            if (kind === "manifest") {
+                const result = (await api.post<Connection>(`${root}/manifest/complete`, { code, state })).data;
+                sessionStorage.setItem(key, JSON.stringify(result));
+                setConnection(result);
+            } else {
+                setAuthorization((await api.post<Authorization>(`${root}/authorization/complete`, { code, state })).data);
+            }
+        });
+    }, [key, root, canEditBasicInfo]);
+    const loadConnectionHealth = async (after?: string) => {
+        const result = (
+            await api.get<ConnectionHealth>(`${root}/connections/${connection!.connection_uid}/health`, { params: after ? { after } : {} })
+        ).data;
+        setConnectionHealth((previous) => (after && previous ? { ...result, items: [...previous.items, ...result.items] } : result));
+        if (!after) await loadHealthJobs();
+    };
+    const loadHealthJobs = async (after?: string) => {
+        const result = (await api.get<HealthJobs>(`${root}/connections/${connection!.connection_uid}/jobs`, { params: after ? { after } : {} })).data;
+        setHealthJobs((previous) => (after && previous ? { ...result, items: [...previous.items, ...result.items] } : result));
+    };
+    const register = () =>
+        run(async () => {
+            const result = (
+                await api.post<{ registration_url: string; manifest: unknown }>(`${root}/manifest`, null, {
+                    params: organization.trim() ? { organization: organization.trim() } : {},
+                })
+            ).data;
+            const url = new URL(result.registration_url);
+            if (url.origin !== "https://github.com" || !url.pathname.endsWith("/settings/apps/new")) throw new Error("Invalid registration target");
+            sessionStorage.setItem(`${key}:kind`, "manifest");
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = url.href;
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "manifest";
+            input.value = JSON.stringify(result.manifest);
+            form.append(input);
+            document.body.append(form);
+            form.submit();
+            form.remove();
+        });
+    const authorize = (page = 1) =>
+        run(async () => {
+            const result = (
+                await api.post<{ authorization_url: string }>(`${root}/authorization`, { connection_uid: connection!.connection_uid, page })
+            ).data;
+            const url = new URL(result.authorization_url);
+            if (url.origin !== "https://github.com" || url.pathname !== "/login/oauth/authorize") throw new Error("Invalid authorization target");
+            sessionStorage.setItem(`${key}:kind`, "authorization");
+            location.assign(url.href);
+        });
+    const loadRepositories = (item: Installation, page = 1) =>
+        run(async () => {
+            const result = (
+                await api.get<{ repositories: Repository[]; next_page: number | null }>(`${root}/installations/${item.id}/repositories`, {
+                    params: { connection_uid: connection!.connection_uid, account_id: item.account.id, page },
+                })
+            ).data;
+            if (page === 1) {
+                const current = (await api.get<Snapshot>(`${root}/resources`)).data;
+                setSnapshot(current);
+                setSelected(
+                    current.items
+                        .filter((row) => row.selected && row.connection_uid === connection!.connection_uid)
+                        .map((row) => Number(row.repository_id))
+                );
+                setInstallation(item);
+                setRepositories(result.repositories);
+            } else setRepositories((previous) => [...previous, ...result.repositories.filter((row) => !previous.some((old) => old.id === row.id))]);
+            setNextPage(result.next_page);
+        });
+    const save = () =>
+        run(async () => {
+            const before = snapshot!.items
+                .filter((row) => row.selected && row.connection_uid === connection!.connection_uid)
+                .map((row) => Number(row.repository_id));
+            const visible = new Set(repositories.map((row) => row.id));
+            const add = selected.filter((id) => !before.includes(id));
+            const remove = before.filter((id) => visible.has(id) && !selected.includes(id));
+            if (!add.length && !remove.length) return;
+            if (add.length > 25 || remove.length > 25) throw new Error("Delta limit");
+            setSnapshot(
+                (
+                    await api.put<Snapshot>(`${root}/resources`, {
+                        connection_uid: connection!.connection_uid,
+                        installation_id: installation!.id,
+                        account_id: installation!.account.id,
+                        add,
+                        remove,
+                        expected_revision: snapshot!.revision,
+                        installation_proof: authorization!.installation_proof,
+                    })
+                ).data
+            );
+            setSaved(true);
+            onStatusChange?.();
+        });
+    return (
+        <fieldset className="fieldset min-w-0 rounded-lg border p-3" disabled={pending || !canEditBasicInfo}>
+            <legend className="fieldset-legend">{text("GitHub connection")}</legend>
+            <p className="text-sm text-muted-foreground">{text("GitHub onboarding help")}</p>
+            {error && <p role="alert">{text("GitHub onboarding failed")}</p>}
+            {refreshed && <p role="status">{text("GitHub health refreshed")}</p>}
+            {saved && <p role="status">{text("GitHub repositories saved")}</p>}
+            {pending && <p role="status">{t("common.Loading...")}</p>}
+            {connectionsError && (
+                <div role="alert">
+                    {text("GitHub connections unavailable")}{" "}
+                    <Button size="sm" variant="outline" onClick={() => void loadConnections()}>
+                        {t("common.Retry")}
+                    </Button>
+                </div>
+            )}
+            {connections.length > 0 && (
+                <label className="flex flex-col gap-1">
+                    {text("Existing GitHub connection")}
+                    <select
+                        className="min-w-0 rounded-md border bg-background px-3 py-2"
+                        value={connection?.connection_uid ?? ""}
+                        onChange={(event) => {
+                            const item = connections.find((row) => row.connection_uid === event.target.value);
+                            const next = item ? { connection_uid: item.connection_uid } : null;
+                            setConnection(next);
+                            setConnectionHealth(null);
+                            setHealthJobs(null);
+                            setHealthCursor(null);
+                            setAuthorization(null);
+                            setInstallation(null);
+                            setRepositories([]);
+                            setSnapshot(null);
+                            setSelected([]);
+                            setSaved(false);
+                            if (next) sessionStorage.setItem(key, JSON.stringify(next));
+                            else sessionStorage.removeItem(key);
+                        }}
+                    >
+                        <option value="">{text("Create new GitHub connection")}</option>
+                        {connection && !connections.some((row) => row.connection_uid === connection.connection_uid) && (
+                            <option value={connection.connection_uid}>{text("Current GitHub connection")}</option>
+                        )}
+                        {connections.map((row) => (
+                            <option key={row.connection_uid} value={row.connection_uid}>
+                                GitHub App {row.app_id} · {row.connection_uid}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            )}
+            {connectionCursor && (
+                <Button size="sm" variant="outline" onClick={() => void loadConnections(connectionCursor)}>
+                    {text("More GitHub connections")}
+                </Button>
+            )}
+            {!connection ? (
+                <>
+                    <label className="flex flex-col gap-1">
+                        {text("GitHub organization optional")}
+                        <input
+                            className="rounded-md border bg-background px-3 py-2"
+                            value={organization}
+                            maxLength={39}
+                            onChange={(event) => setOrganization(event.target.value)}
+                        />
+                    </label>
+                    <Button size="sm" variant="outline" onClick={() => void register()}>
+                        {text("Create GitHub App")}
+                    </Button>
+                </>
+            ) : (
+                <>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                            void run(async () => {
+                                const result = (await api.get<Connection>(`${root}/connections/${connection.connection_uid}/app`)).data;
+                                const url = new URL(result.installation_url!);
+                                if (url.origin !== "https://github.com" || !/^\/apps\/[a-zA-Z0-9-]+\/installations\/new$/.test(url.pathname))
+                                    throw new Error("Invalid installation target");
+                                location.assign(url.href);
+                            })
+                        }
+                    >
+                        {text("Install GitHub App")}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                            void run(async () => {
+                                const current = healthCursor && snapshot ? snapshot : (await api.get<Snapshot>(`${root}/resources`)).data;
+                                const result = (
+                                    await api.post<Snapshot & { next_cursor: string | null }>(`${root}/resources/refresh`, {
+                                        connection_uid: connection.connection_uid,
+                                        expected_revision: current.revision,
+                                        after: healthCursor,
+                                    })
+                                ).data;
+                                setSnapshot(result);
+                                setHealthCursor(result.next_cursor);
+                                setRefreshed(true);
+                                await loadConnectionHealth();
+                                onStatusChange?.();
+                            })
+                        }
+                    >
+                        {text(healthCursor ? "Continue GitHub health refresh" : "Refresh GitHub resource health")}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => void run(() => loadConnectionHealth())}>
+                        {text("Show GitHub connection health")}
+                    </Button>
+                    {connectionHealth && (
+                        <div className="min-w-0 space-y-2 rounded-md border p-3" aria-label={text("GitHub connection health")}>
+                            <p className="text-sm text-muted-foreground">{text("GitHub stored health guidance")}</p>
+                            <p className="text-sm">
+                                {text("Connection state")}: {connectionHealth.state}
+                            </p>
+                            {connectionHealth.items.length === 0 && <p className="text-sm">{text("No selected GitHub resources")}</p>}
+                            <ul className="space-y-2 text-sm">
+                                {connectionHealth.items.map((item) => (
+                                    <li key={`${item.installation_id}:${item.account_id}`} className="flex flex-col gap-1">
+                                        <span>
+                                            {text("Installation")}: {item.installation_id} · {text("Account")}: {item.account_id}
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                            {text("Selected")}: {formatNumber(item.selected_count, i18n.language)} · {text("Healthy")}:{" "}
+                                            {formatNumber(item.healthy_count, i18n.language)} · {text("Degraded")}:{" "}
+                                            {formatNumber(item.degraded_count, i18n.language)} · {text("Unavailable")}:{" "}
+                                            {formatNumber(item.unavailable_count, i18n.language)} · {text("Unverified")}:{" "}
+                                            {formatNumber(item.unverified_count, i18n.language)}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                            {healthJobs && (
+                                <section className="space-y-2 border-t pt-2" aria-label={text("GitHub background health jobs")}>
+                                    <p className="text-sm text-muted-foreground">{text("GitHub background health guidance")}</p>
+                                    <div className="flex flex-wrap gap-2" aria-live="polite">
+                                        {healthJobs.items.length === 0
+                                            ? text("No GitHub health jobs")
+                                            : healthJobs.items.map((job) => (
+                                                  <span key={job.job_uid} className="badge badge-ghost badge-sm">
+                                                      {text(`GitHub health job ${job.state}`)}
+                                                  </span>
+                                              ))}
+                                    </div>
+                                    <Button size="sm" variant="outline" onClick={() => void run(() => loadHealthJobs())}>
+                                        {text("Reload GitHub health jobs")}
+                                    </Button>
+                                    {healthJobs.next_cursor && (
+                                        <Button size="sm" variant="outline" onClick={() => void run(() => loadHealthJobs(healthJobs.next_cursor!))}>
+                                            {text("More GitHub health jobs")}
+                                        </Button>
+                                    )}
+                                </section>
+                            )}
+                            {connectionHealth.next_cursor && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void run(() => loadConnectionHealth(connectionHealth.next_cursor!))}
+                                >
+                                    {text("More installation health")}
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => void authorize()}>
+                        {text("Verify GitHub account")}
+                    </Button>
+                    {authorization && (
+                        <>
+                            <div className="flex flex-wrap gap-2">
+                                {authorization.page > 1 && (
+                                    <Button size="sm" variant="outline" onClick={() => void authorize(authorization.page - 1)}>
+                                        {text("Previous GitHub installations")}
+                                    </Button>
+                                )}
+                                {authorization.next_page && (
+                                    <Button size="sm" variant="outline" onClick={() => void authorize(authorization.next_page!)}>
+                                        {text("More GitHub installations")}
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {authorization.installations.map((item) => (
+                                    <Button
+                                        key={item.id}
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={item.suspended}
+                                        onClick={() => void loadRepositories(item)}
+                                    >
+                                        {item.account.login} · {item.account.type}
+                                    </Button>
+                                ))}
+                            </div>
+                            {installation && (
+                                <fieldset className="fieldset min-w-0">
+                                    <legend className="fieldset-legend">{installation.account.login}</legend>
+                                    <p className="text-xs text-muted-foreground">{text("GitHub repository selection help")}</p>
+                                    {repositories.map((row) => (
+                                        <label key={row.id} className="flex min-w-0 items-center gap-2 py-1">
+                                            <input
+                                                type="checkbox"
+                                                className="checkbox checkbox-sm"
+                                                checked={selected.includes(row.id)}
+                                                onChange={(event) =>
+                                                    setSelected((previous) =>
+                                                        event.target.checked ? [...previous, row.id] : previous.filter((id) => id !== row.id)
+                                                    )
+                                                }
+                                            />
+                                            <span className="break-all">{row.name}</span>
+                                        </label>
+                                    ))}
+                                    {nextPage && (
+                                        <Button size="sm" variant="outline" onClick={() => void loadRepositories(installation, nextPage)}>
+                                            {text("More GitHub repositories")}
+                                        </Button>
+                                    )}
+                                    <Button size="sm" onClick={() => void save()}>
+                                        {text("Save GitHub repositories")}
+                                    </Button>
+                                </fieldset>
+                            )}
+                        </>
+                    )}
+                </>
+            )}
+        </fieldset>
+    );
+}

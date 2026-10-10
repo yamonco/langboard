@@ -1,0 +1,26 @@
+{
+  "Password recovery": "找回密码",
+  "Please enter your name to verify your account.": "请输入您的姓名以验证账号。",
+  "Password Reset Link Sent": "密码重置链接已发送",
+  "A password reset link has been successfully sent to your registered email address.": "密码重置链接已发送至您注册的邮箱地址。",
+  "Please check your inbox (and spam/junk folder) for the email. Follow the instructions in the email to reset your password.": "请查看收件箱及垃圾邮件文件夹，并按照邮件中的说明重置密码。",
+  "If you do not receive the email within a few minutes, please try again or contact support for assistance.": "如果几分钟内仍未收到邮件，请重试或联系支持人员。",
+  "Please enter your new password.": "请输入新密码。",
+  "Resend Link": "重新发送链接",
+  "Resent link successfully.": "链接已重新发送。",
+  "Password Reset Successful": "密码重置成功",
+  "Your password has been successfully reset.": "您的密码已重置。",
+  "You can now sign in with your new password.": "您现在可以使用新密码登录。",
+  "errors": {
+    "missing": {
+      "firstname": "请输入名字。",
+      "lastname": "请输入姓氏。",
+      "password": "请输入新密码。",
+      "password-confirm": "请输入确认密码。"
+    },
+    "invalid": {
+      "name": "姓名不匹配。请重试。",
+      "password-confirm": "确认密码不匹配。请重试。"
+    }
+  }
+}

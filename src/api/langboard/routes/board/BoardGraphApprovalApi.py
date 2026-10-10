@@ -48,12 +48,18 @@ def get_graph_approvals(
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add("user")
-def count_pending_graph_approvals(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+def count_pending_graph_approvals(
+    project_uid: str, board_scope_only: bool = False, service: DomainService = DomainService.scope()
+) -> JsonResponse:
     project = service.project.get_by_id_like(project_uid)
     if not project:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 
-    return JsonResponse(content={"count": service.graph_approval_request.count_pending_by_project(project)})
+    return JsonResponse(
+        content={
+            "count": service.graph_approval_request.count_pending_by_project(project, board_scope_only=board_scope_only)
+        }
+    )
 
 
 @AppRouter.schema(permission=ApiPermission.Edit)

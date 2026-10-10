@@ -3,12 +3,18 @@ from enum import Enum
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
-from ....core.db import BaseDbModel
+from uuid import uuid4
+from sqlalchemy import delete, select, update
+from ....core.db import BaseDbModel, DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.routing import SocketTopic
 from ....core.types import SafeDateTime
+from ....domain.models import CardAttachment, CardDocumentArtifact, CardMetadata, Project
 from ....domain.models.bases import BaseMetadataModel
+from ....Env import Env
+from ....helpers import InfraHelper
 from ....publishers import MetadataPublisher
+from ....tasks.docling.DocumentKeywords import KEYWORD_LANGUAGES, normalize_keywords
 
 
 DOCLING_DOCUMENTS_METADATA_KEY = "__system.docling_documents"
@@ -23,11 +29,14 @@ SUPPORTED_DOCLING_DOCUMENT_TYPES = {
     ".md": "markdown",
     ".markdown": "markdown",
     ".csv": "csv",
+    **{suffix: "image" for suffix in (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")},
 }
 
 
 class DoclingIndexStatus(str, Enum):
     Pending = "pending"
+    Processing = "processing"
+    Disabled = "disabled"
     Indexed = "indexed"
     Failed = "failed"
 
@@ -52,20 +61,137 @@ class DoclingMetadataService(BaseDomainService):
         return sha256(content).hexdigest()
 
     def queue_document(
-        self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, attachment_uid: str, filename: str
+        self,
+        model_cls: type[BaseMetadataModel],
+        foreign_model: BaseDbModel,
+        attachment_uid: str,
+        filename: str,
+        *,
+        vision_config: dict[str, Any] | None = None,
+        embedding_config: dict[str, Any] | None = None,
+        force: bool = False,
     ) -> bool:
-        document_type = self.detect_document_type(filename)
-        if not document_type:
-            return False
+        with DbSession.atomic() as db:
+            db.exec(
+                SqlBuilder.select.table(type(foreign_model))
+                .where(type(foreign_model).column("id") == foreign_model.id)
+                .with_for_update()
+            )
+            document_type = self.detect_document_type(filename)
+            if not document_type:
+                return False
 
-        document = {
-            "attachment_uid": attachment_uid,
-            "document_type": document_type,
-            "status": DoclingIndexStatus.Pending.value,
-            "content": {},
-        }
-        self.upsert_document(model_cls, foreign_model, document)
-        return True
+            current = self.get_document_by_attachment_uid(model_cls, foreign_model, attachment_uid)
+            if current and (
+                current.get("status") in {DoclingIndexStatus.Pending.value, DoclingIndexStatus.Processing.value}
+                or (not force and current.get("status") == DoclingIndexStatus.Indexed.value)
+            ):
+                return False
+            document = {
+                **(current or {}),
+                "attachment_uid": attachment_uid,
+                "document_type": document_type,
+                "status": DoclingIndexStatus.Pending.value,
+                "generation": uuid4().hex,
+                "content": (current or {}).get("content", {}),
+                "vision_config": vision_config,
+                "embedding_config": embedding_config,
+            }
+            self.upsert_document(model_cls, foreign_model, document)
+            return True
+
+    def claim_document(
+        self,
+        model_cls: type[BaseMetadataModel],
+        foreign_model: BaseDbModel,
+        attachment_uid: str,
+        filename: str,
+        *,
+        generation: str | None = None,
+    ) -> bool:
+        with DbSession.atomic() as db:
+            db.exec(
+                SqlBuilder.select.table(type(foreign_model))
+                .where(type(foreign_model).column("id") == foreign_model.id)
+                .with_for_update()
+            )
+            current = self.get_document_by_attachment_uid(model_cls, foreign_model, attachment_uid) or {}
+            if generation is not None and current.get("generation") != generation:
+                return False
+            if current.get("status") == DoclingIndexStatus.Indexed.value:
+                return False
+            if current.get("status") == DoclingIndexStatus.Processing.value:
+                started = current.get("started_at")
+                try:
+                    from datetime import datetime
+
+                    age = (SafeDateTime.now() - datetime.fromisoformat(started)).total_seconds()
+                    if age < Env.DOCLING_CONVERSION_TIMEOUT_SECONDS + 30:
+                        return False
+                except (ValueError, TypeError):
+                    return False
+            self.upsert_document(
+                model_cls,
+                foreign_model,
+                {
+                    **current,
+                    "attachment_uid": attachment_uid,
+                    "started_at": SafeDateTime.now().isoformat(),
+                    "generation": uuid4().hex,
+                },
+            )
+            self.mark_document_processing(model_cls, foreign_model, attachment_uid, filename)
+            return True
+
+    def mark_document_processing(
+        self,
+        model_cls: type[BaseMetadataModel],
+        foreign_model: BaseDbModel,
+        attachment_uid: str,
+        filename: str,
+        completed_pages: int = 0,
+        total_pages: int | None = None,
+        *,
+        generation: str | None = None,
+    ) -> bool:
+        current = self.get_document_by_attachment_uid(model_cls, foreign_model, attachment_uid) or {}
+        if total_pages is not None and (total_pages < 1 or not 0 <= completed_pages <= total_pages):
+            raise ValueError("Invalid document page progress")
+        return self.upsert_document(
+            model_cls,
+            foreign_model,
+            {
+                **current,
+                "attachment_uid": attachment_uid,
+                "document_type": self.detect_document_type(filename) or "unknown",
+                "status": DoclingIndexStatus.Processing.value,
+                "started_at": current.get("started_at") or SafeDateTime.now().isoformat(),
+                "completed_pages": completed_pages,
+                "total_pages": total_pages,
+                # 100% belongs to the committed indexed result, not the last inference request.
+                "progress_percent": min(99, completed_pages * 100 // total_pages) if total_pages else None,
+                "content": current.get("content", {}),
+            },
+            expected_generation=generation,
+        )
+
+    def mark_document_disabled(
+        self,
+        model_cls: type[BaseMetadataModel],
+        foreign_model: BaseDbModel,
+        attachment_uid: str,
+        filename: str,
+    ) -> None:
+        self.upsert_document(
+            model_cls,
+            foreign_model,
+            {
+                "attachment_uid": attachment_uid,
+                "document_type": self.detect_document_type(filename) or "unknown",
+                "status": DoclingIndexStatus.Disabled.value,
+                "content": {},
+            },
+        )
 
     def mark_document_indexed(
         self,
@@ -75,16 +201,74 @@ class DoclingMetadataService(BaseDomainService):
         document_type: str,
         content_hash: str | None = None,
         content: dict[str, Any] | None = None,
+        *,
+        generation: str | None = None,
     ) -> bool:
+        content = dict(content or {})
+        structural = content.pop("docling_document", None)
+        current = self.get_document_by_attachment_uid(model_cls, foreign_model, attachment_uid) or {}
         document = {
+            **current,
             "attachment_uid": attachment_uid,
             "document_type": document_type,
             "status": DoclingIndexStatus.Indexed.value,
+            "progress_percent": 100,
             "content_hash": content_hash,
             "indexed_at": SafeDateTime.now().isoformat(),
             "content": content or {},
         }
-        self.upsert_document(model_cls, foreign_model, document)
+        with DbSession.atomic() as db:
+            db.exec(
+                SqlBuilder.select.table(type(foreign_model))
+                .where(type(foreign_model).column("id") == foreign_model.id)
+                .with_for_update()
+            )
+            latest = self.get_document_by_attachment_uid(model_cls, foreign_model, attachment_uid)
+            if generation is not None and (not latest or latest.get("generation") != generation):
+                return False
+            if model_cls is CardMetadata:
+                attachment_id = InfraHelper.convert_id(attachment_uid)
+                result = db.exec(
+                    update(CardAttachment)
+                    .where(CardAttachment.id == attachment_id)
+                    .where(CardAttachment.card_id == foreign_model.id)
+                    .where(CardAttachment.deleted_at.is_(None))
+                    .values(
+                        document_text="\n\n".join(
+                            filter(
+                                None,
+                                [
+                                    str((content or {}).get("markdown", "")),
+                                    " ".join(
+                                        word
+                                        for words in normalize_keywords(
+                                            (content or {}).get("search_keywords"), list(KEYWORD_LANGUAGES), limit=32
+                                        ).values()
+                                        for word in words
+                                    ),
+                                ],
+                            )
+                        )
+                    )
+                )
+                if not result:
+                    return False
+                artifact = db.exec(
+                    SqlBuilder.select.table(CardDocumentArtifact)
+                    .where(CardDocumentArtifact.attachment_id == attachment_id)
+                ).first()
+                if structural is not None:
+                    if not isinstance(structural, dict) or structural.get("schema_name") != "DoclingDocument":
+                        raise ValueError("Invalid structural Docling document")
+                    encoded = json.dumps(structural, ensure_ascii=False)
+                    if artifact:
+                        artifact.document_json = encoded
+                        db.update(artifact)
+                    else:
+                        db.insert(CardDocumentArtifact(attachment_id=attachment_id, document_json=encoded))
+                elif artifact:
+                    db.delete(artifact)
+            self.upsert_document(model_cls, foreign_model, document)
         return True
 
     def mark_document_failed(
@@ -94,6 +278,8 @@ class DoclingMetadataService(BaseDomainService):
         attachment_uid: str,
         filename: str,
         error_message: str,
+        *,
+        generation: str | None = None,
     ) -> bool:
         document_type = self.detect_document_type(filename) or "unknown"
         current = self.get_document_by_attachment_uid(model_cls, foreign_model, attachment_uid)
@@ -111,8 +297,7 @@ class DoclingMetadataService(BaseDomainService):
             "status": DoclingIndexStatus.Failed.value,
             "error_message": error_message,
         }
-        self.upsert_document(model_cls, foreign_model, document)
-        return True
+        return self.upsert_document(model_cls, foreign_model, document, expected_generation=generation)
 
     def load_documents(self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel) -> list[dict[str, Any]]:
         metadata = self._load_metadata(model_cls, foreign_model)
@@ -155,33 +340,138 @@ class DoclingMetadataService(BaseDomainService):
             None,
         )
 
+    def get_structural_document(
+        self, card: BaseDbModel, attachment_uid: str, *, generation: str, content_hash: str | None
+    ) -> dict[str, Any] | None:
+        """Read private structure only for the current live attachment generation."""
+        with DbSession.atomic() as db:
+            db.exec(
+                SqlBuilder.select.table(type(card)).where(type(card).column("id") == card.id).with_for_update()
+            )
+            current = self.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+            if not current or current.get("generation") != generation or current.get("content_hash") != content_hash:
+                return None
+            artifact = db.exec(
+                SqlBuilder.select.table(CardDocumentArtifact)
+                .join(CardAttachment, CardAttachment.id == CardDocumentArtifact.attachment_id)
+                .where(CardAttachment.id == InfraHelper.convert_id(attachment_uid))
+                .where(CardAttachment.card_id == card.id)
+                .where(CardAttachment.deleted_at.is_(None))
+            ).first()
+            return json.loads(artifact.document_json) if artifact else None
+
     def upsert_document(
-        self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, document: dict[str, Any]
-    ) -> None:
+        self,
+        model_cls: type[BaseMetadataModel],
+        foreign_model: BaseDbModel,
+        document: dict[str, Any],
+        *,
+        expected_generation: str | None = None,
+    ) -> bool:
         attachment_uid = document["attachment_uid"]
-        documents = [
-            current
-            for current in self.load_documents(model_cls, foreign_model)
-            if current.get("attachment_uid") != attachment_uid
-        ]
-        documents.append(document)
-        documents.sort(key=lambda current: str(current.get("document_type") or ""))
-        self.save_documents(model_cls, foreign_model, documents)
+
+        changed = False
+
+        def merge(value: str | None) -> str | None:
+            nonlocal changed
+            documents = self.parse_documents({DOCLING_DOCUMENTS_METADATA_KEY: value or "[]"})
+            current = next((entry for entry in documents if entry.get("attachment_uid") == attachment_uid), None)
+            if expected_generation is not None and (not current or current.get("generation") != expected_generation):
+                return None
+            changed = True
+            documents = [current for current in documents if current.get("attachment_uid") != attachment_uid]
+            documents.append(document)
+            documents.sort(key=lambda current: str(current.get("document_type") or ""))
+            return json.dumps(documents, ensure_ascii=False, separators=(",", ":"))
+
+        # Serialize the first metadata insert as well as subsequent read-modify-write updates.
+        with DbSession.atomic() as db:
+            db.exec(
+                SqlBuilder.select.table(type(foreign_model))
+                .where(type(foreign_model).column("id") == foreign_model.id)
+                .with_for_update()
+            )
+            self.repo.metadata.update_value_by_key(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY, merge)
+        return changed
+
+    def publish_document_embedding(
+        self,
+        card,
+        attachment_uid: str,
+        generation: str,
+        content_hash: str,
+        embedding: dict,
+        *,
+        expected_embedding: dict | None = None,
+        embedding_config: dict | None = None,
+    ) -> bool:
+        """Publish a staged vector generation only while its live source still matches."""
+        with DbSession.atomic() as db:
+            project = db.exec(
+                SqlBuilder.select.table(Project).where(Project.id == card.project_id).with_for_update()
+            ).first()
+            if project is None or project.deleted_at is not None:
+                return False
+            current_card = db.exec(
+                SqlBuilder.select.table(type(card)).where(type(card).column("id") == card.id).with_for_update()
+            ).first()
+            if not current_card or current_card.is_linked_resource or current_card.project_id != project.id:
+                return False
+            attachment = db.exec(
+                SqlBuilder.select.table(CardAttachment)
+                .where(CardAttachment.column("id") == InfraHelper.convert_id(attachment_uid))
+                .where(CardAttachment.column("card_id") == card.id)
+                .where(CardAttachment.column("deleted_at").is_(None))
+                .with_for_update()
+            ).first()
+            if not attachment:
+                return False
+            document = self.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+            if (
+                not document
+                or document.get("generation") != generation
+                or document.get("content_hash") != content_hash
+                or document.get("status") != "indexed"
+                or (expected_embedding is not None and (document.get("embedding") or {}) != expected_embedding)
+            ):
+                return False
+            updated = {**document, "embedding": embedding}
+            if embedding_config is not None:
+                updated["embedding_config"] = embedding_config
+            return self.upsert_document(CardMetadata, card, updated, expected_generation=generation)
 
     def delete_document_by_attachment_uid(
         self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, attachment_uid: str
-    ) -> None:
-        documents = [
-            document
-            for document in self.load_documents(model_cls, foreign_model)
-            if document.get("attachment_uid") != attachment_uid
-        ]
-        self.save_documents(model_cls, foreign_model, documents)
+    ) -> dict[str, Any] | None:
+        with DbSession.atomic() as db:
+            db.exec(
+                SqlBuilder.select.table(type(foreign_model))
+                .where(type(foreign_model).column("id") == foreign_model.id)
+                .with_for_update()
+            )
+            current = self.load_documents(model_cls, foreign_model)
+            removed = next((document for document in current if document.get("attachment_uid") == attachment_uid), None)
+            documents = [document for document in current if document.get("attachment_uid") != attachment_uid]
+            self.save_documents(model_cls, foreign_model, documents)
+            if model_cls is CardMetadata:
+                db.exec(
+                    delete(CardDocumentArtifact).where(
+                        CardDocumentArtifact.attachment_id.in_(
+                            select(CardAttachment.id)
+                            .where(CardAttachment.id == InfraHelper.convert_id(attachment_uid))
+                            .where(CardAttachment.card_id == foreign_model.id)
+                        )
+                    )
+                )
+            return removed
 
     def publish_update(
         self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, topic: SocketTopic
     ) -> None:
-        metadata = self.repo.metadata.get_by_key(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY)
+        # Publish the committed state, never a lagging replica's prior progress.
+        metadata = self.repo.metadata.get_by_key(
+            model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY, readonly=False
+        )
         topic_uid = foreign_model.get_uid()
         if metadata:
             MetadataPublisher.updated_metadata(topic, topic_uid, DOCLING_DOCUMENTS_METADATA_KEY, metadata.value)
@@ -190,5 +480,8 @@ class DoclingMetadataService(BaseDomainService):
         MetadataPublisher.deleted_metadata(topic, topic_uid, [DOCLING_DOCUMENTS_METADATA_KEY])
 
     def _load_metadata(self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel) -> dict[str, str]:
-        metadata = self.repo.metadata.get_by_key(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY)
+        # Claims and generation fences need read-after-write consistency too.
+        metadata = self.repo.metadata.get_by_key(
+            model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY, readonly=False
+        )
         return {metadata.key: metadata.value} if metadata else {}

@@ -15,6 +15,7 @@ from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.domain.models import Bot, Card, ProjectColumn, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.CardVerification import VerificationConflict, VerificationSubmission
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
 from pydantic import Field
@@ -75,6 +76,11 @@ class RecordOrchestrationVerificationForm(BaseFormModel):
 
 
 @form_model
+class RecordVerificationEvidenceForm(BaseFormModel, VerificationSubmission):
+    """Strict evidence contract; reviewer identity comes from authentication."""
+
+
+@form_model
 class RecordOrchestrationRunForm(BaseFormModel):
     status: str = Field(..., title="Run status")
     run_id: str | None = Field(default=None, title="Agent run ID")
@@ -124,7 +130,16 @@ class RecordOrchestrationBypassForm(BaseFormModel):
     tags=["Board.Orchestration"],
     description="Apply the default orchestration workflow columns to a project.",
     responses=OpenApiSchema()
-    .suc({"columns": [(ProjectColumn, {"schema": {"count": "integer"}})]})
+    .suc(
+        {
+            "columns": [
+                (
+                    ProjectColumn,
+                    {"schema": {"count": "integer", "open_count": "integer", "incomplete_count": "integer"}},
+                )
+            ]
+        }
+    )
     .auth()
     .forbidden()
     .err(404, ApiErrorCode.NF2001)
@@ -220,6 +235,34 @@ def record_orchestration_verification(
     return JsonResponse(content={"metadata": result})
 
 
+@AppRouter.schema(form=RecordVerificationEvidenceForm, permission=ApiPermission.Edit)
+@AppRouter.api.put(
+    "/board/{project_uid}/card/{card_uid}/verification-evidence",
+    tags=["Board.Card"],
+    description="Append revision-bound reviewer evidence without approving gates or moving the card.",
+    responses=OpenApiSchema().suc({"verification": {}}).auth().forbidden().err(404, ApiErrorCode.NF2003).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def record_verification_evidence(
+    project_uid: str,
+    card_uid: str,
+    form: RecordVerificationEvidenceForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    submission = VerificationSubmission.model_validate(form.model_dump())
+    try:
+        result = service.card.record_verification_evidence(user_or_bot, project_uid, card_uid, submission)
+    except VerificationConflict:
+        raise ApiException.Conflict_409()
+    except ValueError:
+        raise ApiException.UnprocessableContent_422()
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    return JsonResponse(content={"verification": result})
+
+
 @AppRouter.schema(form=RecordOrchestrationRunForm, permission=ApiPermission.Edit)
 @AppRouter.api.put(
     "/board/{project_uid}/orchestration/card/{card_uid}/run",
@@ -238,12 +281,14 @@ def record_orchestration_run(
     project_uid: str,
     card_uid: str,
     form: RecordOrchestrationRunForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     result = service.orchestration_task.record_run(
         project_uid,
         card_uid,
         form.model_dump(exclude_none=True),
+        user_or_bot=user_or_bot,
     )
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -269,12 +314,14 @@ def record_orchestration_suggestions(
     project_uid: str,
     card_uid: str,
     form: RecordOrchestrationSuggestionsForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     result = service.orchestration_task.record_suggestions(
         project_uid,
         card_uid,
         [suggestion.model_dump(exclude_none=True) for suggestion in form.suggestions],
+        user_or_bot=user_or_bot,
     )
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)

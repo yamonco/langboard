@@ -68,5 +68,6 @@ const routes: RouteObject[] = [
 ];
 
 export default {
+    workbench: true,
     routes,
 };

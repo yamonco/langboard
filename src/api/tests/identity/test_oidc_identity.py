@@ -1,0 +1,247 @@
+"""OIDC issuer-subject identity and resource-token tests."""
+
+from __future__ import annotations
+import importlib.util
+import os
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from jwt import encode as jwt_encode
+from starlette.datastructures import Headers
+
+
+os.environ.setdefault("PROJECT_NAME", "langboard")
+
+from langboard_shared.core.security import OidcClient  # noqa: E402
+from langboard_shared.Env import Env  # noqa: E402
+from langboard_shared.helpers import MiddlewareHelper  # noqa: E402
+
+
+ROOT = Path(__file__).resolve().parents[4]
+MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260910223340-7b7818743022.py"
+MULTI_ISSUER_MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260909173000-a3d9f6c27b41.py"
+
+
+def test_resource_audience_never_defaults_to_the_login_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bearer auth stays fail-closed until a dedicated API audience is configured."""
+
+    monkeypatch.delenv("OIDC_RESOURCE_AUDIENCE", raising=False)
+    Env.update_env("OIDC_CLIENT_ID", "login-client")
+    Env._Env__envs.pop("OIDC_RESOURCE_AUDIENCE", None)  # noqa: SLF001
+
+    assert Env.OIDC_RESOURCE_AUDIENCE == ""
+
+
+def test_access_token_requires_the_configured_resource_audience(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A token for the login client cannot be replayed against Langboard APIs."""
+
+    Env.update_env("OIDC_BEARER_ENABLED", "true")
+    Env.update_env("OIDC_RESOURCE_AUDIENCE", "langboard-api")
+    Env.update_env("OIDC_CLIENT_SECRET", "test-secret")
+    Env.update_env("OIDC_CLOCK_SKEW_SEC", "0")
+    monkeypatch.setattr(OidcClient, "get_discovery", lambda: {"issuer": "https://issuer.example"})
+    payload = {
+        "sub": "employee-1",
+        "iss": "https://issuer.example",
+        "aud": "langboard-api",
+        "iat": 1_788_400_000,
+        "exp": 1_888_400_000,
+    }
+    valid = jwt_encode(payload, "test-secret", algorithm="HS256")
+    wrong_audience = jwt_encode({**payload, "aud": "another-api"}, "test-secret", algorithm="HS256")
+
+    assert OidcClient.validate_access_token(valid)["sub"] == "employee-1"
+    with pytest.raises(Exception):
+        OidcClient.validate_access_token(wrong_audience)
+
+
+def test_bearer_identity_is_resolved_by_normalized_issuer_and_subject(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Email is profile metadata, not the durable bearer-authentication key."""
+
+    Env.update_env("OIDC_BEARER_ENABLED", "true")
+    validated_tokens: list[str] = []
+    monkeypatch.setattr(
+        OidcClient,
+        "validate_access_token",
+        lambda token: validated_tokens.append(token)
+        or {"iss": "https://issuer.example/", "sub": "employee-1", "email": "changed@example.com"},
+    )
+    calls: list[tuple[Any, ...]] = []
+    user = SimpleNamespace(activated_at=object(), deleted_at=None)
+    service = SimpleNamespace(
+        identity_link=SimpleNamespace(
+            get_user_by_provider_external_id=lambda *args: calls.append(args) or user,
+        ),
+        close=lambda: None,
+    )
+    services_module = __import__("langboard_shared.domain.services", fromlist=["DomainService"])
+    monkeypatch.setattr(services_module, "DomainService", lambda: service)
+
+    result = MiddlewareHelper._validate_oidc_user(Headers({"Authorization": "Bearer   upstream-token  "}))
+
+    assert result is user
+    assert validated_tokens == ["upstream-token"]
+    assert calls[0][1:] == ("employee-1", "https://issuer.example")
+
+
+def test_oidc_bearer_is_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Deployments opt in before external tokens reach OIDC validation."""
+
+    Env.update_env("OIDC_BEARER_ENABLED", "false")
+    monkeypatch.setattr(OidcClient, "validate_access_token", lambda _token: pytest.fail("must not validate"))
+
+    assert MiddlewareHelper._validate_oidc_user(Headers({"Authorization": "Bearer token"})) is None
+
+
+def test_identity_migration_keys_subjects_by_provider_issuer_and_external_id() -> None:
+    """Two issuers may safely use the same opaque subject value."""
+
+    source = MIGRATION.read_text(encoding="utf-8")
+
+    assert 'down_revision: str | None = "da39f306364b"' in source
+    assert "uq_user_identity_link_provider_issuer_external_id" in source
+    assert '["provider", "external_id", "issuer"]' in source
+    assert "GROUP BY provider, external_id HAVING COUNT(*) > 1" in source
+    assert "duplicate (provider, external_id) rows exist across issuers" in source
+
+
+def test_identity_migration_accepts_an_already_projected_constraint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deployment repaired ahead of Alembic bookkeeping remains upgradeable."""
+
+    spec = importlib.util.spec_from_file_location("issuer_identity_migration", MIGRATION)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    calls: list[str] = []
+    monkeypatch.setattr(migration.op, "get_bind", lambda: object())
+    monkeypatch.setattr(migration.op, "f", lambda name: name)
+    monkeypatch.setattr(
+        migration.sa,
+        "inspect",
+        lambda _bind: SimpleNamespace(
+            get_unique_constraints=lambda _table: [{"name": "uq_user_identity_link_provider_issuer_external_id"}]
+        ),
+    )
+    monkeypatch.setattr(migration.op, "execute", lambda _statement: calls.append("execute"))
+    monkeypatch.setattr(
+        migration.op,
+        "alter_column",
+        lambda *_args, **_kwargs: calls.append("alter"),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "drop_constraint",
+        lambda *_args, **_kwargs: calls.append("drop"),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "create_unique_constraint",
+        lambda *_args, **_kwargs: calls.append("create"),
+    )
+
+    migration.upgrade()
+
+    assert calls == ["execute", "alter"]
+
+
+def test_multi_issuer_migration_enforces_the_new_database_boundary() -> None:
+    spec = importlib.util.spec_from_file_location("multi_issuer_identity", MULTI_ISSUER_MIGRATION)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    metadata = sa.MetaData()
+    identity_link = sa.Table(
+        "user_identity_link",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("provider", sa.String(), nullable=False),
+        sa.Column("issuer", sa.String(), nullable=False),
+        sa.Column("external_id", sa.String(), nullable=False),
+        sa.UniqueConstraint("user_id", "provider", name="uq_user_identity_link_user_provider"),
+        sa.UniqueConstraint(
+            "provider",
+            "issuer",
+            "external_id",
+            name="uq_user_identity_link_provider_issuer_external_id",
+        ),
+    )
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        metadata.create_all(connection)
+        connection.execute(
+            identity_link.insert().values(
+                id=1,
+                user_id=41,
+                provider="oidc",
+                issuer="https://issuer-one.example",
+                external_id="subject-one",
+            )
+        )
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        reflected = sa.Table("user_identity_link", sa.MetaData(), autoload_with=connection)
+        connection.execute(
+            reflected.insert().values(
+                id=2,
+                user_id=41,
+                provider="oidc",
+                issuer="https://issuer-two.example",
+                external_id="subject-two",
+            )
+        )
+        with pytest.raises(sa.exc.IntegrityError):
+            connection.execute(
+                reflected.insert().values(
+                    id=3,
+                    user_id=41,
+                    provider="oidc",
+                    issuer="https://issuer-two.example",
+                    external_id="subject-three",
+                )
+            )
+def test_manual_identity_link_allows_only_secure_or_local_development_issuers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Production links require TLS while local development may use loopback HTTP."""
+
+    from langboard.routes.settings.UserSettingsApi import _is_allowed_oidc_issuer
+
+    Env.update_env("ENVIRONMENT", "production")
+    assert _is_allowed_oidc_issuer("https://issuer.example/realm")
+    assert not _is_allowed_oidc_issuer("http://issuer.example/realm")
+    assert not _is_allowed_oidc_issuer("http://localhost:8080/realm")
+
+    Env.update_env("ENVIRONMENT", "development")
+    assert _is_allowed_oidc_issuer("http://localhost:8080/realm")
+    assert _is_allowed_oidc_issuer("http://127.0.0.1:8080/realm")
+    assert _is_allowed_oidc_issuer("http://[::1]:8080/realm")
+    assert not _is_allowed_oidc_issuer("http://issuer.example/realm")
+
+
+def test_identity_migration_downgrade_fails_before_schema_changes_when_legacy_key_collides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A downgrade explains incompatible cross-issuer subjects without partial DDL."""
+
+    spec = importlib.util.spec_from_file_location("identity_migration", MIGRATION)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    result = SimpleNamespace(first=lambda: (1,))
+    monkeypatch.setattr(migration.op, "get_bind", lambda: SimpleNamespace(execute=lambda _statement: result))
+    monkeypatch.setattr(
+        migration.op,
+        "drop_constraint",
+        lambda *_args, **_kwargs: pytest.fail("schema changed before compatibility check"),
+    )
+
+    with pytest.raises(RuntimeError, match="duplicate .* rows exist across issuers"):
+        migration.downgrade()

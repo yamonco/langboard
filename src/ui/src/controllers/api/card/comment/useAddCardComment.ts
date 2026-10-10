@@ -4,11 +4,13 @@ import { api } from "@/core/helpers/Api";
 import { TMutationOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
 import { IEditorContent } from "@/core/models/Base";
 import { Utils } from "@langboard/core/utils";
+import type { ICardCommentAnchor } from "@/core/models/types/card-comment-anchor.type";
 
 export interface IAddCardCommentForm {
     project_uid: string;
     card_uid: string;
     content: IEditorContent;
+    anchor?: ICardCommentAnchor | null;
 }
 
 const useAddCardComment = (options?: TMutationOptions<IAddCardCommentForm>) => {
@@ -20,6 +22,7 @@ const useAddCardComment = (options?: TMutationOptions<IAddCardCommentForm>) => {
             url,
             {
                 ...sanitizeEditorValue(params.content),
+                anchor: params.anchor ?? null,
             },
             {
                 env: {

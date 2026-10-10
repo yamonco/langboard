@@ -32,7 +32,7 @@ class ProjectChecklist extends BaseModel<IStore> {
     }
 
     constructor(model: Record<string, unknown>) {
-        super(model);
+        super({ ...model, isOpenedInBoardCard: model.isOpenedInBoardCard ?? true });
 
         this.subscribeSocketEvents([useCardCheckitemCreatedHandlers, useCardCheckitemDeletedHandlers], {
             cardUID: this.card_uid,
@@ -77,7 +77,7 @@ class ProjectChecklist extends BaseModel<IStore> {
     }
 
     public get isOpenedInBoardCard() {
-        return this.getValue("isOpenedInBoardCard") ?? false;
+        return this.getValue("isOpenedInBoardCard") ?? true;
     }
     public set isOpenedInBoardCard(value) {
         this.update({ isOpenedInBoardCard: value });

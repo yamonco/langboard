@@ -1,3 +1,4 @@
+import BoardLoadError from "./BoardLoadError";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
@@ -5,6 +6,7 @@ import useGetCards from "@/controllers/api/board/useGetCards";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ROUTES } from "@/core/routing/constants";
 import BoardFilter from "@/pages/BoardPage/components/board/BoardFilter";
+import BoardSort from "@/pages/BoardPage/components/board/BoardSort";
 import { memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { BoardProvider } from "@/core/providers/BoardProvider";
@@ -18,7 +20,7 @@ import { IBoardRelatedPageProps } from "@/pages/BoardPage/types";
 
 const BoardPage = memo(({ project, currentUser }: IBoardRelatedPageProps) => {
     const navigate = usePageNavigateRef();
-    const { data, error } = useGetCards({ project_uid: project.uid });
+    const { data, error, isFetching, refetch } = useGetCards({ project_uid: project.uid });
 
     useEffect(() => {
         if (!error) {
@@ -39,8 +41,9 @@ const BoardPage = memo(({ project, currentUser }: IBoardRelatedPageProps) => {
 
     return (
         <>
+            {error && <BoardLoadError isFetching={isFetching} retry={() => void refetch()} />}
             {!data ? (
-                <SkeletonBoard />
+                !error && <SkeletonBoard />
             ) : (
                 <BoardProvider project={project} currentUser={currentUser}>
                     <BoardResult key={`board-result-${project.uid}`} project={project} />
@@ -56,7 +59,7 @@ const BoardResult = memo(({ project }: { project: Project.TModel }) => {
     const [t] = useTranslation();
 
     return (
-        <>
+        <Flex direction="col" h="full" minH="0">
             {selectCardViewType && (
                 <Flex justify="center" items="center" position="fixed" top="-2" left="0" h="20" w="full" z="50" gap="3" px="1">
                     <Box position="absolute" top="0" left="0" size="full" className="bg-secondary/70 bg-cover blur-md backdrop-blur-sm" />
@@ -82,15 +85,16 @@ const BoardResult = memo(({ project }: { project: Project.TModel }) => {
                 </Flex>
             )}
 
-            <Flex justify="between" px="4" pt="4" wrap>
+            <Flex justify="between" px="4" pt="4" wrap className="shrink-0">
                 <BoardMemberList isSelectCardView={!!selectCardViewType} />
                 <Flex items="center" gap="1">
                     <BoardFilter />
+                    <BoardSort />
                 </Flex>
             </Flex>
 
             <Board key={`board-${project.uid}`} />
-        </>
+        </Flex>
     );
 });
 BoardResult.displayName = "Board.Result";

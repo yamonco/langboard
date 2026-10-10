@@ -1,3 +1,6 @@
+import useColumnCardSort from "./useColumnCardSort";
+import { useIsMobile } from "@/core/hooks/useIsMobile";
+import { COLUMN_CARD_SORT_MODES } from "./columnCardSort";
 import Box from "@/components/base/Box";
 import DropdownMenu from "@/components/base/DropdownMenu";
 import Toast from "@/components/base/Toast";
@@ -5,8 +8,10 @@ import MoreMenu from "@/components/MoreMenu";
 import NotificationSetting from "@/components/NotificationSetting";
 import { DISABLE_DRAGGING_ATTR } from "@/constants";
 import useDeleteProjectColumn from "@/controllers/api/board/useDeleteProjectColumn";
+import useReplaceProjectColumnDock from "@/controllers/api/board/useReplaceProjectColumnDock";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ProjectColumn } from "@/core/models";
+import { pinnedProjectDockColumns } from "@/core/models/projectDock";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoard } from "@/core/providers/BoardProvider";
 import BoardColumnMoreMenuBotList from "@/pages/BoardPage/components/board/BoardColumnMoreMenuBotList";
@@ -21,7 +26,12 @@ export interface IBoardColumnMoreMenuProps {
 
 const BoardColumnMoreMenu = memo(({ column, onRenameStart }: IBoardColumnMoreMenuProps) => {
     const { project, currentUser, hasRoleAction } = useBoard();
+    const [t] = useTranslation();
+    const { mode, setMode } = useColumnCardSort(project.uid, column.uid);
+    const isMobile = useIsMobile();
     const canEdit = hasRoleAction(ProjectRole.EAction.Update) && !column.is_archive;
+    const isAdmin = currentUser.useField("is_admin");
+    const canPin = (isAdmin || hasRoleAction(ProjectRole.EAction.Update)) && !column.is_archive;
     const shouldKeepRenameFocusRef = useRef(false);
     const handleCloseAutoFocus = useCallback((e: Event) => {
         if (!shouldKeepRenameFocusRef.current) {
@@ -35,12 +45,39 @@ const BoardColumnMoreMenu = memo(({ column, onRenameStart }: IBoardColumnMoreMen
         shouldKeepRenameFocusRef.current = true;
         onRenameStart?.();
     }, [onRenameStart]);
+    const sortOptions = (
+        <>
+            <DropdownMenu.RadioGroup value={mode} onValueChange={(value) => setMode(value as typeof mode)}>
+                {COLUMN_CARD_SORT_MODES.map((value) => (
+                    <DropdownMenu.RadioItem key={value} value={value}>
+                        {t(`board.cardSort.${value}`)}
+                    </DropdownMenu.RadioItem>
+                ))}
+            </DropdownMenu.RadioGroup>
+            <DropdownMenu.Separator />
+            <div className="max-w-56 px-2 py-1 text-xs text-muted-foreground">
+                {t("board.Manual order is preserved; switch to Manual to drag cards")}
+            </div>
+        </>
+    );
 
     return (
         <MoreMenu.Root
             triggerProps={{ className: "size-7", ...{ [DISABLE_DRAGGING_ATTR]: "" } }}
             contentProps={{ className: "w-min p-0", onCloseAutoFocus: handleCloseAutoFocus, ...{ [DISABLE_DRAGGING_ATTR]: "" } }}
         >
+            {isMobile ? (
+                <>
+                    <DropdownMenu.Label>{t("board.Sort cards")}</DropdownMenu.Label>
+                    {sortOptions}
+                    <DropdownMenu.Separator />
+                </>
+            ) : (
+                <DropdownMenu.Sub>
+                    <DropdownMenu.SubTrigger>{t("board.Sort cards")}</DropdownMenu.SubTrigger>
+                    <DropdownMenu.SubContent>{sortOptions}</DropdownMenu.SubContent>
+                </DropdownMenu.Sub>
+            )}
             <NotificationSetting.SpecificScopedPopover
                 type="column"
                 currentUser={currentUser}
@@ -62,6 +99,7 @@ const BoardColumnMoreMenu = memo(({ column, onRenameStart }: IBoardColumnMoreMen
                 onlyPopover
             />
             {canEdit && <BoardColumnMoreMenuRename onRenameStart={handleRenameStart} />}
+            {canPin && <BoardColumnMoreMenuDock column={column} />}
             {hasRoleAction(ProjectRole.EAction.Update) && <BoardColumnMoreMenuBotScope column={column} />}
             {canEdit && <BoardColumnMoreMenuDelete column={column} />}
             {hasRoleAction(ProjectRole.EAction.Update) && <BoardColumnMoreMenuBotList column={column} />}
@@ -69,6 +107,39 @@ const BoardColumnMoreMenu = memo(({ column, onRenameStart }: IBoardColumnMoreMen
     );
 });
 BoardColumnMoreMenu.displayName = "Board.ColumnMore";
+
+const BoardColumnMoreMenuDock = memo(({ column }: IBoardColumnMoreMenuProps) => {
+    const [t] = useTranslation();
+    const { project } = useBoard();
+    const dockOrder = column.useField("dock_order");
+    const { mutateAsync, isPending } = useReplaceProjectColumnDock({ interceptToast: true });
+    const pending = useRef(false);
+    const toggle = (event: Event) => {
+        event.preventDefault();
+        if (pending.current) return;
+        pending.current = true;
+        const pinned = pinnedProjectDockColumns(ProjectColumn.Model.getModels((item) => item.project_uid === project.uid)).map((item) => item.uid);
+        const columnUIDs = dockOrder != null ? pinned.filter((uid) => uid !== column.uid) : [...pinned, column.uid];
+        Toast.Add.promise(mutateAsync({ project_uid: project.uid, column_uids: columnUIDs, expected_revision: project.dock_revision }), {
+            loading: t("common.Updating..."),
+            success: t("board.Dock updated"),
+            error: (error) => {
+                const message = { message: "" };
+                setupApiErrorHandler({}, message).handle(error);
+                return message.message;
+            },
+            finally: () => {
+                pending.current = false;
+            },
+        });
+    };
+    return (
+        <DropdownMenu.Item onSelect={toggle} disabled={isPending} {...{ [DISABLE_DRAGGING_ATTR]: "" }}>
+            {t(dockOrder != null ? "board.Unpin from dock" : "board.Pin to dock")}
+        </DropdownMenu.Item>
+    );
+});
+BoardColumnMoreMenuDock.displayName = "Board.ColumnMoreDock";
 
 const BoardColumnMoreMenuRename = memo(({ onRenameStart }: Pick<IBoardColumnMoreMenuProps, "onRenameStart">) => {
     const [t] = useTranslation();

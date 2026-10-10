@@ -81,7 +81,17 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 
 ---
 
+### Python SDK
+
+The [standalone Python SDK guide](https://github.com/yamonco/langboard-sdk/blob/main/packages/python/GUIDE.md) covers installation,
+authenticated REST App management, instance connections and resource selections,
+native MCP work commands, built-in workflow types, and revision-conflict recovery.
+The SDK preserves native server authority and supports caller-owned transports.
+See the [external app SDK contract and support boundaries](docs/external-app-sdk.md)
+and [isolated JavaScript panel SDK](https://github.com/yamonco/langboard-sdk/blob/main/packages/app-panel/README.md).
+
 ## 🔐 API Keys and Key Vault
+
 
 - API key lifecycle operations include create, update, activate/deactivate, expiration, and delete.
 - IP whitelist validation and API key usage logging are built in.
@@ -101,6 +111,10 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 - Delivery uses bounded timeouts and retries. Consumers must therefore support
   at-least-once delivery.
 - The live event schemas and signing headers are documented at `/schema/webhook`.
+- Opt-in execution events use a CloudEvents 1.0 structured body. Their `source` and
+  `subject` carry project and card identity; `data` contains execution metadata.
+  The CloudEvent `time` records the work transition. Verify freshness using
+  `X-Langboard-Webhook-Timestamp`, including when retrying an older event.
 
 ---
 

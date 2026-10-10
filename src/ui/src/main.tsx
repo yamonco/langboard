@@ -3,14 +3,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "@/core/injection";
 import App from "@/App";
+import { setupPreloadRecovery } from "@/core/helpers/setupPreloadRecovery";
 import "@/assets/styles/main.css";
 
 const Strict = process.env.IS_PRODUCTION !== "true" ? React.StrictMode : React.Fragment;
 
-window.addEventListener("vite:preloadError", (event) => {
-    event.preventDefault();
-    window.location.reload();
-});
+setupPreloadRecovery(window);
 
 const configuredPublicUIURL = new URL(process.env.PUBLIC_UI_URL || window.location.origin);
 const currentURL = new URL(window.location.href);

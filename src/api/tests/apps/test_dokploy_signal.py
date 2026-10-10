@@ -1,0 +1,479 @@
+# ruff: noqa: F811
+"""Actual storage/capability fences with official deployment metadata contracts."""
+
+import json
+import pytest
+from langboard.apps import DokployConnection as dk
+from langboard.apps import DokploySignal as signal
+from langboard_shared.core.db import DbSession, SqlBuilder
+from langboard_shared.core.db.DbEngine import DbEngine
+from langboard_shared.domain.models import AppResourceBinding, AppSignal, BoardAppBinding
+from langboard_shared.domain.services.factory.SecretReferenceService_test import secrets  # noqa: F401
+from langboard_shared.domain.services.factory.WorkflowStageService_app_test import board  # noqa: F401
+from langboard_shared.publishers import CardPublisher
+from test_dokploy_connection import connect, setup  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def revocation_notifications(monkeypatch):
+    from langboard_shared.publishers import AppSettingPublisher
+    events = []
+    monkeypatch.setattr(AppSettingPublisher, "apps_changed", lambda: events.append("apps:changed"))
+    return events
+
+
+def test_resource_removal_notifies_only_commit_and_preserves_other_selections(selected, revocation_notifications):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding).order_by(AppResourceBinding.id)).all()
+        resource = rows[0]
+        uid, revision = resource.get_uid(), resource.access_revision
+        untouched = {row.id: (row.is_selected, row.access_revision) for row in rows[1:]}
+    args = service, board[1], board[2].get_uid(), connection["connection_uid"], uid
+    with pytest.raises(dk.DokployConflict):
+        dk.remove_resource(*args, revision + 1)
+    with pytest.raises(RuntimeError, match="rollback"):
+        with DbSession.atomic():
+            dk.remove_resource(*args, revision)
+            assert revocation_notifications == []
+            raise RuntimeError("rollback")
+    assert revocation_notifications == []
+    result = dk.remove_resource(*args, revision)
+    assert result["selected"] is False and result["access_revision"] == revision + 1
+    assert revocation_notifications == ["apps:changed"]
+    assert dk.remove_resource(*args, result["access_revision"]) == result
+    assert revocation_notifications == ["apps:changed"]
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        assert {row.id: (row.is_selected, row.access_revision) for row in rows if row.get_uid() != uid} == untouched
+
+
+def test_disconnect_notifies_only_committed_changes_and_is_idempotent(selected, revocation_notifications):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    args = service, board[1], board[2].get_uid(), connection["connection_uid"]
+    with pytest.raises(dk.DokployConflict):
+        dk.disconnect(*args, "0" * 64)
+    assert revocation_notifications == []
+    with pytest.raises(RuntimeError, match="rollback"):
+        with DbSession.atomic():
+            dk.disconnect(*args, connection["revision"])
+            assert revocation_notifications == []
+            raise RuntimeError("rollback")
+    assert revocation_notifications == []
+    result = dk.disconnect(*args, connection["revision"])
+    assert result["state"] == "disconnected" and revocation_notifications == ["apps:changed"]
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        revisions = {row.id: row.access_revision for row in rows}
+        assert all(row.access_state == "revoked" and row.is_selected for row in rows)
+    assert dk.disconnect(*args, result["revision"]) == result
+    assert revocation_notifications == ["apps:changed"]
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        assert {row.id: row.access_revision for row in rows} == revisions
+
+
+def test_read_revocation_rollback_does_not_publish(selected, revocation_notifications):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        revision = db.exec(SqlBuilder.select.table(BoardAppBinding)).first().edit_revision()
+    with pytest.raises(RuntimeError, match="rollback"):
+        with DbSession.atomic():
+            dk.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
+            assert revocation_notifications == []
+            raise RuntimeError("rollback")
+    assert revocation_notifications == []
+    with DbSession.use(readonly=False) as db:
+        assert db.exec(SqlBuilder.select.table(BoardAppBinding)).first().edit_revision() == revision
+
+
+def test_read_revocation_survives_policy_and_credential_failure(selected, revocation_notifications):
+    from langboard_shared.domain.models import AppConnection, AppDefinition, AppGovernancePolicy, SecretReference
+
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        revision = binding.edit_revision()
+        secret = db.exec(SqlBuilder.select.table(SecretReference)).first()
+        secret.state = "revoked"
+        db.update(secret)
+        db.insert(AppGovernancePolicy(scope_key="global", mode="disabled"))
+        db.insert(AppDefinition(key="dokploy", approved_by=board[1].id, is_enabled=False,
+                                declaration={"capabilities": ["signals.read"]}))
+        other = BoardAppBinding(project_id=11, app_key="dokploy", state="enabled",
+                                granted_capabilities=["signals.read", "panels.render"])
+        db.insert(other)
+        other_revision = other.edit_revision()
+    calls = len(setup[3])
+    revoked = dk.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
+    assert revoked["granted_capabilities"] == [] and revoked["state"] == "disabled"
+    assert revocation_notifications == ["apps:changed"]
+    assert len(setup[3]) == calls
+    # Repeating with the returned revision is harmless even while policy/secret are unusable.
+    assert dk.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revoked["revision"]) == revoked
+    assert revocation_notifications == ["apps:changed"]
+    with DbSession.use(readonly=False) as db:
+        other = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.project_id == 11)).first()
+        conn = db.exec(SqlBuilder.select.table(AppConnection)).first()
+        assert other.edit_revision() == other_revision and conn.state == "connected"
+
+
+def test_read_revocation_preserves_other_grants_without_provider_io(selected, revocation_notifications):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    calls = setup[3]
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        binding.granted_capabilities = [*binding.granted_capabilities, "panels.render", "workflow.transition"]
+        binding.stage_transitions_enabled = True
+        db.update(binding)
+        revision = binding.edit_revision()
+    count = len(calls)
+    with pytest.raises(dk.DokployConflict):
+        dk.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], "0" * 64)
+    result = dk.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
+    assert revocation_notifications == ["apps:changed"]
+    assert result["granted_capabilities"] == ["panels.render", "workflow.transition"] and result["state"] == "enabled"
+    assert len(calls) == count
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert current.stage_transitions_enabled
+    # Current read gates reject the removed grant before making any provider request.
+    with pytest.raises(dk.DokployUnavailable):
+        refresh(selected)
+    assert len(calls) == count
+
+
+def test_read_consent_preserves_independent_existing_grants(selected):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        binding.granted_capabilities = ["panels.render", "workflow.transition"]
+        binding.stage_transitions_enabled = True
+        db.update(binding)
+        revision = binding.edit_revision()
+    result = dk.enable_read_access(
+        service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision
+    )
+    expected = ["panels.render", "workflow.transition", "resources.read", "signals.read", "deployments.read"]
+    assert result["granted_capabilities"] == expected
+    repeated = dk.enable_read_access(
+        service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], result["revision"]
+    )
+    assert repeated["granted_capabilities"] == expected
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert current.granted_capabilities == expected and current.stage_transitions_enabled
+
+@pytest.fixture(params=["application", "compose"])
+def selected(setup, monkeypatch, request):
+    service, board, _, _, state = setup
+    kind = request.param
+    external_id = "app-1" if kind == "application" else "compose-1"
+    connection = connect(setup)
+    chosen = dk.bind_resource(
+        service,
+        board[1],
+        board[2].get_uid(),
+        connection["connection_uid"],
+        kind,
+        external_id,
+        "project-1",
+        "env-1",
+        connection["revision"],
+    )
+    with DbSession.use(readonly=False) as db:
+        AppSignal.__table__.create(DbEngine.get_main_engine(), checkfirst=True)
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        binding_revision = binding.edit_revision()
+    enabled = dk.enable_read_access(
+        service,
+        board[1],
+        board[2].get_uid(),
+        connection["connection_uid"],
+        connection["revision"],
+        binding_revision,
+    )
+    assert enabled["granted_capabilities"] == ["resources.read", "signals.read", "deployments.read"]
+    state["rows"] = [
+        {
+            "deploymentId": "dep-1",
+            kind + "Id": external_id,
+            "status": "done",
+            "createdAt": "2026-10-08T10:00:00Z",
+            "finishedAt": "2026-10-08T10:01:00Z",
+            "errorMessage": "private",
+            "logPath": "/private/log",
+            "pid": "42",
+        }
+    ]
+    original_get = signal.read_json
+
+    def deployment_get(base, path, headers, params=None):
+        endpoint = "/api/deployment.all" if kind == "application" else "/api/deployment.allByCompose"
+        if path == endpoint:
+            assert params == {kind + "Id": external_id} and headers["x-api-key"] == "fixture-api-key"
+            if state.get("after_deploy"):
+                state["after_deploy"]()
+            return state["rows"], {}
+        return original_get(base, path, headers, params)
+
+    monkeypatch.setattr(signal, "read_json", deployment_get)
+    events = []
+    monkeypatch.setattr(CardPublisher, "app_signal_changed", lambda uid: events.append(uid))
+    return setup, connection, chosen, events
+
+
+def refresh(selected):
+    setup, connection, chosen, _ = selected
+    service, board, *_ = setup
+    return signal.refresh_deployments(
+        service,
+        board[1],
+        board[2].get_uid(),
+        connection["connection_uid"],
+        chosen["resource_uid"],
+        connection["revision"],
+        chosen["access_revision"],
+    )
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "binding_revision",
+        "connection_revision",
+        "role",
+        "unselected",
+        "disconnected",
+        "secret",
+        "foreign_board",
+        "owner",
+    ],
+)
+def test_explicit_read_consent_uses_current_authority(selected, failure):
+    from langboard_shared.domain.models import AppConnection, SecretReference
+
+    setup, conn, chosen, _ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        binding.state, binding.granted_capabilities = "disabled", []
+        db.update(binding)
+        revision = binding.edit_revision()
+        if failure == "role":
+            board[4].actions = ["read"]
+            db.update(board[4])
+        elif failure == "unselected":
+            resource = db.exec(SqlBuilder.select.table(AppResourceBinding)).first()
+            resource.is_selected = False
+            db.update(resource)
+        elif failure == "disconnected":
+            connection = db.exec(SqlBuilder.select.table(AppConnection)).first()
+            connection.state = "disconnected"
+            db.update(connection)
+        elif failure == "secret":
+            secret = db.exec(SqlBuilder.select.table(SecretReference)).first()
+            secret.state = "revoked"
+            db.update(secret)
+    from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
+    from langboard_shared.helpers import InfraHelper
+
+    with pytest.raises((dk.DokployConflict, dk.DokployUnavailable, SecretReferenceUnavailable)):
+        dk.enable_read_access(
+            service,
+            board[1].model_copy(update={"id": 2}) if failure == "owner" else board[1],
+            InfraHelper.convert_uid(11) if failure == "foreign_board" else board[2].get_uid(),
+            conn["connection_uid"],
+            "0" * 64 if failure == "connection_revision" else conn["revision"],
+            "0" * 64 if failure == "binding_revision" else revision,
+        )
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert current.state == "disabled" and current.granted_capabilities == []
+
+
+def test_append_only_safe_idempotent_refresh(selected):
+    setup, connection, chosen, events = selected
+    first = refresh(selected)
+    assert first["inserted"] == 1 and not first["truncated"]
+    assert first["items"][0]["event_type"] == "deployment.succeeded"
+    assert "private" not in json.dumps(first) and "42" not in json.dumps(first)
+    assert refresh(selected)["inserted"] == 0 and len(events) == 1
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppSignal)).all()
+        assert len(rows) == 1 and rows[0].commit_sha == ""
+        assert "private" not in json.dumps(rows[0].model_dump(), default=str)
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert not binding.stage_transitions_enabled and binding.workflow_mapping == {}
+
+
+def test_refresh_reports_bounded_latest_page(selected):
+    state = selected[0][4]
+    template = state["rows"][0]
+    state["rows"] = [
+        {**template, "deploymentId": f"dep-{i}", "finishedAt": f"2026-10-08T10:{i:02}:00Z"} for i in range(30)
+    ]
+    result = refresh(selected)
+    assert result["truncated"] and result["limit"] == 25 and result["inserted"] == 25
+    assert [row["external_id"] for row in result["items"]] == [f"dep-{i}" for i in range(29, 4, -1)]
+    assert refresh(selected)["inserted"] == 0
+
+
+def test_malformed_batch_leaves_no_partial_evidence(selected):
+    state = selected[0][4]
+    state["rows"].append({**state["rows"][0], "deploymentId": "bad", "status": []})
+    with pytest.raises(dk.DokployUnavailable):
+        refresh(selected)
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(AppSignal)).all()
+    assert not selected[3]
+
+
+def test_lifecycle_appends_without_overwriting_prior_signal(selected):
+    row = selected[0][4]["rows"][0]
+    row["status"], row["startedAt"] = "running", "2026-10-08T10:00:10Z"
+    assert refresh(selected)["items"][0]["event_type"] == "deployment.started"
+    row["status"] = "done"
+    assert refresh(selected)["inserted"] == 1
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppSignal)).all()
+        assert {row.event_type for row in rows} == {"deployment.started", "deployment.succeeded"}
+    assert len(selected[3]) == 2
+
+
+def test_duplicate_provider_rows_preserve_single_event(selected):
+    rows = selected[0][4]["rows"]
+    rows.append(dict(rows[0]))
+    assert refresh(selected)["inserted"] == 1
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(AppSignal)).all()) == 1
+
+
+@pytest.mark.parametrize("failure", ["capability", "disabled", "unselected", "revoked", "revision"])
+def test_current_gate_rejects_before_provider_io(selected, failure):
+    setup, _, _, _ = selected
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        resource = db.exec(SqlBuilder.select.table(AppResourceBinding)).first()
+        if failure == "capability":
+            binding.granted_capabilities = ["signals.read"]
+        elif failure == "disabled":
+            binding.state = "disabled"
+        elif failure == "unselected":
+            resource.is_selected = False
+        elif failure == "revoked":
+            resource.access_state = "revoked"
+        else:
+            resource.access_revision += 1
+        db.update(binding)
+        db.update(resource)
+    before = len(setup[3])
+    with pytest.raises((dk.DokployUnavailable, dk.DokployConflict)):
+        refresh(selected)
+    assert len(setup[3]) == before
+
+
+@pytest.mark.parametrize("failure", ["capability", "unselected", "revision"])
+def test_inflight_binding_changes_do_not_write_signals(selected, failure):
+    setup, _, _, events = selected
+
+    def change():
+        with DbSession.use(readonly=False) as db:
+            binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+            resource = db.exec(SqlBuilder.select.table(AppResourceBinding)).first()
+            if failure == "capability":
+                binding.granted_capabilities = []
+            elif failure == "unselected":
+                resource.is_selected = False
+            else:
+                resource.access_revision += 1
+            db.update(binding)
+            db.update(resource)
+
+    setup[4]["after_deploy"] = change
+    with pytest.raises((dk.DokployUnavailable, dk.DokployConflict)):
+        refresh(selected)
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(AppSignal)).all()
+    assert not events
+
+
+@pytest.mark.parametrize(
+    "status,started,finished,event",
+    [
+        ("running", None, None, "deployment.queued"),
+        ("running", "2026-10-08T10:00:10Z", None, "deployment.started"),
+        ("done", None, "2026-10-08T10:01:00Z", "deployment.succeeded"),
+        ("error", None, "2026-10-08T10:01:00Z", "deployment.failed"),
+        ("cancelled", None, "2026-10-08T10:01:00Z", "deployment.cancelled"),
+    ],
+)
+def test_official_state_and_timestamp_semantics(status, started, finished, event):
+    row = {
+        "deploymentId": "dep-1",
+        "applicationId": "app-1",
+        "status": status,
+        "createdAt": "2026-10-08T10:00:00Z",
+        "startedAt": started,
+        "finishedAt": finished,
+    }
+    assert signal.normalize_deployment(row, "application", "app-1")["event_type"] == event
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"status": "unknown"},
+        {"status": []},
+        {"finishedAt": None},
+        {"finishedAt": "2026-10-08T10:01:00"},
+        {"applicationId": "foreign"},
+    ],
+)
+def test_invalid_evidence_has_no_fallback_timestamp(mutation):
+    row = {
+        "deploymentId": "dep-1",
+        "applicationId": "app-1",
+        "status": "done",
+        "createdAt": "2026-10-08T10:00:00Z",
+        "finishedAt": "2026-10-08T10:01:00Z",
+        **mutation,
+    }
+    with pytest.raises(dk.DokployUnavailable):
+        signal.normalize_deployment(row, "application", "app-1")
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+@pytest.mark.parametrize("inflight", [False, True])
+def test_app_registry_revocation_fences_refresh(selected, change, inflight):
+    from langboard_shared.domain.models import AppDefinition
+
+    setup = selected[0]
+    board = setup[1]
+    with DbSession.atomic() as db:
+        definition = AppDefinition(key="dokploy", approved_by=board[1].id, declaration={"capabilities": ["signals.read"]})
+        db.insert(definition)
+
+    def revoke():
+        with DbSession.atomic() as db:
+            current = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "dokploy")).first()
+            if change == "disabled":
+                current.is_enabled = False
+            else:
+                current.declaration = {"capabilities": []}
+            db.update(current)
+
+    if inflight:
+        setup[-1]["after_deploy"] = revoke
+    else:
+        revoke()
+    with pytest.raises(dk.DokployUnavailable):
+        refresh(selected)
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(AppSignal)).all()

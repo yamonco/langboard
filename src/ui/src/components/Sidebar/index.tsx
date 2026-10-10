@@ -24,7 +24,7 @@ function Sidebar({ navs, main, floatingIcon = "plus", floatingTitle = "common.Ac
                 )}
                 data-collapsed={isCollapsed}
             >
-                <Box position="relative" display={{ initial: "hidden", md: "block" }} size="full">
+                <Box position="relative" display={{ initial: "hidden", md: "block" }} size="full" data-workbench-sidebar="">
                     <aside
                         className={cn(
                             "sticky z-50 flex size-full flex-col items-start border-r text-sm font-medium transition-all duration-100",
@@ -32,13 +32,14 @@ function Sidebar({ navs, main, floatingIcon = "plus", floatingTitle = "common.Ac
                             "group-data-[collapsed=false]/sidebar:p-2 lg:group-data-[collapsed=false]/sidebar:p-3"
                         )}
                     >
-                        <SidebarNavItems navs={navs} />
+                        <SidebarNavItems navs={navs} isCollapsed={isCollapsed} />
                     </aside>
 
                     <Button
                         variant="secondary"
+                        aria-label={t(isCollapsed ? "common.Expand" : "common.Collapse")}
                         onClick={() => setIsCollapsed(!isCollapsed)}
-                        className="absolute right-[-1.2rem] top-1/2 z-50 size-10 -translate-y-1/2 transform rounded-full p-0"
+                        className="absolute right-1 top-1/2 z-50 size-10 -translate-y-1/2 rounded-md p-0"
                     >
                         <IconComponent icon={isCollapsed ? "chevron-right" : "chevron-left"} size="8" />
                     </Button>

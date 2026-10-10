@@ -1,3 +1,4 @@
+import { LANGUAGE_LOCALES } from "@/constants";
 import { useTranslation } from "react-i18next";
 import Button, { type ButtonProps } from "@/components/base/Button";
 import DropdownMenu from "@/components/base/DropdownMenu";
@@ -11,6 +12,8 @@ export interface ILanguageSwitcherProps {
     buttonClassNames?: string;
     hideTriggerIcon?: bool;
     size?: ButtonProps["size"];
+    contentAttrs?: Record<string, string>;
+    onOpenChange?: (open: boolean) => void;
     asForm?: {
         initialValue: string;
         disabled?: bool;
@@ -24,6 +27,8 @@ function LanguageSwitcher({
     buttonClassNames,
     hideTriggerIcon,
     size = "default",
+    contentAttrs,
+    onOpenChange,
     asForm,
 }: ILanguageSwitcherProps): React.JSX.Element {
     const [t, i18n] = useTranslation();
@@ -35,17 +40,17 @@ function LanguageSwitcher({
             return;
         }
 
-        if (!i18n.languages.includes(lang)) {
+        if (!LANGUAGE_LOCALES.includes(lang)) {
             return;
         }
 
         i18n.changeLanguage(lang);
     };
 
-    const langs = i18n.languages.filter((locale) => locale !== curLang);
+    const langs = LANGUAGE_LOCALES.filter((locale) => locale !== curLang);
 
     return (
-        <DropdownMenu.Root>
+        <DropdownMenu.Root onOpenChange={onOpenChange}>
             <DropdownMenu.Trigger asChild>
                 <Button
                     variant={variant ?? "default"}
@@ -60,7 +65,7 @@ function LanguageSwitcher({
             </DropdownMenu.Trigger>
 
             {langs.length === 0 ? null : (
-                <DropdownMenu.Content>
+                <DropdownMenu.Content {...contentAttrs}>
                     {langs.map((locale) => {
                         return (
                             <DropdownMenu.Item onClick={() => changeLanguageHandler(locale)} key={locale}>

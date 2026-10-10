@@ -1,23 +1,56 @@
+from typing import Literal
 from langboard_shared.core.schema import TimeBasedPagination
-from langboard_shared.core.types import SafeDateTime
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.security import RoleFinder
-from pydantic import Field
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
 class ActivityPagination(TimeBasedPagination):
-    limit: int = Field(default=50, ge=1, le=100)
     assignee_uid: str | None = None
     only_count: bool = False
+
+
+@McpTool.add(
+    "user",
+    description="Read compact activity history in boards shared by viewer and target; fetch bounded details by activity UID and scope. Never changes read state.",
+)
+def get_shared_user_activities(
+    user_uid: str,
+    user: User,
+    service: DomainService,
+    page: int = 1,
+    limit: int = 20,
+    refer_time: str | None = None,
+    activity_uid: str | None = None,
+    scope: Literal["project", "wiki"] | None = None,
+    offset: int = 0,
+    max_chars: int = 4000,
+    project_uid: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> dict:
+    return service.activity.get_shared_user_activities(
+        user,
+        user_uid,
+        ActivityPagination(page=page, limit=limit, refer_time=refer_time),
+        activity_uid,
+        scope,
+        offset,
+        max_chars,
+        project_uid,
+        since,
+        until,
+        channel=CollaborationChannel.Mcp,
+    )
 
 
 @McpTool.add("user", description="Get activities for the current user.")
 def get_current_user_activities(user: User, service: DomainService, limit: int = 50) -> dict:
     pagination = ActivityPagination(limit=limit)
-    result = service.activity.get_api_list_by_user(user, pagination)
+    result = service.activity.get_api_list_by_user(user, pagination, channel=CollaborationChannel.Mcp)
     if not result:
         return {"activities": [], "count_new_records": 0}
     activities, count_new_records, _ = result
@@ -28,17 +61,13 @@ def get_current_user_activities(user: User, service: DomainService, limit: int =
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_project_activities(
     project_uid: str,
-    service: DomainService,
+    service: DomainService, user: User,
     limit: int = 50,
     page: int = 1,
     refer_time: str | None = None,
 ) -> dict:
-    pagination = (
-        ActivityPagination(page=page, limit=limit, refer_time=SafeDateTime.fromisoformat(refer_time))
-        if refer_time
-        else ActivityPagination(page=page, limit=limit)
-    )
-    result = service.activity.get_api_list_by_project(project_uid, pagination)
+    pagination = ActivityPagination(page=page, limit=limit, refer_time=refer_time)
+    result = service.activity.get_api_list_by_project(project_uid, pagination, user=user, channel=CollaborationChannel.Mcp)
     if not result:
         return {
             "activities": [],
@@ -56,9 +85,9 @@ def get_project_activities(
 
 @McpTool.add("user", description="Get activities for a project column.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_column_activities(project_uid: str, column_uid: str, service: DomainService, limit: int = 50) -> dict:
+def get_project_column_activities(project_uid: str, column_uid: str, service: DomainService, user: User, limit: int = 50) -> dict:
     pagination = ActivityPagination(limit=limit)
-    result = service.activity.get_api_list_by_column(project_uid, column_uid, pagination)
+    result = service.activity.get_api_list_by_column(project_uid, column_uid, pagination, user=user, channel=CollaborationChannel.Mcp)
     if not result:
         return {"activities": [], "count_new_records": 0}
     activities, count_new_records, project, column = result
@@ -72,9 +101,9 @@ def get_project_column_activities(project_uid: str, column_uid: str, service: Do
 
 @McpTool.add("user", description="Get activities for a card.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_activities(project_uid: str, card_uid: str, service: DomainService, limit: int = 50) -> dict:
+def get_card_activities(project_uid: str, card_uid: str, service: DomainService, user: User, limit: int = 50) -> dict:
     pagination = ActivityPagination(limit=limit)
-    result = service.activity.get_api_list_by_card(project_uid, card_uid, pagination)
+    result = service.activity.get_api_list_by_card(project_uid, card_uid, pagination, user=user, channel=CollaborationChannel.Mcp)
     if not result:
         return {"activities": [], "count_new_records": 0}
     activities, count_new_records, project, card = result

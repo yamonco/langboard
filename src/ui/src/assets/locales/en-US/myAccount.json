@@ -34,5 +34,66 @@
       "new_email": "Email already exists. Try another one."
     },
     "Invalid language.": "Invalid language."
+  },
+  "Default language": "Default language",
+  "Default language description": "Choose the language used when you sign in. Changes are saved to your account.",
+  "secretInput": {
+    "title": "Secure secret input",
+    "help": "Enter the value here, outside the conversation. Only an opaque secret reference is returned to the assistant. This request expires after 10 minutes and can be used once.",
+    "value": "Secret value",
+    "save": "Store secret",
+    "completed": "Stored. You can close this page and return to the conversation.",
+    "failed": "This request expired, was used, or could not be completed. Request a new input link.",
+    "cancel": "Cancel request",
+    "cancelled": "Cancelled. No secret was stored.",
+    "create": "Create secret",
+    "rotate": "Replace existing secret value",
+    "reason": "Reason"
+  },
+  "secretHistory": {
+    "title": "Secret history",
+    "help": "Audit facts for this reference. Secret values and vault paths are never displayed.",
+    "failed": "History unavailable or access changed.",
+    "empty": "No history yet.",
+    "older": "Older events",
+    "actor": "Actor",
+    "actions": {
+      "created": "Created",
+      "resolved": "Used",
+      "renamed": "Renamed",
+      "moved": "Moved",
+      "revoked": "Revoked",
+      "rotated": "Value replaced",
+      "bound": "Bound",
+      "migrated": "Storage migrated",
+      "copied": "Copied"
+    },
+    "reasons": {
+      "user_input": "Explicit browser input",
+      "runtime_use": "Authorized runtime use",
+      "reference_created": "Reference creation",
+      "reference_renamed": "Reference rename",
+      "reference_moved": "Reference scope change",
+      "reference_revoked": "Reference revocation",
+      "value_rotated": "Secret value rotation",
+      "reference_bound": "Authorized application connection binding",
+      "provider_migrated": "Secret storage provider changed",
+      "integration_setup": "Integration setup",
+      "routine_rotation": "Routine credential rotation",
+      "credential_expired": "Expired credential replacement",
+      "security_response": "Security response",
+      "reference_copied": "Explicit same-scope secret copy"
+    },
+    "openSource": "Open source card",
+    "openSourceWiki": "Open source wiki"
+  },
+  "secretCopy": {
+    "title": "Copy secret",
+    "help": "Create an independent secret in the same access scope. The value stays in secure storage.",
+    "name": "New logical name",
+    "submit": "Create copy",
+    "completed": "Copy created. The original is unchanged.",
+    "open": "Open copied secret history",
+    "failed": "Could not confirm the copy. The name may already exist or access/revision changed. Check the history before retrying; close and reopen to refresh the source."
   }
 }

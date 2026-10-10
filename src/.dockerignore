@@ -1,5 +1,9 @@
+**/.env*
+.git
+**/.git
 **/node_modules
 **/dist
+**/dist.rollback-*
 **/.rollup.cache
 
 **/.venv

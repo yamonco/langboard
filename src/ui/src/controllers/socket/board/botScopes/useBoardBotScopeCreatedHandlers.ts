@@ -1,12 +1,13 @@
 import { SocketEvents } from "@langboard/core/constants";
 import useSocketHandler, { IBaseUseSocketHandlersProps } from "@/core/helpers/SocketHandler";
-import { TBotRelatedTargetTable, TBotRelatedTargetInterface } from "@/core/models/types/bot.related.type";
+import { TBotRelatedTargetTable } from "@/core/models/types/bot.related.type";
+import { ProjectBotScope, ProjectColumnBotScope, ProjectCardBotScope } from "@/core/models";
 import { ESocketTopic } from "@langboard/core/enums";
 import { BOT_SCOPES } from "@/core/constants/BotRelatedConstants";
 
 export interface IBoardBotScopeCreatedRawResponse {
     scope_table: TBotRelatedTargetTable;
-    bot_scope: TBotRelatedTargetInterface;
+    bot_scope: ProjectBotScope.Interface | ProjectColumnBotScope.Interface | ProjectCardBotScope.Interface;
 }
 
 export interface IUseBoardBotScopeCreatedHandlersProps extends IBaseUseSocketHandlersProps<{}> {

@@ -6,7 +6,7 @@ function BoardRoutePage(): React.JSX.Element {
     const { projectUID } = useParams();
 
     return (
-        <BoardController key={projectUID}>
+        <BoardController projectUID={projectUID}>
             <BoardProxy />
             <Outlet />
         </BoardController>

@@ -1,4 +1,4 @@
-from fastapi import Depends
+from fastapi import Depends, Request
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -14,13 +14,14 @@ from langboard_shared.core.routing import (
     create_editor_collaboration_document_id,
 )
 from langboard_shared.core.schema import OpenApiSchema
-from langboard_shared.domain.models import Card, CardMetadata, Project, ProjectRole
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
+from langboard_shared.domain.models import Bot, CardMetadata, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied
 from langboard_shared.filter import RoleFilter
-from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import MetadataPublisher
-from langboard_shared.security import RoleFinder
+from langboard_shared.security import Auth, RoleFinder
 from .MetadataForm import MetadataDeleteForm, MetadataForm, MetadataGetModel
 from .MetadataHelper import create_metadata_api_schema
 
@@ -34,11 +35,11 @@ from .MetadataHelper import create_metadata_api_schema
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_card_metadata(project_uid: str, card_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+def get_card_metadata(project_uid: str, card_uid: str, request: Request, user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()) -> JsonResponse:
+    params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    _, card = params
+    _, card, _ = params
 
     metadata = service.metadata.get_all_as_api(CardMetadata, card, as_dict=True)
     return JsonResponse(content={"metadata": metadata})
@@ -60,12 +61,12 @@ def get_card_metadata(project_uid: str, card_uid: str, service: DomainService = 
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_project_cards_metadata(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+def get_project_cards_metadata(project_uid: str, request: Request, user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()) -> JsonResponse:
     project = service.project.get_by_id_like(project_uid)
     if project is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
 
-    cards = service.card.get_by_project(project)
+    cards = service.card.get_visible_by_project(project, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api))
     metadata = service.metadata.get_all_by_foreign_models_as_api(
         CardMetadata,
         "card_id",
@@ -86,13 +87,15 @@ def get_project_cards_metadata(project_uid: str, service: DomainService = Domain
 def get_card_metadata_by_key(
     project_uid: str,
     card_uid: str,
+    request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"),
     get_query: MetadataGetModel = Depends(),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    _, card = params
+    _, card, _ = params
 
     metadata = service.metadata.get_by_key_as_api(CardMetadata, card, get_query.key)
     value = metadata.get("value", None) if metadata else None
@@ -121,14 +124,24 @@ def get_card_metadata_by_key(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 @AuthFilter.add()
 def save_card_metadata(
-    project_uid: str, card_uid: str, form: MetadataForm, service: DomainService = DomainService.scope()
+    project_uid: str, card_uid: str, form: MetadataForm, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    params = service.card.resolve_readable_card(
+        project_uid, card_uid, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    )
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2016)
-    _, card = params
+    project, card, _ = params
+    if card.is_linked_resource:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2016)
 
-    metadata = service.metadata.save(CardMetadata, card, form.key, form.value, form.old_key)
+    try:
+        metadata = service.metadata.save_card(user_or_bot, project, card, form.key, form.value, form.old_key)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
+    except ValueError:
+        raise ApiException.BadRequest_400() from None
     if metadata is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2016)
 
@@ -151,14 +164,22 @@ def save_card_metadata(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 @AuthFilter.add()
 def delete_card_metadata(
-    form: MetadataDeleteForm, project_uid: str, card_uid: str, service: DomainService = DomainService.scope()
+    form: MetadataDeleteForm, project_uid: str, card_uid: str, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    params = service.card.resolve_readable_card(
+        project_uid, card_uid, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    )
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    _, card = params
+    project, card, _ = params
+    if card.is_linked_resource:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2016)
 
-    service.metadata.delete(CardMetadata, card, form.keys)
+    try:
+        service.metadata.delete_card(user_or_bot, project, card, form.keys)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
 
     MetadataPublisher.deleted_metadata(SocketTopic.BoardCard, card.get_uid(), form.keys)
     return JsonResponse()

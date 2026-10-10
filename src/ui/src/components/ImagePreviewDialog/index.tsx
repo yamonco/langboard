@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
@@ -16,19 +17,19 @@ export type FileItem = {
 };
 
 interface ImagePreviewDialogProps {
-    files: { name: string; url: string }[];
+    files: { name: string; url: string; type?: string }[];
     initialIndex: number;
     onClose: () => void;
 }
 
 const ImagePreviewDialog = ({ files, initialIndex, onClose }: ImagePreviewDialogProps) => {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [zoom, setZoom] = useState(1);
     const currentFile = useMemo(() => files[currentIndex], [files, currentIndex]);
     const currentFileUrl = useMemo(() => currentFile?.url, [currentFile]);
     const currentFileName = useMemo(() => currentFile?.name, [currentFile]);
-    const mimeType = useMemo(() => !!currentFile && mimeTypes.lookup(currentFile.url), [currentFile]);
+    const mimeType = useMemo(() => currentFile?.type || (!!currentFile && mimeTypes.lookup(currentFile.url)), [currentFile]);
     const updateZoom = (type: "in" | "out") => {
         setZoom((prev) => {
             if (type === "in") {
@@ -41,6 +42,7 @@ const ImagePreviewDialog = ({ files, initialIndex, onClose }: ImagePreviewDialog
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Escape"].includes(e.key)) return;
             e.preventDefault();
             e.stopPropagation();
 
@@ -57,11 +59,9 @@ const ImagePreviewDialog = ({ files, initialIndex, onClose }: ImagePreviewDialog
             }
         };
 
-        document.body.addEventListener("keydown", handleKeyDown);
         window.addEventListener("keydown", handleKeyDown);
 
         return () => {
-            document.body.removeEventListener("keydown", handleKeyDown);
             window.removeEventListener("keydown", handleKeyDown);
         };
     }, [currentIndex, files]);
@@ -102,6 +102,8 @@ const ImagePreviewDialog = ({ files, initialIndex, onClose }: ImagePreviewDialog
     return (
         <DismissableLayer disableOutsidePointerEvents>
             <Flex
+                role="dialog"
+                aria-label={t("editor.Image")}
                 items="center"
                 justify="center"
                 position="fixed"
@@ -120,8 +122,8 @@ const ImagePreviewDialog = ({ files, initialIndex, onClose }: ImagePreviewDialog
                         {!!mimeType && mimeType.startsWith("image/") ? (
                             <CachedImage
                                 src={currentFileUrl}
-                                alt={mimeType}
-                                className="max-h-full max-w-full"
+                                alt={currentFileName ?? t("editor.Image")}
+                                className="h-auto max-h-[calc(100dvh-4rem)] w-auto max-w-[calc(100vw-2rem)] object-contain"
                                 onDragStart={handleDrag}
                                 onDragOver={handleDrag}
                                 onDragEnd={handleDrag}
@@ -156,7 +158,7 @@ const ImagePreviewDialog = ({ files, initialIndex, onClose }: ImagePreviewDialog
                                 variant="ghost"
                                 className="h-auto w-10 p-0 text-center"
                             />
-                            <span className="text-nowrap text-xs text-gray-500">/ {files.length}</span>
+                            <span className="text-nowrap text-xs text-gray-500">/ {formatNumber(files.length, i18n.language)}</span>
                         </Label>
                         <Flex items="center">
                             <Button variant="ghost" size="icon-sm" onClick={goPrev}>

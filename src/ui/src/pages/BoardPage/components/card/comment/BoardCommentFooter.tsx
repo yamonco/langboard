@@ -12,6 +12,7 @@ import { isModel, ModelRegistry } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
 import { getEditorStore } from "@/core/stores/EditorStore";
+import BoardCommentSeen from "./BoardCommentSeen";
 import BoardCommentReaction from "@/pages/BoardPage/components/card/comment/BoardCommentReaction";
 import { IBoardCommentContextParams } from "@/pages/BoardPage/components/card/comment/types";
 import { useState } from "react";
@@ -22,7 +23,7 @@ function BoardCommentFooter(): React.JSX.Element {
     const { isCurrentEditor } = params;
 
     return (
-        <Flex items="center" gap="2">
+        <Flex items="center" gap="2" wrap={true}>
             {isCurrentEditor ? <BoardCommentFooterEditButtons /> : <BoardCommentFooterActions />}
         </Flex>
     );
@@ -110,6 +111,7 @@ function BoardCommentFooterActions() {
     const isAdmin = currentUser.useField("is_admin");
     const [isValidating, setIsValidating] = useState(false);
     const canEdit = currentUser.uid === author.uid || isAdmin;
+    const visibility = card.useField("visibility");
     const canReply = !isModel(author, "User") || author.isValidUser();
     const { mutateAsync: deleteCommentMutateAsync } = useDeleteCardComment({ interceptToast: true });
     const startEditing = () => {
@@ -152,20 +154,25 @@ function BoardCommentFooterActions() {
     return (
         <>
             <BoardCommentReaction comment={comment} />
-            {hasRoleAction(ProjectRole.EAction.Read) && currentUser.uid !== author.uid && currentUser.isValidUser() && canReply && (
-                <>
-                    <Separator orientation="vertical" className="h-1/2" />
-                    <Button
-                        variant="link"
-                        size="sm"
-                        data-reply-component
-                        className="h-5 p-0 text-accent-foreground/50"
-                        onClick={() => replyRef.current?.(author)}
-                    >
-                        {t("card.Reply")}
-                    </Button>
-                </>
-            )}
+            {visibility !== "PRIVATE" && currentUser.isValidUser() && <BoardCommentSeen comment={comment} />}
+            {visibility !== "PRIVATE" &&
+                hasRoleAction(ProjectRole.EAction.Read) &&
+                currentUser.uid !== author.uid &&
+                currentUser.isValidUser() &&
+                canReply && (
+                    <>
+                        <Separator orientation="vertical" className="h-1/2" />
+                        <Button
+                            variant="link"
+                            size="sm"
+                            data-reply-component
+                            className="h-5 p-0 text-accent-foreground/50"
+                            onClick={() => replyRef.current?.(author)}
+                        >
+                            {t("card.Reply")}
+                        </Button>
+                    </>
+                )}
             {canEdit && (
                 <>
                     <Separator orientation="vertical" className="h-1/2" />

@@ -6,6 +6,7 @@ import { ProjectLabel } from "@/core/models";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
 import { EEditorCollaborationType } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
+import BoardCardActionSetLabel from "@/pages/BoardPage/components/card/action/label/BoardCardActionSetLabel";
 
 interface ILabelToggleMeta {
     checked: bool;
@@ -72,6 +73,7 @@ function BoardCardLabelList(): React.JSX.Element {
                     </Flex>
                 );
             })}
+            <BoardCardActionSetLabel buttonClassName="h-7 gap-1 rounded-full border-dashed px-2.5 text-xs text-muted-foreground" />
         </Flex>
     );
 }

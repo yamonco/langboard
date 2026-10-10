@@ -1,7 +1,8 @@
 import i18n, { BackendModule, ReadCallback, ResourceKey, ResourceLanguage } from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
-import { APP_NAME, IS_PRODUCTION, LANGUAGE_LOCALES } from "@/constants";
+import { APP_NAME, IS_PRODUCTION } from "@/constants";
+import { DEFAULT_LOCALE, FALLBACK_LOCALE, normalizeLocale, SUPPORTED_LOCALES } from "@/core/utils/LocalePolicy";
 import { Utils } from "@langboard/core/utils";
 
 const jsons = import.meta.glob<{ default: Record<string, unknown> }>("./assets/locales/**/*.json");
@@ -16,11 +17,8 @@ Object.keys(jsons).forEach((jsonPath) => {
 });
 Object.entries(tempLocales).forEach(([lang, nsLoaders]) => {
     locales[lang] = async () => {
-        const nsData: Record<string, ResourceKey> = {};
-        for (const [ns, loader] of Object.entries(nsLoaders)) {
-            nsData[ns] = (await loader()).default;
-        }
-        return nsData;
+        const entries = await Promise.all(Object.entries(nsLoaders).map(async ([ns, loader]) => [ns, (await loader()).default]));
+        return Object.fromEntries(entries);
     };
 });
 
@@ -30,6 +28,7 @@ class I18NextBackend implements BackendModule {
     read(language: string, _: string, callback: ReadCallback): void {
         const loader = locales[language];
         if (!loader) {
+            callback(null, {});
             return;
         }
 
@@ -43,12 +42,17 @@ class I18NextBackend implements BackendModule {
     }
 }
 
+i18n.on("languageChanged", (language) => {
+    document.documentElement.lang = normalizeLocale(language);
+});
+
 i18n.use(new I18NextBackend())
     .use(LanguageDetector)
     .use(initReactI18next)
     .init({
         debug: !IS_PRODUCTION && false,
-        fallbackLng: LANGUAGE_LOCALES,
+        fallbackLng: FALLBACK_LOCALE,
+        supportedLngs: [...SUPPORTED_LOCALES],
         load: "currentOnly",
         keySeparator: ".",
         preload: false,
@@ -64,13 +68,7 @@ i18n.use(new I18NextBackend())
             order: ["localStorage", "navigator"],
             lookupLocalStorage: "lang",
             caches: ["localStorage"],
-            convertDetectedLanguage: (lng) => {
-                if (!LANGUAGE_LOCALES.includes(lng)) {
-                    return "en-US";
-                }
-
-                return lng;
-            },
+            convertDetectedLanguage: (lng) => normalizeLocale(lng || DEFAULT_LOCALE),
         },
     });
 

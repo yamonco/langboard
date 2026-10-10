@@ -14,26 +14,40 @@ class UserIdentityLinkRepository(BaseRepository[UserIdentityLink]):
     def name() -> str:
         return "user_identity_link"
 
-    def get_by_provider_external_id(self, provider: IdentityProvider, external_id: str) -> UserIdentityLink | None:
+    def get_by_provider_external_id(
+        self,
+        provider: IdentityProvider,
+        external_id: str,
+        issuer: str | None = None,
+    ) -> UserIdentityLink | None:
+        """Resolve a provider subject, scoped to its issuer when supplied."""
+
+        condition = (UserIdentityLink.column("provider") == provider) & (
+            UserIdentityLink.column("external_id") == external_id
+        )
+        condition &= UserIdentityLink.column("issuer") == (issuer or "")
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.table(UserIdentityLink)
-                .where(
-                    (UserIdentityLink.column("provider") == provider)
-                    & (UserIdentityLink.column("external_id") == external_id)
-                )
-                .limit(1)
-            )
+            result = db.exec(SqlBuilder.select.table(UserIdentityLink).where(condition).limit(1))
             return result.first()
 
-    def get_by_user_provider(self, user: TUserParam, provider: IdentityProvider) -> UserIdentityLink | None:
+    def get_by_user_provider(
+        self,
+        user: TUserParam,
+        provider: IdentityProvider,
+        issuer: str | None = None,
+        *,
+        consistent: bool = False,
+    ) -> UserIdentityLink | None:
         user_id = InfraHelper.convert_id(user)
-        with DbSession.use(readonly=True) as db:
+        condition = (UserIdentityLink.column("user_id") == user_id) & (
+            UserIdentityLink.column("provider") == provider
+        )
+        if issuer is not None:
+            condition &= UserIdentityLink.column("issuer") == issuer.strip().rstrip("/")
+        with DbSession.use(readonly=not consistent) as db:
             result = db.exec(
                 SqlBuilder.select.table(UserIdentityLink)
-                .where(
-                    (UserIdentityLink.column("user_id") == user_id) & (UserIdentityLink.column("provider") == provider)
-                )
+                .where(condition)
                 .limit(1)
             )
             return result.first()

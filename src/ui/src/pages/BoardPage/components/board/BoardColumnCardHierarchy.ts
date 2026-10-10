@@ -8,6 +8,7 @@ export interface IBoardColumnCardHierarchyItem {
 export interface IBoardColumnCardHierarchyGroup {
     root: ProjectCard.TModel;
     descendants: IBoardColumnCardHierarchyItem[];
+    hasContainmentCycle: boolean;
 }
 
 /**
@@ -26,6 +27,8 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
 
     cards.forEach((card) => {
         card.relationships.forEach((relationship) => {
+            const semantic = relationshipSemantic(relationship);
+            if (semantic && semantic !== "contains") return;
             const parent = cardsByUID.get(relationship.parent_card_uid);
             const child = cardsByUID.get(relationship.child_card_uid);
             if (!parent || !child || parent.uid === child.uid) {
@@ -68,7 +71,7 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
                 if (child) pending.push({ card: child, depth: item.depth + 1 });
             }
         }
-        groups.push({ root, descendants });
+        groups.push({ root, descendants, hasContainmentCycle: hasContainmentCycle([root, ...descendants.map((item) => item.card)]) });
     };
 
     cards.filter((card) => !childUIDs.has(card.uid)).forEach(appendGroup);
@@ -81,7 +84,93 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
 };
 
 export const isRelationshipRenderedInHierarchy = (
-    card: ProjectCard.TModel,
-    relatedCard: ProjectCard.TModel | undefined,
-    isRelatedCardVisible: boolean
-) => !!relatedCard && relatedCard.project_column_uid === card.project_column_uid && isRelatedCardVisible;
+    card: Pick<ProjectCard.TModel, "project_column_uid">,
+    relatedCard: Pick<ProjectCard.TModel, "project_column_uid"> | undefined,
+    isRelatedCardVisible: boolean,
+    semantic?: string | null
+) => (!semantic || semantic === "contains") && !!relatedCard && relatedCard.project_column_uid === card.project_column_uid && isRelatedCardVisible;
+
+export const relationshipSemantic = (relationship: ProjectCard.TModel["relationships"][number]) =>
+    relationship.machine_semantic ?? relationship.relationship_type?.machine_semantic;
+
+/** Only composition cycles need a finite-tree warning; shared children are not cycles. */
+export const hasContainmentCycle = (cards: ProjectCard.TModel[], rootUID?: string): boolean => {
+    const visible = new Set(cards.map((card) => card.uid));
+    const children = buildCardRelationshipIndex(cards, "contains");
+    const completed = new Set<string>();
+    const active = new Set<string>();
+    for (const card of rootUID ? cards.filter((candidate) => candidate.uid === rootUID) : cards) {
+        if (completed.has(card.uid)) continue;
+        const pending = [{ uid: card.uid, exit: false }];
+        while (pending.length) {
+            const item = pending.pop()!;
+            if (item.exit) {
+                active.delete(item.uid);
+                completed.add(item.uid);
+                continue;
+            }
+            if (active.has(item.uid)) return true;
+            if (completed.has(item.uid)) continue;
+            active.add(item.uid);
+            pending.push({ uid: item.uid, exit: true });
+            for (const child of children.get(item.uid) ?? []) {
+                if (visible.has(child)) pending.push({ uid: child, exit: false });
+            }
+        }
+    }
+    return false;
+};
+
+export type TCardRelationshipIndex = Map<string, Set<string>>;
+
+export const buildCardRelationshipIndex = (cards: ProjectCard.TModel[], semantic?: string): TCardRelationshipIndex => {
+    const childrenByParentUID: TCardRelationshipIndex = new Map();
+    cards.forEach((card) => {
+        card.relationships.forEach((relationship) => {
+            if (semantic && relationshipSemantic(relationship) !== semantic) return;
+            const children = childrenByParentUID.get(relationship.parent_card_uid) ?? new Set<string>();
+            children.add(relationship.child_card_uid);
+            childrenByParentUID.set(relationship.parent_card_uid, children);
+        });
+    });
+    return childrenByParentUID;
+};
+
+export const canCreateCardRelationship = (
+    cards: ProjectCard.TModel[],
+    sourceCardUID: string,
+    targetCardUID: string,
+    type: "parents" | "children",
+    childrenByParentUID = buildCardRelationshipIndex(cards),
+    semantic?: string | null
+): boolean => {
+    if (sourceCardUID === targetCardUID) {
+        return false;
+    }
+
+    const parentCardUID = type === "children" ? sourceCardUID : targetCardUID;
+    const childCardUID = type === "children" ? targetCardUID : sourceCardUID;
+    if (childrenByParentUID.get(parentCardUID)?.has(childCardUID)) {
+        return false;
+    }
+
+    // The drag target is selected before the relationship type. Server validation owns unknown semantics.
+    if (semantic !== "blocks") return true;
+    const blockingChildren = buildCardRelationshipIndex(cards, "blocks");
+    const pending = [childCardUID];
+    const visited = new Set<string>();
+    while (pending.length) {
+        const currentUID = pending.pop()!;
+        if (currentUID === parentCardUID) {
+            return false;
+        }
+        if (visited.has(currentUID)) {
+            continue;
+        }
+
+        visited.add(currentUID);
+        pending.push(...(blockingChildren.get(currentUID) ?? []));
+    }
+
+    return true;
+};

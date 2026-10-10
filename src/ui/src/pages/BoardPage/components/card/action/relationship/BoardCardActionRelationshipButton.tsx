@@ -22,7 +22,7 @@ export interface IBoardCardActionRelationshipButtonProps extends ISharedBoardCar
 }
 
 function BoardCardActionRelationshipButton({ type, relationships, buttonClassName, isExpanded = false }: IBoardCardActionRelationshipButtonProps) {
-    const { selectCardViewType, disabledCardSelectionUIDsRef, startCardSelection, filterRelationships, filterRelatedCardUIDs } = useBoardController();
+    const { selectCardViewType, disabledCardSelectionUIDsRef, startCardSelection, filterRelationships } = useBoardController();
     const { projectUID, card } = useBoardCard();
     const [isOpened, setIsOpened] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
@@ -66,7 +66,8 @@ function BoardCardActionRelationshipButton({ type, relationships, buttonClassNam
         );
 
         setIsOpened(false);
-        disabledCardSelectionUIDsRef.current = filterRelatedCardUIDs(card.uid, relationships, !isParent);
+        // Reverse composition/reference edges are valid; the server rejects only blocks cycles.
+        disabledCardSelectionUIDsRef.current = [card.uid];
         startCardSelection({
             type,
             currentUID: card.uid,

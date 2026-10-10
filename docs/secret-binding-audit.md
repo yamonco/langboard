@@ -1,0 +1,83 @@
+# Secret binding audit
+
+Successful native Dokploy and GlitchTip connection registration and resource selection, GitHub manifest connection registration, and Dokploy receiver credential configuration record a `bound` secret audit fact in the destination transaction. This is distinct from resolving a credential for provider I/O. Failure or rollback of that transaction removes both the destination change and its binding audit fact.
+
+The trusted host operation requires an active destination transaction, an `app_connection` source identifier, current reference authority, active state, and the expected reference revision. It does not read or write vault material or increment the reference revision. Audit pages retain the existing current-reference access checks and never expose raw source identifiers, credentials, or vault paths. The fixed reason is `reference_bound`; labels support English, Korean, Japanese, and Chinese.
+
+Browser input create and rotation facts correlate through the SHA-256 digest of
+their one-use input nonce. The bearer URL nonce and browser proof are never recorded
+as audit identifiers. This changes new facts only; existing history is not rewritten.
+History projections also digest legacy 43-character browser-input request IDs.
+
+The migration expands the existing audit constraint and preserves historical records. Downgrade refuses while binding facts exist. It neither synthesizes old binding events nor backfills prior connections.
+
+Audit source links require current native board and card/wiki visibility. App-use policy is independent: disabling apps does not hide a source that the user can still read. Secret ownership alone never grants source access, and deleted sources or revoked membership remain hidden.
+
+Canonical `secret://ref/<uid>` links in the shared Plate editor and static renderer
+open the native authenticated per-reference history route. Only a complete canonical
+identifier is accepted; aliases, query strings, fragments, and arbitrary Secret
+destinations are not history targets. Existing external links retain their confirmation
+dialog. The editor stores reference metadata only; a link caption is not a mechanism
+for converting or removing plaintext secrets. Dedicated wiki secretization and copy
+remain separate work. History access still checks current reference authority on every
+request, and readable source links require their own native ACL.
+
+This implementation covers native Dokploy and GlitchTip registration and resource selection, GitHub manifest registration, and Dokploy receiver credential binding. A failed GitHub connection transaction rolls back its binding fact and revokes the independently stored reference; a failed receiver transaction preserves the previous configuration and history. Wiki secretization/copy producers, authorized source links, and live canary acceptance require their own integration and verification. A binding fact is not evidence of deployment success or workflow approval.
+
+Browser input offers bounded operation-specific audit reasons. Creation accepts explicit
+user input or integration setup; rotation additionally distinguishes routine rotation,
+expired credentials, and security response. The authenticated native endpoint validates
+the reason before claiming the one-use input. Invalid free text and reasons for another
+operation cannot write a value or consume the input. Older clients that omit the reason
+retain `user_input`. English, Korean, Japanese, and Chinese labels share the same stored
+reason codes; no credential material is accepted in an audit reason.
+
+## Native copy producer
+
+`POST /secret-references/{uid}/copy` accepts only a new logical name and the
+current source revision. The host rechecks current source ownership/update
+authority and active state. A copy stays in the source scope; this endpoint
+cannot share it into another user, board, or organization. Each successful copy
+has an independent URI and opaque vault location. It returns metadata only and
+is deliberately not exposed as a credential-resolving MCP operation.
+
+The source receives `copied` and the destination receives `created`, correlated
+by one generated request ID and the fixed `reference_copied` reason. Copying
+does not change the source revision or retire source material. Both database
+facts commit together; a database/audit failure removes the newly stored vault
+material. A duplicate logical name or stale revision returns a conflict rather
+than replacing an existing secret. The migration preserves old audit records
+and refuses downgrade while copy facts exist. The native history screen offers an explicit copy form, fetches current metadata
+only when opened, and submits the selected name with the fetched revision.
+Revoked references cannot be submitted; successful receipts link to the new
+history and refresh source facts. Navigation discards late responses. Ambiguous
+failures do not claim that no copy was created and do not automatically replay
+the mutation. Wiki secretization and live canary acceptance remain unfinished.
+
+## Shared masked reference node
+
+The shared editable/static Plate kits and Markdown rules now recognize canonical
+`secret://ref/<uid>` Markdown links as inline void `secretReference` elements.
+They store the canonical URI and an empty text child; the link caption is replaced
+by a fixed mask when saved. Serialization emits a masked canonical Markdown link,
+so existing native wiki Markdown storage can roundtrip the reference without a
+new secret-valued field. The compact lock/mask links to the authenticated native
+history route; rendering does not fetch metadata or resolve vault material.
+
+Ordinary links remain ordinary links. Incomplete references, aliases, query strings,
+and fragments are not upgraded into masked nodes. This is a presentation and
+reference persistence contract for canonical Markdown, not a plaintext-to-vault
+conversion. The shared normalizer also converts canonical link elements introduced
+through Plate operations (including JSON `setValue`) and strips all text/marks
+from the required empty child of a masked reference. Replacing a void node child
+explicitly includes void descendants, avoiding an endless insertion loop.
+This does not purge old wiki revisions or sanitize unrelated collaborative JSON.
+The native Plate Yjs plugin is also exercised with two independent Y.Doc instances
+and encoded updates: initial canonical links normalize, a replacement reference
+propagates, and both shared documents retain only the URI and empty reference
+child. Plate-local node IDs and structural empty text siblings are not Yjs
+content, so assertions compare reference subtrees and both shared documents.
+This is a local transport harness, not authenticated Hocuspocus/server evidence;
+that live multi-client synchronization check remains outstanding. Wiki
+secretization still requires an explicit native transaction
+and its own audit producer, source authority, and saved-wiki acceptance.

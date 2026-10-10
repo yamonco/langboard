@@ -260,7 +260,7 @@ export abstract class BaseModel<TModel extends IBaseModel> {
     ): InstanceType<TDerived> | undefined {
         const filter = Utils.Type.isString(uidOrFilter) ? (model: InstanceType<TDerived>) => model.uid === uidOrFilter : uidOrFilter;
         const [model, setModel] = useState<InstanceType<TDerived> | undefined>(
-            Object.values(BaseModel.#MODELS[this.MODEL_NAME] ?? {}).filter(filter as any)[0]
+            () => Object.values(BaseModel.#MODELS[this.MODEL_NAME] ?? {}).filter(filter as any)[0]
         );
 
         useEffect(() => {
@@ -307,7 +307,7 @@ export abstract class BaseModel<TModel extends IBaseModel> {
         dependencies?: React.DependencyList
     ): InstanceType<TDerived>[] {
         const [models, setModels] = useState<InstanceType<TDerived>[]>(
-            Object.values(BaseModel.#MODELS[this.MODEL_NAME] ?? {}).filter(filter as any) as any
+            () => Object.values(BaseModel.#MODELS[this.MODEL_NAME] ?? {}).filter(filter as any) as any
         );
 
         useEffect(() => {
@@ -499,6 +499,13 @@ export abstract class BaseModel<TModel extends IBaseModel> {
             });
         });
         return createFakeModel(constructor.MODEL_NAME, model, constructor.createFakeMethodsMap(model), foreignModels);
+    }
+
+    /** Subscribe to selected model fields without requiring a React render. */
+    public subscribeFields(fields: (keyof TModel)[], listener: () => void): () => void {
+        return this.#store.subscribe((current, previous) => {
+            if (fields.some((field) => current[field] !== previous[field])) listener();
+        });
     }
 
     public useField<TKey extends keyof TModel>(

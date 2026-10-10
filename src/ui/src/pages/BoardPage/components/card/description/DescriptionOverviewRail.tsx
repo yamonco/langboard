@@ -1,0 +1,119 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
+import Box from "@/components/base/Box";
+import HoverCard from "@/components/base/HoverCard";
+import { cn } from "@/core/utils/ComponentUtils";
+import { useTranslation } from "react-i18next";
+import { memo, useMemo } from "react";
+
+import type { IDescriptionChunk } from "./descriptionChunks";
+import { buildRailMarkers, getMarkerOpacity, getMarkerWidth, getNearestMarkerIndex } from "./descriptionOverviewRailData";
+
+interface IDescriptionOverviewRailProps {
+    chunks: IDescriptionChunk[];
+    activeIndex: number;
+    onNavigate: (index: number) => void;
+    viewportHeight: number;
+    onScrollKey?: (key: string) => boolean;
+}
+
+export function getPreviewTitleKey(type: IDescriptionChunk["metadata"]["type"]): string {
+    switch (type) {
+        case "code":
+            return "editor.Code";
+        case "table":
+            return "editor.Table";
+        case "list":
+            return "editor.Lists";
+        case "quote":
+            return "editor.Quote";
+        case "media":
+            return "editor.Image";
+        case "mixed":
+            return "editor.Text";
+        default:
+            return "editor.Paragraph";
+    }
+}
+
+export const DescriptionOverviewRail = memo(
+    ({ chunks, activeIndex, onNavigate, viewportHeight, onScrollKey }: IDescriptionOverviewRailProps): React.JSX.Element => {
+        const [t, i18n] = useTranslation();
+        const markers = useMemo(() => buildRailMarkers(chunks), [chunks]);
+        const nearestActiveMarkerIndex = useMemo(() => getNearestMarkerIndex(markers, activeIndex), [activeIndex, markers]);
+
+        return (
+            <Box
+                data-card-description-rail
+                position="absolute"
+                top="6"
+                left="1"
+                className="pointer-events-none z-10 flex w-7 justify-center"
+                style={{ height: Math.max(0, viewportHeight - 48) }}
+                aria-hidden={false}
+                onKeyDown={(event) => {
+                    if (onScrollKey?.(event.key)) event.preventDefault();
+                }}
+            >
+                <Box className="pointer-events-auto flex max-h-full min-h-0 flex-1 flex-col items-end justify-between gap-px py-2">
+                    {markers.map((marker, markerIndex) => {
+                        const distance = Math.abs(markerIndex - nearestActiveMarkerIndex);
+                        const active = distance === 0;
+                        const rangeLabel = marker.range
+                            ? `${formatNumber(marker.range.start, i18n.language)}–${formatNumber(marker.range.end, i18n.language)}`
+                            : `${formatNumber(marker.index + 1, i18n.language)} / ${formatNumber(chunks.length, i18n.language)}`;
+
+                        return (
+                            <HoverCard.Root key={`${marker.chunk.id}-${marker.index}`} openDelay={180} closeDelay={80}>
+                                <HoverCard.Trigger asChild>
+                                    <button
+                                        type="button"
+                                        aria-label={t("editor.Navigate description", { position: marker.index + 1, total: chunks.length })}
+                                        aria-current={active ? "location" : undefined}
+                                        className={cn(
+                                            "h-[3px] min-h-px shrink rounded-full bg-muted-foreground/70",
+                                            "transition-[width,opacity,transform] duration-150 ease-out",
+                                            "hover:scale-x-110 hover:bg-foreground hover:opacity-100",
+                                            "focus-visible:bg-foreground focus-visible:outline-none",
+                                            "focus-visible:ring-2 focus-visible:ring-ring",
+                                            "motion-reduce:transition-none",
+                                            getMarkerWidth(distance),
+                                            getMarkerOpacity(distance),
+                                            active && "bg-foreground"
+                                        )}
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            onNavigate(marker.index);
+                                        }}
+                                    />
+                                </HoverCard.Trigger>
+
+                                <HoverCard.Portal>
+                                    <HoverCard.Content
+                                        side="right"
+                                        align="center"
+                                        sideOffset={10}
+                                        className="w-72"
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                    >
+                                        <div className="truncate text-sm font-semibold">
+                                            {marker.chunk.metadata.heading || t(getPreviewTitleKey(marker.chunk.metadata.type))}
+                                        </div>
+                                        {!!marker.chunk.metadata.previewText && (
+                                            <div className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                                                {marker.chunk.metadata.previewText}
+                                            </div>
+                                        )}
+                                        <div className="mt-2 text-[11px] text-muted-foreground/80">{rangeLabel}</div>
+                                    </HoverCard.Content>
+                                </HoverCard.Portal>
+                            </HoverCard.Root>
+                        );
+                    })}
+                </Box>
+            </Box>
+        );
+    }
+);
+
+export default DescriptionOverviewRail;

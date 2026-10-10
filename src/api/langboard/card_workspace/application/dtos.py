@@ -1,5 +1,5 @@
-from typing import Any
-from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
+from typing import Any, Literal
+from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 
 class BoundedItemsDto(BaseModel):
@@ -13,6 +13,12 @@ class BoundedItemsDto(BaseModel):
     limit: int
 
 
+class PeopleDto(BoundedItemsDto):
+    """Assignees plus timer workers; workers never imply assignment."""
+
+    active_workers: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class BoundedTextDto(BaseModel):
     """One bounded text fragment with an opaque continuation."""
 
@@ -21,6 +27,7 @@ class BoundedTextDto(BaseModel):
     content: str
     format: str
     total_chars: int
+    revision: str
     next_cursor: str | None
 
 
@@ -49,13 +56,15 @@ class CardBundleDto(BaseModel):
 
     core: dict[str, Any]
     workflow: dict[str, Any]
-    people: BoundedItemsDto | None = None
+    work_state: dict[str, Any] | None = None
+    people: PeopleDto | None = None
     classification: ClassificationDto | None = None
     checklists: BoundedItemsDto | None = None
     comments: BoundedItemsDto | None = None
     attachments: BoundedItemsDto | None = None
     metadata: BoundedItemsDto | None = None
     automation: AutomationDto | None = None
+    content_blocks: BoundedItemsDto | None = None
 
     @model_serializer(mode="wrap")
     def serialize_selected_sections(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -100,6 +109,15 @@ class CardBundleResponse(BaseModel):
         return self
 
 
+class AuthenticatedActorDto(BaseModel):
+    """Minimal identity from the server-authenticated principal, never a client hint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    uid: str
+    type: Literal["user", "bot"]
+
+
 class ProjectIdentityResponse(BaseModel):
     """Stable project identity plus its bounded active workflow columns."""
 
@@ -110,6 +128,7 @@ class ProjectIdentityResponse(BaseModel):
     project_type: str
     url: str
     columns: BoundedItemsDto
+    authenticated_actor: AuthenticatedActorDto | None = None
 
 
 class ProjectCardListResponse(BaseModel):
@@ -119,3 +138,18 @@ class ProjectCardListResponse(BaseModel):
 
     project_uid: str
     cards: BoundedItemsDto
+    workflow_stages: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class ProjectCardIndexResponse(ProjectCardListResponse):
+    """Workflow-aware index for modern MCP and native query consumers."""
+
+    columns: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    format: Literal["tree"] | None = None
+    relationships: list[dict[str, Any]] | None = None
+    relationship_scope: Literal["current_page"] | None = None
+    relationships_truncated: bool | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_format(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return {key: value for key, value in handler(self).items() if value is not None}

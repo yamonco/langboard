@@ -14,3 +14,8 @@ class UpdateProjectLabelDetailsForm(BaseFormModel):
     name: str | None = Field(default=None, description="Project label name")
     color: str | None = Field(default=None, description="Project label color in hex format")
     description: str | None = Field(default=None, description="Project label description")
+
+
+@form_model
+class UseGlobalProjectLabelForm(BaseFormModel):
+    global_label_uid: str = Field(..., min_length=1, max_length=100, description="Existing global label UID")
