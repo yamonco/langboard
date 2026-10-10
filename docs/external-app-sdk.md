@@ -209,5 +209,9 @@ The resource-specific GitHub webhook endpoint applies the same unattended gate
 before signature resolution and again inside the evidence transaction. Changing
 the connection to personal ownership or disabling its organization while a
 signature is checked prevents the subsequent write.
+Dokploy automatic notification authentication and receipt insertion use the same
+unattended gate. Changes to ownership, board organization or organization state
+between header authentication and streamed-body receipt insertion are rechecked.
+Interactive configuration and health reads validate ordinary connection access.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.
