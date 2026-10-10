@@ -630,7 +630,28 @@ secrets are excluded. Downgrade cannot discard records with attempts.
 Actual PostgreSQL tests prove exclusive claim under four concurrent workers and
 request acceptance concurrency. SQLite tests exercise expiry recovery, stale
 completion denial, stable retry bytes, exhaustion, and current connection/stage/
-destination revocation. No HTTP executor, scheduler, public retry/history UI,
-runtime acknowledgment/start/stop or HITL flow is wired yet. The worker must
-revalidate before sending, enforce the existing public URL/DNS policy, and obtain
-a separate native runtime receipt before claiming running execution.
+destination revocation. The explicit HTTP executor described below is available, but no scheduler, public
+retry/history UI, runtime acknowledgment/start/stop or HITL flow is wired yet.
+Receivers must obtain a separate native runtime receipt before claiming running
+execution.
+
+### Explicit app event HTTP executor
+
+`deliver_app_event(event_id, expected_destination_revision)` explicitly acquires
+the durable app claim, resolves and pins a public DNS target through the existing
+webhook URL policy, then rechecks the same live claim and current authority after
+DNS resolution. A revoked connection, stale selection or changed destination is
+persisted as `blocked_before_send` and no HTTP request occurs. The HTTP call uses
+the shared exact-byte transport, original Host/SNI, no redirects and a bounded
+60-second read timeout. It records delivery only after the same unexpired claim
+returns success. Failures release the current claim for its bounded retry budget;
+a late response cannot mark a recovered or expired lease delivered.
+
+HTTP transport tests use `httpx.MockTransport` to verify exact HMAC bytes,
+200/503/redirect behavior and post-DNS revocation. They are controlled transport
+proofs, not a live external app integration. A change after the final transaction
+and before the HTTP operation cannot be undone by the sender; receivers must
+obtain current native runtime authority before executing. The executor is not
+automatically scheduled/enqueued and creates no runtime start receipt. Delivery
+retry scheduling, external receiver acceptance and native runtime lifecycle/HITL
+remain required before unattended execution can be enabled.
