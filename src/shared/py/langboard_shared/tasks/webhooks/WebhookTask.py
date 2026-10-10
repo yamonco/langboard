@@ -215,12 +215,19 @@ def signed_request(
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+    return sign_webhook_bytes(body, model.event_id, secret, timestamp=timestamp, version=model.schema_version)
+
+
+def sign_webhook_bytes(
+    body: bytes, event_id: str, secret: str | None, *, timestamp: int | None = None, version: str = "1"
+) -> tuple[bytes, dict[str, str]]:
+    """Sign exact canonical bytes; payload projection belongs to the caller."""
     delivered_at = str(timestamp if timestamp is not None else int(time()))
     headers = {
         "Content-Type": "application/json",
-        "X-Langboard-Webhook-Id": model.event_id,
+        "X-Langboard-Webhook-Id": event_id,
         "X-Langboard-Webhook-Timestamp": delivered_at,
-        "X-Langboard-Webhook-Version": model.schema_version,
+        "X-Langboard-Webhook-Version": version,
     }
     if secret:
         signature = hmac_new(

@@ -580,6 +580,19 @@ credentials and the full authority snapshot are excluded from the event payload.
 These records begin `pending` with attempt count zero. They have no deletion
 cascade and downgrade refuses to discard event history. This is durable event
 intent only: it is not signed, sent, acknowledged or evidence of running work.
-App destination configuration, trust/consent-bound signing, current-authority
-claim fencing, delivery retries and runtime acknowledgment remain pending. The
-legacy board execution outbox and its worker are unchanged.
+The host internal `bind_app_event_destination` binds a current connection to an
+administrator-managed webhook with an explicit event allowlist, signing secret
+and HTTPS origin declared in the approved app definition. Compare-and-set
+revisions cover rebinding. Target URL, secret reference, allowlist and declared
+trust identity changes require explicit rebinding before signing.
+
+`prepare_app_event_signature` rechecks connection/policy and target identity,
+loads the existing vault secret, pins the destination revision in the pending
+event and signs canonical original bytes with the existing webhook HMAC contract.
+An event pinned to an old destination cannot migrate silently after rebinding.
+The signed payload is the original event envelope plus a `destination` object
+with `destination_uid` and `revision`. Signing is not execution authority and
+does not send, increment attempts, acknowledge or start work. It is an internal
+primitive, not a public app configuration endpoint. Current execution consent,
+resource/selection claim fencing, delivery retries and runtime acknowledgment
+remain pending. The legacy board execution outbox and worker are unchanged.
