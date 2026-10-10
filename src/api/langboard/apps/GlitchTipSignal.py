@@ -79,6 +79,7 @@ def _scope(service, actor, project_uid, connection_uid, resource_uid, *, lock=Fa
         if not signal_app_allowed(db, "glitchtip", lock=lock):
             raise connection.GlitchTipUnavailable()
         conn = connection._connection(db, actor, connection_uid, lock=lock)
+        connection._access(db, actor, board, conn)
         query = SqlBuilder.select.table(BoardAppBinding).where(
             BoardAppBinding.project_id == board.id,
             BoardAppBinding.app_key == "glitchtip",

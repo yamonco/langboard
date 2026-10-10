@@ -64,6 +64,7 @@ def _scope(service, actor, project_uid, connection_uid, resource_uid, *, lock=Fa
         if not signal_app_allowed(db, "dokploy", lock=lock):
             raise connection.DokployUnavailable()
         conn = connection._connection(db, actor, connection_uid, lock=lock)
+        connection._access(db, actor, board, conn)
         query = SqlBuilder.select.table(BoardAppBinding).where(
             BoardAppBinding.project_id == board.id,
             BoardAppBinding.app_key == "dokploy",

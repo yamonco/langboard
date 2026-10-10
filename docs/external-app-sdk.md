@@ -223,5 +223,10 @@ Notification health includes a current `can_configure` hint. The UI keeps revoke
 receiver metadata available for explicit disablement while blocking credential
 input and configuration actions when that hint is false. The hint does not grant
 authority: every mutation rechecks its current server permissions and revisions.
+GlitchTip and Dokploy interactive metadata discovery and signal refresh validate
+current connection ownership and matching active organization before provider IO
+and again before returning results or persisting evidence. Owner-authorized
+personal-account reads remain interactive operations; they do not acquire
+organization automation permission from a board mapping.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.
