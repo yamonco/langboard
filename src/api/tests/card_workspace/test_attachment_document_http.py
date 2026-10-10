@@ -44,7 +44,8 @@ def document_http(monkeypatch):
     monkeypatch.setattr(BoardCardAttachmentApi, "require_card_child", validate_child)
     service = SimpleNamespace(card=SimpleNamespace(resolve_readable_card=resolve_card), card_attachment=SimpleNamespace(request_document_processing=process), close=lambda: None)
 
-    def validate(scope):
+    def validate(scope, *, allow_oidc=False):
+        assert allow_oidc is False
         scope["auth"] = state["actor"]
         return state["actor"]
 
