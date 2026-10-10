@@ -1,6 +1,20 @@
 import { test, expect } from "@playwright/test";
 const path = "/src/pages/BoardPage/components/settings/DokployOnboarding.fixture.html";
 for (const width of [1920, 390])
+    test(`health denial keeps owner removal available ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto(path + "?saved&denyhealth&deny");
+        await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+        await expect(page.getByRole("alert")).toBeVisible();
+        await expect(page.getByRole("combobox", { name: "Existing connection" })).toHaveValue("conn");
+        await page.getByRole("button", { name: "Load saved selections" }).click();
+        await page.getByRole("button", { name: "Remove selection", exact: true }).click();
+        await expect(page.getByRole("button", { name: "Remove selection", exact: true })).toHaveCount(0);
+        const calls = await page.evaluate(() => (window as unknown as { dokployCalls: { url: string }[] }).dokployCalls);
+        expect(calls.some((row) => row.url.endsWith("/resources"))).toBe(false);
+        expect(calls.some((row) => row.url.endsWith("/remove"))).toBe(true);
+    });
+for (const width of [1920, 390])
     test(`secure registration and hierarchy selection ${width}`, async ({ page }) => {
         await page.clock.install({ time: new Date("2026-10-08T01:32:03Z") });
         await page.setViewportSize({ width, height: 1000 });
