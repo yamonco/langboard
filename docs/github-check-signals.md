@@ -55,6 +55,13 @@ described below. The full multi-provider Signal card remains incomplete.
 
 ## Read surface and remaining work
 
+The shared board Signal Inbox scopes discovery to the requesting user's personal
+connections and organization connections belonging to the current board's organization.
+Board ownership or instance administration does not expose another user's unshared
+personal Signal rows. The same SQL scope applies before pagination and cursor validation,
+so hidden personal rows do not produce discoverable cursors. Explicit card-bound evidence
+remains a separate projection with its own card visibility rules.
+
 `GET /board/{board_uid}/settings/apps/github/connections/{connection_uid}/resources/{resource_uid}/signals`
 requires browser authentication and current board Read permission in addition to the live
 consumer authority above. It returns 25 events per page with a scoped opaque cursor,
