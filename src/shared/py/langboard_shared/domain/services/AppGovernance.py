@@ -129,6 +129,13 @@ def require_app_allowed(db, project, *, approved=True, personal=False):
     current = _current(db, Project, project.id, for_update=False)
     if current is None or current.deleted_at:
         raise AppGovernanceDenied()
+    return require_current_project_policy(db, current, approved=approved, personal=personal)
+
+
+def require_current_project_policy(db, current, *, approved=True, personal=False):
+    """Policy gate for a project freshly read from the primary in this transaction."""
+    if current.deleted_at:
+        raise AppGovernanceDenied()
     policy = current_policy(db, current.organization_id)
     mode = policy["effective_mode"]
     if mode == "disabled" or ((personal or not approved) and mode != "personal_allowed"):

@@ -6,6 +6,7 @@ from ...core.db import DbSession
 from ...helpers import InfraHelper
 from ..models import (
     AppConnection,
+    AppDefinition,
     AppGovernancePolicy,
     AppResourceBinding,
     AppSignal,
@@ -19,6 +20,18 @@ from ..models import (
     SecretReference,
     User,
 )
+
+
+def registered_capability_condition(app_key, capability):
+    """An explicit override can revoke built-in capabilities without per-row queries."""
+    revoked = select(AppDefinition.id).where(
+        AppDefinition.key == app_key,
+        or_(
+            AppDefinition.is_enabled == False,  # noqa: E712
+            ~func.coalesce(cast(AppDefinition.declaration["capabilities"], Text), "").contains(f'"{capability}"'),
+        ),
+    ).exists()
+    return ~revoked
 
 
 def signal_resource_conditions(*, app_key="github", resource_type="repository", capability="signals.read"):
@@ -49,6 +62,7 @@ def signal_resource_conditions(*, app_key="github", resource_type="repository", 
         AppGovernancePolicy.mode == "disabled",
     ).correlate(Project).exists()
     return (
+        registered_capability_condition(app_key, capability),
         ~global_disabled,
         ~organization_disabled,
         Project.deleted_at.is_(None),
@@ -92,6 +106,8 @@ def provider_resource_condition():
         for kind in policy.resource_types:
             predicates.append(and_(
                 *signal_resource_conditions(app_key=manifest.key, resource_type=kind),
+                *(registered_capability_condition(manifest.key, capability)
+                  for capability in policy.required_capabilities),
                 *(cast(BoardAppBinding.granted_capabilities, Text).contains(f'"{capability}"')
                   for capability in policy.required_capabilities),
             ))

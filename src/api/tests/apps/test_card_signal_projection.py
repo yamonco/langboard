@@ -532,3 +532,61 @@ def test_global_app_policy_hides_existing_evidence_without_deleting_it(scoped):
         policy.mode = "approved_only"
         db.update(policy)
     assert card_signal_projections([card])[card.id]
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+def test_registry_revocation_hides_existing_card_evidence_without_deletion(scoped, change):
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppDefinition, AppSignal
+
+    state, card, _, _ = scoped
+    send(state)
+    assert card_signal_projections([card])[card.id]
+    with DbSession.atomic() as db:
+        definition = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "github")).first()
+        if change == "disabled":
+            definition.is_enabled = False
+        else:
+            definition.declaration = {"capabilities": ["resources.read"]}
+        db.update(definition)
+    assert card_signal_projections([card]) == {}
+    with DbSession.atomic() as db:
+        assert len(db.exec(SqlBuilder.select.table(AppSignal)).all()) == 1
+        definition.is_enabled = True
+        definition.declaration = {"capabilities": ["signals.read"]}
+        db.update(definition)
+    assert card_signal_projections([card])[card.id]
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+def test_revoked_app_cannot_create_card_signal_binding(scoped, change):
+    from langboard.apps.CardSignal import bind_check
+    from langboard.apps.GitHubManifest import GitHubManifestUnavailable
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppDefinition
+    from langboard_shared.domain.services import DomainService
+
+    state, card, binding, _ = scoped
+    domain = DomainService()
+    state[0].card = domain.card
+    signal_uid = send(state)["signal_uid"]
+    with DbSession.atomic() as db:
+        state[1][4].actions = ["read", "update", "card_update"]
+        db.update(state[1][4])
+        binding.is_enabled = False
+        db.update(binding)
+        definition = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "github")).first()
+        if change == "disabled":
+            definition.is_enabled = False
+        else:
+            definition.declaration = {"capabilities": []}
+        db.update(definition)
+    try:
+        with pytest.raises(GitHubManifestUnavailable):
+            bind_check(state[0], state[1][1], state[1][2].get_uid(), card.get_uid(), state[2].get_uid(),
+                       state[4].get_uid(), signal_uid, 7, 1)
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(CardAppSignalBinding).where(CardAppSignalBinding.id == binding.id)).first()
+            assert not current.is_enabled
+    finally:
+        domain.close()
