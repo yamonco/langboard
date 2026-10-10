@@ -216,3 +216,17 @@ for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
         await context.close();
     });
 }
+
+for (const width of [1440, 390]) {
+    test(`canonical editor reference opens native history at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/src/components/plate-ui/secret-reference-link.fixture.html");
+        for (const name of ["Editable reference", "Static reference"]) {
+            const region = page.getByRole("region", { name });
+            await expect(region.getByRole("link", { name: "••••" })).toHaveAttribute("href", "/secret-references/fixture/history");
+            await expect(region.getByText("Invalid", { exact: true })).not.toHaveAttribute("href", "/secret-references/fixture/history");
+        }
+        await page.getByRole("region", { name: "Editable reference" }).getByRole("link", { name: "••••" }).click();
+        await expect(page).toHaveURL(/\/secret-references\/fixture\/history$/);
+    });
+}
