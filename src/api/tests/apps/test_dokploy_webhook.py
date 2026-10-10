@@ -508,3 +508,55 @@ def test_app_registry_revocation_blocks_webhook_without_losing_receipts(configur
     with DbSession.use(readonly=False) as db:
         rows = db.exec(SqlBuilder.select.table(DokployNotificationReceipt)).all()
         assert len(rows) == 1 and rows[0].get_uid() == first["receipt_uid"]
+
+
+@pytest.mark.parametrize("change", ["policy", "registry", "connection", "secret", "receiver-secret"])
+def test_notification_disable_survives_revocation_with_current_revision(configured, change):
+    from langboard_shared.domain.models import AppDefinition, AppGovernancePolicy
+
+    setup, conn, _, config = configured
+    service, board, *_ = setup
+    first = accept(configured)
+    with DbSession.atomic() as db:
+        saved = db.exec(SqlBuilder.select.table(AppConnection)).first()
+        if change == "policy":
+            db.insert(AppGovernancePolicy(scope_key="global", mode="disabled"))
+        elif change == "registry":
+            db.insert(AppDefinition(key="dokploy", approved_by=board[1].id, declaration={"capabilities": []}, is_enabled=False))
+        elif change == "connection":
+            saved.state = "revoked"
+            db.update(saved)
+        else:
+            reference = configured[2]["uri"] if change == "receiver-secret" else saved.credential_reference
+            metadata = service.secret_reference.get_metadata(board[1], reference)
+            service.secret_reference.revoke(board[1], reference, metadata["revision"])
+        revision = dk._revision(saved)
+    with pytest.raises(dk.DokployUnavailable):
+        accept(configured)
+    retained = webhook.health(service, board[1], board[2].get_uid(), conn["connection_uid"])
+    assert retained["connection_revision"] == revision and retained["resources"] == []
+    args = (service, board[1], board[2].get_uid(), conn["connection_uid"], revision, config["binding_revision"])
+    with pytest.raises(dk.DokployConflict):
+        webhook.disable(*args, config["config_revision"] + 1)
+    result = webhook.disable(*args, config["config_revision"])
+    assert result["state"] == "disabled"
+    assert result["last_received_at"] == first["received_at"]
+    with pytest.raises(dk.DokployUnavailable):
+        webhook.configure(*args, result["config_revision"], configured[2]["uri"])
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(DokployNotificationReceipt)).all()) == 1
+
+
+def test_notification_disable_still_requires_board_update_and_connection_owner(configured):
+    setup, conn, _, config = configured
+    service, board, *_ = setup
+    with DbSession.atomic() as db:
+        board[4].actions = ["read"]
+        db.update(board[4])
+        owner = db.exec(SqlBuilder.select.table(User).where(User.id == board[2].owner_id)).first()
+        owner.is_admin = True
+        db.update(owner)
+    for actor in (board[1], owner):
+        with pytest.raises(dk.DokployUnavailable):
+            webhook.disable(service, actor, board[2].get_uid(), conn["connection_uid"], conn["revision"],
+                            config["binding_revision"], config["config_revision"])

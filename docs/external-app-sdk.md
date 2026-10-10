@@ -213,5 +213,11 @@ Dokploy automatic notification authentication and receipt insertion use the same
 unattended gate. Changes to ownership, board organization or organization state
 between header authentication and streamed-body receipt insertion are rechecked.
 Interactive configuration and health reads validate ordinary connection access.
+When policy, app registration, connection state or a referenced secret is revoked,
+notification health may retain removal revisions and prior receipt timestamps,
+with no resource discovery or credentials. Disabling an existing receiver still
+requires current board Update access, its connection owner and exact revisions;
+it does not require the removed signal grant or an active secret. Reconfiguration
+continues to require current app policy and active connection credentials.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.
