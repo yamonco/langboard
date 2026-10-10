@@ -3,7 +3,8 @@
 from typing import Any
 from sqlalchemy import JSON, CheckConstraint, UniqueConstraint
 from sqlalchemy.schema import conv
-from ...core.db import BaseDbModel, Field, SnowflakeIDField
+from ...core.db import BaseDbModel, DateTimeField, Field, SnowflakeIDField
+from ...core.types import SafeDateTime
 
 
 class AppExecutionOutbox(BaseDbModel, table=True):
@@ -23,6 +24,10 @@ class AppExecutionOutbox(BaseDbModel, table=True):
     payload: dict[str, Any] = Field(default_factory=dict, sa_type=JSON, nullable=False)
     state: str = Field(default="pending", nullable=False)
     attempt_count: int = Field(default=0, nullable=False)
+    lease_until: SafeDateTime | None = DateTimeField(default=None, nullable=True)
+    claim_token: str | None = Field(default=None, nullable=True)
+    last_error: str | None = Field(default=None, nullable=True)
+    delivery_history: list[dict[str, Any]] = Field(default_factory=list, sa_type=JSON, nullable=False)
 
     def notification_data(self) -> dict[str, Any]:
         return {}

@@ -36,6 +36,13 @@ def prepare(board):
             try:
                 outbox.op = module.op
                 outbox.upgrade()
+                lease = importlib.import_module("langboard.migrations.versions.20261011040000-f82c793016ae")
+                original_lease = lease.op
+                try:
+                    lease.op = module.op
+                    lease.upgrade()
+                finally:
+                    lease.op = original_lease
             finally:
                 outbox.op = original_outbox
     finally:
