@@ -120,6 +120,10 @@ async def test_packaged_sdk_start_report_uses_native_http(board, monkeypatch):
         assert first["start_uid"] == replay["start_uid"] and replay["changed"] is False
         report = await execution.runtime_report(lease_id.to_short_code(), runtime_token)
         assert report["active_report"] is True and report["start_report"]["start_uid"] == first["start_uid"]
+        from datetime import datetime
+
+        assert datetime.fromisoformat(report["expires_at"]).tzinfo is not None
+        assert datetime.fromisoformat(report["start_report"]["reported_at"]).tzinfo is not None
         with DbSession.atomic() as db:
             lease = db.exec(SqlBuilder.select.table(AppExecutionLease)).first()
             original_expiry = lease.expires_at
