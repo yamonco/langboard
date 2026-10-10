@@ -549,7 +549,11 @@ removing evidence. A version mismatch returns 409 before either request or event
 is inserted. Ownership, selection, definition, binding and selected resource rows
 are locked during evaluation. The response `authority` contains the accepted
 fixed snapshot, including its version and selected resource UIDs. Downgrade refuses
-to discard existing requests. PostgreSQL concurrent acceptance remains unverified.
+to discard existing requests. Real disposable PostgreSQL tests prove four
+concurrent requests commit one request/event identity, and a request observed
+waiting on a database lock rejects a committed selection change with 409 and
+zero persisted requests/events. This proves request acceptance concurrency;
+delivery claims, acknowledgments and lifecycle concurrency remain unverified.
 
 The response is `state: requested`, `started: false`. This is request acceptance,
 not dispatch, delivery, a running lease or an external runtime acknowledgment.
