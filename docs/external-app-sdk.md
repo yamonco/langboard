@@ -452,7 +452,14 @@ writes return 403; existing receipt reads retain their visibility checks.
 Attachment upload, rename, delete, ordering and explicit processing/embedding
 requests also use the native service fence. Ordering and processing methods require
 an explicit authenticated actor; REST/MCP callers pass their current user, without
-inferring automation authority from the attachment author or card owner. HITL and remaining direct repository
+inferring automation authority from the attachment author or card owner.
+Card-scoped native graph approval creation also holds the project/card ownership
+lock through persistence. A supplied bot or internal bot takes precedence over a
+requesting user; none of them carries an owner-app grant. Human-only and released
+bot requests retain the existing native scope/origin validation. Other approval
+scopes and human approval resolution retain their existing behavior. This does
+not implement the generic external-app HITL request/response/delivery contract.
+That contract and remaining direct repository
 writes also require separate fence coverage before
 ownership configuration is exposed. Service tests prove the exercised denial
 paths; they do not prove deployed REST/MCP or PostgreSQL concurrency acceptance.

@@ -4,15 +4,15 @@ from functools import wraps
 from inspect import signature
 from ...core.db import DbSession, SqlBuilder
 from ...helpers import InfraHelper
-from ..models import Bot, Card, CardAppOwnership, Project, User
+from ..models import Bot, Card, CardAppOwnership, InternalBot, Project, User
 from .AppGovernance import AppGovernanceDenied
 
 
-def require_card_app_mutation(db: DbSession, actor: User | Bot, card, project=None) -> None:
+def require_card_app_mutation(db: DbSession, actor: User | Bot | InternalBot, card, project=None) -> None:
     """Fence direct writers in their existing transaction before side effects."""
     if isinstance(actor, User):
         return
-    if not isinstance(actor, Bot):
+    if not isinstance(actor, (Bot, InternalBot)):
         raise AppGovernanceDenied()
     if project is not None:
         db.exec(

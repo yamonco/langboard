@@ -8,8 +8,16 @@ from unittest.mock import Mock
 import pytest
 from langboard.card_workspace.application import execution_receipts as receipts
 from langboard_shared.core.db import DbSession, SqlBuilder
+from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.routing import ApiException
-from langboard_shared.domain.models import Bot, CardAppOwnership, CardAppOwnershipAudit
+from langboard_shared.domain.models import (
+    Bot,
+    CardAppOwnership,
+    CardAppOwnershipAudit,
+    GraphApprovalRequest,
+    InternalBot,
+    ManualScopeRunGraphApprovalRequest,
+)
 from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied
 from langboard_shared.domain.services.CardAppGovernance import set_card_app_ownership
 from langboard_shared.domain.services.CardAppMutation import guard_card_app_mutation
@@ -18,7 +26,11 @@ from langboard_shared.domain.services.factory.CardCommentService import CardComm
 from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.domain.services.factory.CheckitemService import CheckitemService
 from langboard_shared.domain.services.factory.ChecklistService import ChecklistService
+from langboard_shared.domain.services.factory.GraphApprovalRequestService import GraphApprovalRequestService
 from langboard_shared.domain.services.factory.WorkflowStageService_app_test import board  # noqa: F401
+from langboard_shared.infrastructure.repositories.factory.GraphApprovalRequestRepository import (
+    GraphApprovalRequestRepository,
+)
 from test_card_app_ownership import prepare
 
 
@@ -60,6 +72,84 @@ def test_attachment_writer_requires_actor_before_repository_access(operation):
     args = ("project", "card", "attachment", 0) if operation == "change_order" else ("project", "card", "attachment")
     with pytest.raises(TypeError, match="user"):
         getattr(service, operation)(*args)
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+@pytest.mark.parametrize("actor_kind", ["bot", "internal_bot", "bot_and_user", "missing"])
+def test_card_approval_creation_denies_unbound_automation_before_side_effects(board, monkeypatch, actor_kind):
+    card = prepare(board)
+    set_card_app_ownership(board[1], board[2].id, card.id, "example-app", None)
+    service = GraphApprovalRequestService(None, None, None)
+    repository = SimpleNamespace(graph_approval_request=Mock())
+    monkeypatch.setattr(service, "repo", repository, raising=False)
+    cancel = Mock()
+    monkeypatch.setattr(service, "_GraphApprovalRequestService__cancel_unpersisted", cancel)
+    args = {}
+    if actor_kind in {"bot", "bot_and_user"}:
+        args["bot"] = Bot(name="Automation", bot_uname="bot-test", app_api_token="test-only",
+                          platform="default", platform_running_type="default")
+    elif actor_kind == "internal_bot":
+        args["internal_bot"] = InternalBot(bot_type="project_chat", display_name="Assistant",
+                                          platform="default", platform_running_type="default")
+    if actor_kind == "bot_and_user":
+        args["user"] = board[1]
+    with pytest.raises(AppGovernanceDenied):
+        service.create_from_interrupt(board[2], {
+            "type": "approval_request", "origin_type": "manual_scope_run", "scope_table": "card",
+            "scope_uid": card.get_uid(), "thread_id": "test-thread", "app_key": "example-app",
+        }, **args)
+    repository.graph_approval_request.insert_with_detail.assert_not_called()
+    cancel.assert_not_called()
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+@pytest.mark.parametrize("human", [False, True])
+def test_card_approval_human_and_released_bot_retain_native_creation(board, monkeypatch, human):
+    card = prepare(board)
+    set_card_app_ownership(board[1], board[2].id, card.id, "example-app", None)
+    if not human:
+        set_card_app_ownership(board[1], board[2].id, card.id, None, 1)
+    service = GraphApprovalRequestService(None, None, None)
+    repository = SimpleNamespace(card=SimpleNamespace(get_by_id_like=lambda _: card), graph_approval_request=Mock())
+    monkeypatch.setattr(service, "repo", repository, raising=False)
+    detail = object()
+    monkeypatch.setattr(service, "_GraphApprovalRequestService__create_detail", lambda *a, **k: detail)
+    actor = {"user": board[1]} if human else {"bot": Bot(name="Automation", bot_uname="bot-test",
+             app_api_token="test-only", platform="default", platform_running_type="default")}
+    approval = service.create_from_interrupt(board[2], {
+        "type": "approval_request", "origin_type": "manual_scope_run", "scope_table": "card",
+        "scope_uid": card.get_uid(), "thread_id": "test-thread",
+    }, **actor)
+    assert approval is not None and approval.thread_id == "test-thread"
+    repository.graph_approval_request.insert_with_detail.assert_called_once_with(approval, detail)
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+def test_card_approval_and_detail_share_outer_transaction(board, monkeypatch):
+    card = prepare(board)
+    for model in (GraphApprovalRequest, ManualScopeRunGraphApprovalRequest):
+        model.__table__.create(DbEngine.get_main_engine())
+    service = GraphApprovalRequestService(None, None, None)
+    repository = SimpleNamespace(card=SimpleNamespace(get_by_id_like=lambda _: card),
+                                 graph_approval_request=object.__new__(GraphApprovalRequestRepository))
+    monkeypatch.setattr(service, "repo", repository, raising=False)
+    interrupt = {"type": "approval_request", "origin_type": "manual_scope_run",
+                 "scope_table": "card", "scope_uid": card.get_uid(), "thread_id": "test-thread"}
+    with pytest.raises(RuntimeError, match="rollback"):
+        with DbSession.atomic() as db:
+            service.create_from_interrupt(board[2], interrupt, user=board[1])
+            assert len(db.exec(SqlBuilder.select.table(GraphApprovalRequest)).all()) == 1
+            assert len(db.exec(SqlBuilder.select.table(ManualScopeRunGraphApprovalRequest)).all()) == 1
+            raise RuntimeError("rollback")
+    with DbSession.atomic() as db:
+        assert db.exec(SqlBuilder.select.table(GraphApprovalRequest)).all() == []
+        assert db.exec(SqlBuilder.select.table(ManualScopeRunGraphApprovalRequest)).all() == []
+    approval = service.create_from_interrupt(board[2], interrupt, user=board[1])
+    with DbSession.atomic() as db:
+        saved = db.exec(SqlBuilder.select.table(GraphApprovalRequest)).first()
+        detail = db.exec(SqlBuilder.select.table(ManualScopeRunGraphApprovalRequest)).first()
+        assert saved.id == approval.id == detail.approval_request_id
+        assert detail.scope_id == card.id and detail.scope_table == "card"
 
 
 @pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
