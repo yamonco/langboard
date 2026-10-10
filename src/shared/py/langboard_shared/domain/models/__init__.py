@@ -2,6 +2,7 @@ from .ApiComfortTool import ApiComfortTool
 from .ApiKeyRole import ApiKeyRole
 from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
+from .AppExecutionRequest import AppExecutionRequest
 from .AppConnection import AppConnection
 from .AppConnectionCredential import AppConnectionCredential
 from .CardAppResourceSelection import CardAppResourceSelection, CardAppResourceSelectionAudit
@@ -117,6 +118,7 @@ __all__ = [
     "GitHubHealthJob",
     "AppDefinition",
     "AppGovernancePolicy",
+    "AppExecutionRequest",
     "AppConnection",
     "BoardAppBinding",
     "DokployWebhookBinding",
