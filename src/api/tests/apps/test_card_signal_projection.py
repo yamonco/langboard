@@ -516,3 +516,19 @@ def test_binding_notifications_follow_commit_and_conflicts_do_not_publish(scoped
         assert card.last_change_seq == 7
     finally:
         domain.close()
+
+
+def test_global_app_policy_hides_existing_evidence_without_deleting_it(scoped):
+    from langboard_shared.domain.models import AppGovernancePolicy
+
+    state, card, _, _ = scoped
+    send(state)
+    assert card_signal_projections([card])[card.id]
+    with DbSession.use(readonly=False) as db:
+        policy = AppGovernancePolicy(scope_key="global", mode="disabled")
+        db.insert(policy)
+    assert card_signal_projections([card]) == {}
+    with DbSession.use(readonly=False) as db:
+        policy.mode = "approved_only"
+        db.update(policy)
+    assert card_signal_projections([card])[card.id]

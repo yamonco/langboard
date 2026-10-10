@@ -6,6 +6,7 @@ from ...core.db import DbSession
 from ...helpers import InfraHelper
 from ..models import (
     AppConnection,
+    AppGovernancePolicy,
     AppResourceBinding,
     AppSignal,
     BoardAppBinding,
@@ -40,7 +41,16 @@ def signal_resource_conditions(*, app_key="github", resource_type="repository", 
         )
         .exists()
     )
+    global_disabled = select(AppGovernancePolicy.id).where(
+        AppGovernancePolicy.scope_key == "global", AppGovernancePolicy.mode == "disabled",
+    ).exists()
+    organization_disabled = select(AppGovernancePolicy.id).where(
+        AppGovernancePolicy.organization_id == Project.organization_id,
+        AppGovernancePolicy.mode == "disabled",
+    ).correlate(Project).exists()
     return (
+        ~global_disabled,
+        ~organization_disabled,
         Project.deleted_at.is_(None),
         BoardAppBinding.app_key == app_key,
         BoardAppBinding.state.in_(["enabled", "needs_attention"]),
