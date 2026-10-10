@@ -783,6 +783,15 @@ external account identity or capabilities are accepted. This does not verify an
 upstream login or replace a provider's OAuth flow. Built-in provider keys retain
 their native verified connection routes.
 
+Recover connection receipts with `GET /settings/apps/registry/{app_key}/inbound-connections`.
+The default scope includes only the caller's personal connections. An explicit
+`organization_uid` requires current organization management authority and returns
+only that organization's connections. Instance administration does not reveal
+another user's personal connections. Use `after` (the returned `next_cursor`)
+and `limit` (1–50, default 25) for bounded pages. Responses include only UID,
+ownership, state and the current disconnect revision; no credentials or upstream
+account data. Disabled apps and policies still allow this recovery for cleanup.
+
 After preparing a board workflow draft, select each external resource with
 `PUT /board/{project_uid}/settings/apps/{app_key}/inbound-connections/{connection_uid}/resources`.
 Send the current app revision, binding UID/revision, declared `resource_type` and

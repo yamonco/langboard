@@ -224,6 +224,48 @@ def test_inbound_organization_authority_and_revocation_cleanup(creation):
     assert not removed["selected"] and removed["access_state"] == "revoked"
 
 
+def test_inbound_receipt_listing_scope_pagination_and_disabled_cleanup(creation):
+    from langboard_shared.core.types import SnowflakeID
+    from langboard_shared.domain.models import AppGovernancePolicy, Organization
+    from langboard_shared.domain.services.AppConnectionManagement import (
+        create_inbound_connection,
+        disconnect_inbound_connection,
+        list_inbound_connections,
+    )
+
+    actor, definition = creation[0][1], creation[5]
+    created = create_inbound_connection(actor, "example-erp", definition.edit_revision())
+    with DbSession.atomic() as db:
+        organization = Organization(name="Managed organization", slug="managed", owner_user_id=actor.id)
+        db.insert(organization)
+        db.insert(AppConnection(app_key="example-erp", owner_id=2, state="connected"))
+    org_receipt = create_inbound_connection(actor, "example-erp", definition.edit_revision(), organization.id)
+    first = list_inbound_connections(actor, "example-erp", limit=1)
+    assert first["items"][0]["connection_uid"] == creation[2].get_uid()
+    assert first["next_cursor"] == creation[2].get_uid()
+    second = list_inbound_connections(actor, "example-erp", after_id=creation[2].id, limit=1)
+    assert second["items"] == [created] and second["next_cursor"] is None
+    assert list_inbound_connections(actor, "example-erp", organization_id=organization.id)["items"] == [org_receipt]
+    with DbSession.atomic() as db:
+        organization.owner_user_id = 2
+        db.update(organization)
+        db.insert(AppGovernancePolicy(scope_key="global", mode="disabled"))
+        definition.is_enabled = False
+        db.update(definition)
+    with pytest.raises(AppGovernanceDenied):
+        list_inbound_connections(actor, "example-erp", organization_id=organization.id)
+    receipt = list_inbound_connections(actor, "example-erp", after_id=creation[2].id)["items"][0]
+    disconnected = disconnect_inbound_connection(
+        actor, SnowflakeID.from_short_code(receipt["connection_uid"]), receipt["revision"]
+    )
+    assert list_inbound_connections(actor, "example-erp", after_id=creation[2].id)["items"][0] == {
+        **created,
+        **disconnected,
+    }
+    with pytest.raises(ValueError):
+        list_inbound_connections(actor, "example-erp", limit=51)
+
+
 def test_native_backlog_presentation_and_replay(creation):
     first = call(creation)
     again = call(creation)
