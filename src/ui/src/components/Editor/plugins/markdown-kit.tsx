@@ -4,15 +4,25 @@ import { KEYS, bindFirst } from "platejs";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { EscapeMarkdown, InternalLinkMarkdown, MentionMarkdown, CodeDrawingMarkdown } from "@/components/Editor/plugins/markdown";
+import * as SecretReferenceMarkdown from "./markdown/secret-reference";
 import { serializeListNumbers } from "./markdown/list-number";
 
 export const MarkdownKit = [
     MarkdownPlugin.configure({
         options: {
             disallowedNodes: [KEYS.suggestion],
-            remarkPlugins: [remarkMath, CodeDrawingMarkdown.remark, remarkGfm, remarkMdx, InternalLinkMarkdown.remark, MentionMarkdown.remark],
+            remarkPlugins: [
+                remarkMath,
+                CodeDrawingMarkdown.remark,
+                remarkGfm,
+                remarkMdx,
+                InternalLinkMarkdown.remark,
+                SecretReferenceMarkdown.remark,
+                MentionMarkdown.remark,
+            ],
             rules: {
                 ...InternalLinkMarkdown.rules,
+                ...SecretReferenceMarkdown.rules,
                 ...(MentionMarkdown.rules as any),
                 ...CodeDrawingMarkdown.rules,
             },
