@@ -127,7 +127,14 @@ function AccountRecoveryPage(): React.JSX.Element {
                 <Box mt="4" textSize="base">
                     {description}
                 </Box>
-                <Button type="button" variant="outline" size="sm" className="mt-4" onClick={backToSignin} title={`Sign in with ${email}`}>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={backToSignin}
+                    title={t("common.Sign in with email", { email })}
+                >
                     {email}
                 </Button>
             </>

@@ -1,86 +1,459 @@
+"""MCP tools for project cards, from service-backed operations to the safe native card workspace."""
+
 import base64
 import io
+import mimetypes
 from binascii import Error as Base64Error
-from langboard_shared.core.db import EditorContentModel
+from typing import Annotated, Any, Literal
+from fastmcp.exceptions import ValidationError
+from langboard_shared.core.db import DbSession, EditorContentModel
+from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
+from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.core.utils.Converter import convert_python_data
-from langboard_shared.domain.models import Bot, Card, Project, ProjectRole, User
+from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
+from langboard_shared.domain.models.Checkitem import CheckitemStatus
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services.CardVerification import VerificationEvidence, VerificationSubmission
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
-from ..Constants import MCP_DEFAULT_LIST_LIMIT, TMcpListLimit
+from pydantic import BeforeValidator, Field
+from ..card_workspace.application import (
+    CardBundleResponse,
+    ProjectCardListResponse,
+    ProjectIdentityResponse,
+    validate_card_graph_patch,
+)
+from ..card_workspace.application import get_card_bundle as query_card_bundle
+from ..card_workspace.application import get_project_identity as query_project_identity
+from ..card_workspace.application import get_public_card_metadata as query_public_metadata
+from ..card_workspace.application import get_public_card_metadata_by_key as query_public_metadata_key
+from ..card_workspace.application import list_project_cards as query_project_cards
+from ..card_workspace.application import patch_card_description as replace_description_text
+from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
+from ..card_workspace.application import replace_card_description as replace_description
+from ..card_workspace.application import set_card_relationships as replace_relationships
+from ..card_workspace.application.context_delta import CardContextDelta, card_context_delta
+from ..card_workspace.application.context_profiles import ContextProfile
+from ..card_workspace.application.dtos import BoundedItemsDto
+from ..card_workspace.application.projections import (
+    bounded_items,
+    public_attachment,
+    public_card_summary,
+    public_checkitem,
+    public_checklist,
+    public_comment,
+    public_label,
+    public_metadata,
+)
+from ..card_workspace.application.work_plan import WorkPlan, WorkPlanService
+from ..card_workspace.domain import (
+    CardBundleInclude,
+    CardBundleSection,
+    CardGraphEdge,
+    CardGraphNewCard,
+    CardUnavailableError,
+    ChecklistProjectionItem,
+    CommentPage,
+    DescriptionPatchConflict,
+    ExactTextReplacement,
+    SectionPage,
+    require_public_metadata_key,
+)
+from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
+from ..card_workspace.infrastructure.linked_wikis import change_link, visible_linked_wikis
 from ..mcp_integration import McpRoleFilter, McpTool
+from .ProjectMcp import create_template_project
 
 
-@McpTool.add(description="Get all cards in a project.")
+def _get_card_in_project(project_uid: str, card_uid: str) -> tuple[Project, Card] | None:
+    return InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+
+
+def _require_task_card(project_uid: str, card_uid: str) -> tuple[Project, Card]:
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found")
+    if params[1].is_linked_resource:
+        raise ValueError("Linked Wiki cards are read-only references; move or remove the card, or edit the source Wiki")
+    return params
+
+
+@McpTool.add(description="Compatibility entry for the complete card image source.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_cards(
-    project_uid: str,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
-    project = service.project.get_by_id_like(project_uid)
-    if not project:
-        raise ValueError("Project not found")
-    cards = service.card.get_api_list_by_project(project, limit=limit)
-    return {"cards": cards}
-
-
-@McpTool.add(description="Get card details with bounded related records.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card(
-    project_uid: str,
-    card_uid: str,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+def get_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
+    params = _get_card_in_project(project_uid, card_uid)
     if not params:
         raise ValueError("Card not found")
     project, card = params
-    api_card = service.card.get_details(project, card, limit=limit)
-    if not api_card:
+    details = service.card.get_details(project, card, user_or_bot, channel=CollaborationChannel.Mcp)
+    if not details:
         raise ValueError("Card not found")
-    return api_card
+    return details
 
 
-@McpTool.add(description="Get card checklists.")
+@McpTool.add(description="Compatibility entry for card attachment image selection.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_checklists(
+def get_card_attachments(project_uid: str, card_uid: str, service: DomainService, *, user_or_bot: User | Bot) -> dict:
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
+    if resolved is None:
+        raise ValueError("Card not found")
+    return {"attachments": service.card_attachment.get_api_list_by_card(resolved[1])}
+
+
+@McpTool.add("user", description="Read up to 8 MB of one attachment belonging to a readable card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def read_card_attachment(
+    project_uid: str, card_uid: str, attachment_uid: str, user: User, service: DomainService
+) -> dict:
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, user, CollaborationChannel.Mcp)
+    if resolved is None:
+        raise ValueError("Card not found in project")
+    _, card, _ = resolved
+    attachment = service.card_attachment.get_by_id_like(attachment_uid, consistent=True)
+    if attachment is None or attachment.card_id != card.id or attachment.deleted_at is not None:
+        raise ValueError("Attachment not found in card")
+    source_file = attachment.file
+    source_name = attachment.filename
+    content = Storage.get_file(source_file)
+    if content is None:
+        raise ValueError("Attachment content unavailable")
+    if len(content) > 8 * 1024 * 1024:
+        raise ValueError("Attachment exceeds the 8 MB MCP read limit")
+    if service.card.resolve_readable_card(project_uid, card_uid, user, CollaborationChannel.Mcp) is None:
+        raise ValueError("Attachment content unavailable")
+    latest = service.card_attachment.get_by_id_like(attachment_uid, consistent=True)
+    if (
+        latest is None
+        or latest.card_id != card.id
+        or latest.deleted_at is not None
+        or latest.file != source_file
+        or latest.filename != source_name
+    ):
+        raise ValueError("Attachment content unavailable")
+    return {
+        "attachment_uid": attachment.get_uid(),
+        "file_name": attachment.filename,
+        "mime_type": mimetypes.guess_type(attachment.filename)[0] or "application/octet-stream",
+        "size": len(content),
+        "file_data_base64": base64.b64encode(content).decode("ascii"),
+    }
+
+
+@McpTool.add(
+    "user", description="Read one bounded transcription excerpt without embeddings; continue by offset and generation."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def read_card_document(
     project_uid: str,
     card_uid: str,
+    attachment_uid: str,
+    user: User,
     service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-    checkitems_limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+    offset: Annotated[int, Field(ge=0)] = 0,
+    max_chars: Annotated[int, Field(ge=128, le=8000)] = 4000,
+    expected_generation: str | None = None,
 ) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not params:
-        raise ValueError("Card not found")
-    _, card = params
-    checklists = service.checklist.get_api_list_by_card(card, limit=limit, checkitems_limit=checkitems_limit)
-    return {"checklists": checklists}
+    """Recheck current permissions and live ancestry before loading document content."""
+    if type(offset) is not int or offset < 0 or type(max_chars) is not int or not 128 <= max_chars <= 8000:
+        raise ValueError("Invalid document excerpt bounds")
+    _, card, attachment = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
+    source_file, source_name = attachment.file, attachment.filename
+    document = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+    if not document:
+        raise ValueError("Document transcription unavailable")
+    _, _, latest_attachment = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
+    if latest_attachment.file != source_file or latest_attachment.filename != source_name:
+        raise ValueError("Document unavailable")
+    generation = document.get("generation")
+    if expected_generation is not None and expected_generation != generation:
+        raise ValueError("Document generation changed; restart reading")
+    result = {
+        "project_uid": project_uid,
+        "card_uid": card_uid,
+        "attachment_uid": attachment_uid,
+        "filename": attachment.filename,
+        "generation": generation,
+        "status": document.get("status"),
+        "content_hash": document.get("content_hash"),
+    }
+    if document.get("status") != "indexed":
+        return {**result, "content": "", "next_offset": None}
+    text = (document.get("content") or {}).get("markdown", "")
+    if not isinstance(text, str) or offset > len(text):
+        raise ValueError("Document excerpt unavailable")
+    end = min(offset + max_chars, len(text))
+    return {
+        **result,
+        "content": text[offset:end],
+        "offset": offset,
+        "next_offset": end if end < len(text) else None,
+        "total_chars": len(text),
+        "content_format": "markdown",
+    }
 
 
-@McpTool.add(description="Get card attachments.")
+def _require_readable_document(project_uid, card_uid, attachment_uid, user, service):
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, user, CollaborationChannel.Mcp)
+    if resolved is None:
+        raise ValueError("Document unavailable")
+    project, card, _ = resolved
+    actions = service.project.get_user_role_actions_by_project(user, project)
+    if "*" not in actions and ProjectRoleAction.Read.value not in actions:
+        raise ValueError("Document unavailable")
+    attachment = service.card_attachment.get_by_id_like(attachment_uid, consistent=True)
+    if (
+        card.is_linked_resource
+        or attachment is None
+        or attachment.card_id != card.id
+        or attachment.deleted_at is not None
+    ):
+        raise ValueError("Document unavailable")
+    return project, card, attachment
+
+
+@McpTool.add(
+    "user",
+    description="Search one readable attachment's active vectors; bounded excerpts, current ACL and source checks.",
+)
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_attachments(
+def search_card_document(
     project_uid: str,
     card_uid: str,
+    attachment_uid: str,
+    query: Annotated[str, Field(min_length=1, max_length=1000)],
+    user: User,
     service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+    max_tokens: Annotated[int, Field(ge=128, le=4000)] = 2000,
 ) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not params:
-        raise ValueError("Card not found")
-    _, card = params
-    attachments = service.card_attachment.get_api_list_by_card(card, limit=limit)
-    return {"attachments": attachments}
+    import re
+    from langboard_shared.tasks.docling.DocumentEmbedding import (
+        create_document_embeddings,
+        resolve_embedding_snapshot,
+        validate_embedding_config,
+    )
+    from langboard_shared.tasks.docling.DocumentVectorGeneration import embedding_fingerprint
+    from langboard_shared.tasks.docling.DocumentVectorQuery import search_vector_generation
+    from langboard_shared.tasks.docling.DocumentVectorStore import open_document_vector_store
+
+    if (
+        not isinstance(query, str)
+        or not query.strip()
+        or len(query) > 1000
+        or type(max_tokens) is not int
+        or not 128 <= max_tokens <= 4000
+    ):
+        raise ValueError("Invalid document vector query bounds")
+    _, card, _ = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
+    document = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+    if not document or document.get("status") != "indexed":
+        raise ValueError("Document vectors unavailable")
+    pointer = (document.get("embedding") or {}).get("pointer")
+    if not isinstance(pointer, dict) or "chunk_ids" not in pointer:
+        raise ValueError("Reindex this attachment before vector retrieval")
+    if (
+        pointer.get("board_uid") != project_uid
+        or pointer.get("card_uid") != card_uid
+        or pointer.get("attachment_uid") != attachment_uid
+        or pointer.get("content_hash") != document.get("content_hash")
+        or (document.get("embedding") or {}).get("source_generation") != document.get("generation")
+    ):
+        raise ValueError("Document vectors do not match the current source")
+    snapshot = document.get("embedding_config") or {}
+    binding = service.internal_bot.get_by_id_like(snapshot.get("binding_uid"))
+    from langboard_shared.domain.models.InternalBot import InternalBotType
+
+    if not binding or binding.bot_type != InternalBotType.DocumentEmbedding:
+        raise ValueError("Document embedding binding unavailable")
+    try:
+        _, current = validate_embedding_config(binding.value)
+        if not current.enabled:
+            raise ValueError("Document retrieval disabled")
+        private = resolve_embedding_snapshot(snapshot, binding.value)
+        config, settings = validate_embedding_config(private)
+        fingerprint = embedding_fingerprint(
+            provider=config["base_url"], model=config["model_name"], dimensions=settings.dimensions, version="v1"
+        )
+        if not re.fullmatch(r"[0-9a-f]{64}", fingerprint) or fingerprint != pointer.get("embedding_fingerprint"):
+            raise ValueError("Document embedding configuration changed")
+        storage = pointer.get("storage") or {}
+        if storage.get("type") != settings.store or (
+            settings.store == "qdrant" and storage.get("endpoint") != str(settings.external_url).rstrip("/")
+        ):
+            raise ValueError("Document vector storage configuration changed")
+        embeddings = create_document_embeddings(
+            private, set(Env.get_from_env("MODEL_PROVIDER_ALLOWED_BASE_URLS", "").split(","))
+        )
+        context = open_document_vector_store(
+            settings,
+            embeddings,
+            fingerprint,
+            Env.DATA_DIR / "document-retrieval",
+            set(Env.get_from_env("DOCUMENT_VECTOR_ALLOWED_BASE_URLS", "").split(",")),
+            create=False,
+        )
+        with context as store:
+            if store is None:
+                raise ValueError("Document vectors unavailable")
+            hits = search_vector_generation(store, pointer, query, settings, max_tokens=max_tokens)
+    except Exception:
+        raise ValueError("Document vector retrieval unavailable; verify binding and reindex this attachment") from None
+    _, latest_card, _ = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
+    latest = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, latest_card, attachment_uid)
+    if (
+        not latest
+        or latest.get("status") != "indexed"
+        or latest.get("generation") != document.get("generation")
+        or latest.get("content_hash") != document.get("content_hash")
+        or (latest.get("embedding") or {}).get("pointer") != pointer
+    ):
+        raise ValueError("Document generation changed; retry retrieval")
+    return {
+        "project_uid": project_uid,
+        "card_uid": card_uid,
+        "attachment_uid": attachment_uid,
+        "generation": document.get("generation"),
+        "matches": hits,
+    }
 
 
-@McpTool.add(description="Create a card.")
+@McpTool.add("user", description="List wikis linked to a card that the current user may read.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card_linked_wikis(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    return {"linked_wikis": visible_linked_wikis(project, card, user, service)}
+
+
+@McpTool.add("user", description="Link or unlink a readable project wiki to a card without copying files.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_linked_wiki(
+    project_uid: str,
+    card_uid: str,
+    wiki_uid: str,
+    action: Literal["link", "unlink"],
+    user: User,
+    service: DomainService,
+) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    links = change_link(project, card, wiki_uid, action, user, service)
+    return {"wiki_uid": wiki_uid, "linked": any(item["wiki_uid"] == wiki_uid for item in links), "linked_wikis": links}
+
+
+@McpTool.add("user", description="Create a project wiki from a card and link it; preserve original card by default.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_wiki_from_card(
+    project_uid: str,
+    card_uid: str,
+    user: User,
+    service: DomainService,
+    wiki_title: str | None = None,
+    include_description: bool = True,
+    include_comments: bool = False,
+    include_checklists: bool = True,
+    include_attachments_as_references: bool = True,
+    archive_original: bool = False,
+) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    actions = service.project.get_user_role_actions_by_project(user, project)
+    if "*" not in actions and ProjectRoleAction.Update.value not in actions:
+        raise ValueError("Project wiki creation requires project update permission")
+    title = (wiki_title or card.title).strip()
+    if not title or len(title) > 300:
+        raise ValueError("Wiki title must be 1..300 characters")
+    parts = []
+    if include_description and card.description.content:
+        parts.append(card.description.content)
+    if include_comments:
+        comments = service.card_comment.get_api_list_by_card(card)
+        if comments:
+            parts.append("## Comments")
+            parts.extend(f"- {item['content']}" for item in comments)
+    if include_checklists:
+        for checklist in service.checklist.get_api_list_by_card(card):
+            parts.append(f"## {checklist['title']}")
+            for item in checklist.get("checkitems", []):
+                parts.append(f"- [{'x' if item.get('is_checked') else ' '}] {item['title']}")
+    if include_attachments_as_references:
+        attachments = service.card_attachment.get_api_list_by_card(card)
+        if attachments:
+            parts.append("## Card attachments")
+            parts.extend(f"- {item['name']} (attachment_uid: {item['uid']})" for item in attachments)
+    content = "\n\n".join(parts)
+    if len(content) > 32000:
+        raise ValueError("Wiki content exceeds 32000 characters")
+    result = service.project_wiki.create(user, project, title, EditorContentModel(content=content))
+    if result is None:
+        raise ValueError("Wiki creation failed")
+    wiki, _ = result
+    links = change_link(project, card, wiki.get_uid(), "link", user, service)
+    if archive_original:
+        service.card.archive(user, project, card)
+    return {
+        "wiki_uid": wiki.get_uid(),
+        "title": wiki.title,
+        "linked": any(item["wiki_uid"] == wiki.get_uid() for item in links),
+        "linked_wikis": links,
+        "card_archived": archive_original,
+    }
+
+
+def _create_card_in_project(
+    project_uid: str,
+    column_uid: str,
+    title: str,
+    description: str | None,
+    assign_user_uids: list[str] | None,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ValueError("Project not found")
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Card title is required")
+    normalized_users = (
+        [uid.strip() if isinstance(uid, str) else "" for uid in assign_user_uids]
+        if assign_user_uids is not None
+        else None
+    )
+    if normalized_users is not None:
+        if any(not uid for uid in normalized_users) or len(normalized_users) != len(set(normalized_users)):
+            raise ValueError("assign_user_uids contains empty or duplicate values")
+        available = {
+            member["uid"]
+            for member in service.project.get_api_assigned_user_list(project, where_user_in=normalized_users)
+        }
+        unknown = next((uid for uid in normalized_users if uid not in available), None)
+        if unknown is not None:
+            raise ValueError(f"Unknown project member: {unknown}")
+    columns = [column for column in service.project_column.get_api_list_by_project(project) if not column["is_archive"]]
+    columns.sort(key=lambda column: (column["order"], column["uid"]))
+    if not columns:
+        raise ValueError("Project has no active column")
+    column = (
+        columns[0] if column_uid == "leftmost" else next((item for item in columns if item["uid"] == column_uid), None)
+    )
+    if column is None:
+        raise ValueError("Destination column is not active in the project")
+    result = service.card.create(
+        user_or_bot,
+        project,
+        column["uid"],
+        title.strip(),
+        EditorContentModel(content=description or ""),
+        normalized_users,
+    )
+    if result is None:
+        raise RuntimeError("Failed to create card")
+    return result[1], column
+
+
+@McpTool.add(
+    description="Create a card in an active project column; use column_uid='leftmost' for the first active column."
+)
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def create_card(
     project_uid: str,
@@ -91,15 +464,29 @@ def create_card(
     user_or_bot: User | Bot,
     service: DomainService,
 ) -> dict:
-    description_model = EditorContentModel(content=description or "")
-    result = service.card.create(user_or_bot, project_uid, column_uid, title, description_model, assign_user_uids)
-    if not result:
-        raise ValueError("Failed to create")
-    _, api_card = result
+    api_card, _ = _create_card_in_project(
+        project_uid, column_uid, title, description, assign_user_uids, user_or_bot, service
+    )
     return api_card
 
 
-@McpTool.add(description="Change card details.")
+@McpTool.add(description="Compatibility entry for creating in the leftmost active column.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_in_leftmost_column(
+    project_uid: str,
+    title: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    description: str | None = None,
+    assign_user_uids: list[str] | None = None,
+) -> dict:
+    card, column = _create_card_in_project(
+        project_uid, "leftmost", title, description, assign_user_uids, user_or_bot, service
+    )
+    return {"card": card, "column": {"uid": column["uid"], "name": column["name"]}}
+
+
+@McpTool.add(description="Change a card title or deadline; use revision-bound description tools for body edits.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def change_card_details(
     project_uid: str,
@@ -107,10 +494,9 @@ def change_card_details(
     user_or_bot: User | Bot,
     service: DomainService,
     title: str | None = None,
-    description: str | None = None,
     deadline_at: str | None = None,
 ) -> dict:
-    if title is None and description is None and deadline_at is None:
+    if title is None and deadline_at is None:
         raise ValueError("At least one card detail field is required")
     normalized_title = None
     if title is not None:
@@ -126,10 +512,9 @@ def change_card_details(
     form_dict = {}
     if normalized_title is not None:
         form_dict["title"] = normalized_title
-    if description is not None:
-        form_dict["description"] = EditorContentModel(content=description)
     if deadline_at is not None:
         form_dict["deadline_at"] = parsed_deadline
+    _require_task_card(project_uid, card_uid)
     result = service.card.update(user_or_bot, project_uid, card_uid, form_dict)
     if not result:
         raise ValueError("Failed to update")
@@ -137,32 +522,54 @@ def change_card_details(
         response = {}
         if normalized_title is not None:
             response["title"] = normalized_title
-        if description is not None:
-            response["description"] = convert_python_data(EditorContentModel(content=description))
         if deadline_at is not None:
             response["deadline_at"] = deadline_at
         return response
     return result
 
 
+@McpTool.add(
+    description="Set the card's own completion checkbox explicitly. Requires core.is_check_card=true; does not approve work, move columns or complete user checklists."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def set_card_completed(
+    project_uid: str,
+    card_uid: str,
+    completed: Annotated[bool, Field(strict=True)],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    _require_task_card(project_uid, card_uid)
+    if not service.card.set_card_completed(user_or_bot, project_uid, card_uid, completed):
+        raise ValueError("Card completion checkbox is unavailable; read the card bundle")
+    return {"completed": completed}
+
+
 @McpTool.add(description="Archive a card.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def archive_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    p = service.project.get_by_id_like(project_uid)
-    if not p:
-        raise ValueError("Project not found")
-    result = service.card.archive(user_or_bot, p, card_uid)
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found")
+    project, card = params
+    result = service.card.archive(user_or_bot, project, card)
     if not result:
         raise ValueError("Failed to archive")
-    return {"message": "Archived"}
+    return {"message": "Removed from board" if card.is_linked_resource else "Archived"}
 
 
-@McpTool.add(description="Delete a card. (Only available for archived cards)")
+@McpTool.add(description="Delete an archived card when the signed-in actor is its original author or an administrator.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardDelete], RoleFinder.project)
 def delete_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    result = service.card.delete(user_or_bot, project_uid, card_uid)
+    try:
+        result = service.card.delete(user_or_bot, project_uid, card_uid)
+    except CardDeleteForbidden as exc:
+        raise ValidationError(f"{exc.code}: {exc}") from exc
     if not result:
-        raise ValueError("Failed to delete")
+        raise ValidationError(
+            "CARD_DELETE_PRECONDITION_FAILED: Read the card again. Ordinary cards must be archived before deletion; "
+            "a missing card cannot be deleted. No deletion was performed."
+        )
     return {"message": "Deleted"}
 
 
@@ -190,7 +597,7 @@ def change_card_order_or_move_column(
 
 
 @McpTool.add("user", description="Upload a card attachment. Accepts base64 encoded file data.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def upload_card_attachment(
     project_uid: str,
     card_uid: str,
@@ -199,6 +606,7 @@ def upload_card_attachment(
     user: User,
     service: DomainService,
 ) -> dict:
+    _require_task_card(project_uid, card_uid)
     max_file_bytes = Env.MAX_FILE_SIZE_MB * 1024 * 1024
     max_base64_length = ((max_file_bytes + 2) // 3) * 4
     if len(file_data_base64) > max_base64_length:
@@ -224,3 +632,1085 @@ def upload_card_attachment(
         raise ValueError("Failed to create attachment")
 
     return result.api_response()
+
+
+# ---------------------------------------------------------------------------
+# Safe native card workspace tools
+# ---------------------------------------------------------------------------
+
+
+@McpTool.add("user", description="Assign the authenticated user to this card, preserving every existing assignee.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def assign_card_to_me(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict[str, Any]:
+    """Use the server-authenticated identity, never a caller-supplied user UID."""
+    try:
+        return service.card.assign_self(user, project_uid, card_uid)
+    except ValueError as exc:
+        raise ValidationError(
+            f"{exc}. No assignment was made. Ask a project updater to onboard you as a member, then retry once."
+        ) from exc
+
+
+def _as_card_bundle_include(value: str | CardBundleInclude) -> CardBundleInclude:
+    """Parse one JSON enum value without weakening the domain type."""
+
+    return CardBundleInclude(value)
+
+
+JsonCardBundleInclude = Annotated[CardBundleInclude, BeforeValidator(_as_card_bundle_include)]
+
+
+def _as_checklist_projection_item(
+    value: dict[str, Any] | ChecklistProjectionItem,
+) -> ChecklistProjectionItem:
+    """Parse one JSON projection item without leaking transport types inward."""
+
+    if isinstance(value, ChecklistProjectionItem):
+        return value
+    return ChecklistProjectionItem(**value)
+
+
+JsonChecklistProjectionItem = Annotated[
+    ChecklistProjectionItem,
+    BeforeValidator(_as_checklist_projection_item),
+]
+
+CardCommentReactionType = Literal[
+    "check-mark",
+    "confusing",
+    "eyes",
+    "heart",
+    "laughing",
+    "party-popper",
+    "rocket",
+    "thumbs-down",
+    "thumbs-up",
+]
+
+
+def _as_card_graph_new_card(value: dict[str, Any] | CardGraphNewCard) -> CardGraphNewCard:
+    """Parse one request-local card without leaking transport types inward."""
+
+    return value if isinstance(value, CardGraphNewCard) else CardGraphNewCard(**value)
+
+
+def _as_card_graph_edge(value: dict[str, Any] | CardGraphEdge) -> CardGraphEdge:
+    """Parse one typed graph edge without leaking transport types inward."""
+
+    return value if isinstance(value, CardGraphEdge) else CardGraphEdge(**value)
+
+
+JsonCardGraphNewCard = Annotated[CardGraphNewCard, BeforeValidator(_as_card_graph_new_card)]
+JsonCardGraphEdge = Annotated[CardGraphEdge, BeforeValidator(_as_card_graph_edge)]
+
+
+def _as_exact_text_replacement(
+    value: dict[str, Any] | ExactTextReplacement,
+) -> ExactTextReplacement:
+    """Parse one transport edit into the immutable domain value."""
+
+    return value if isinstance(value, ExactTextReplacement) else ExactTextReplacement(**value)
+
+
+JsonExactTextReplacement = Annotated[
+    ExactTextReplacement,
+    BeforeValidator(_as_exact_text_replacement),
+]
+
+
+def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAdapter:
+    """Build the native adapter at the MCP composition root."""
+
+    return NativeCardWorkspaceAdapter(actor, service)
+
+
+@McpTool.add(
+    "user",
+    description=(
+        "Compatibility alias. Migrate to ProjectMcp.create_project with template_name, then get_project_columns; "
+        "retire this tool after callers migrate."
+    ),
+)
+def provision_project(
+    title: str,
+    user: User,
+    service: DomainService,
+    description: str | None = None,
+    template_name: str | None = None,
+    infer_template_prefix: bool = False,
+) -> dict[str, Any]:
+    """Provision a template-backed project with its kanban workflow columns."""
+
+    return create_template_project(title, description, "Other", user, service, template_name, infer_template_prefix)
+
+
+@McpTool.add(
+    description=(
+        "Atomically create up to seven cards and add or remove typed parent-child relationships. "
+        "References beginning with 'new:' address cards created by this same request."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def apply_card_graph_patch(
+    project_uid: str,
+    anchor_card_uid: str,
+    new_cards: list[JsonCardGraphNewCard],
+    add_edges: list[JsonCardGraphEdge],
+    remove_relationship_uids: list[str],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Apply one approved card graph patch without partial persistence."""
+
+    patch = validate_card_graph_patch(project_uid, anchor_card_uid, new_cards, add_edges, remove_relationship_uids)
+    try:
+        result = service.card_relationship.apply_graph_patch(user_or_bot, *patch)
+    except RelationshipCycle as exc:
+        raise ValidationError(f"CARD_GRAPH_CYCLE: {exc}. No graph changes saved; revise the blocks edges.") from exc
+    if result is None:
+        raise ValueError("Anchor card not found in project")
+    return result
+
+
+def _require_work_plan_project(project_uid: str, plan: WorkPlan) -> None:
+    if plan.project_uid != project_uid:
+        raise ValueError("Work plan project does not match authorized project")
+
+
+@McpTool.add(
+    description="Preview a bounded atomic card work plan without saving; return the reviewed revision for apply."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def preview_card_work_plan(
+    project_uid: str, plan: WorkPlan, user_or_bot: User | Bot, service: DomainService
+) -> dict[str, Any]:
+    _require_work_plan_project(project_uid, plan)
+    return WorkPlanService(user_or_bot, service).preview(plan)
+
+
+@McpTool.add(
+    description="Apply one reviewed card work plan atomically. Reuse request_id only for the identical plan and revision."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read, ProjectRoleAction.CardUpdate], RoleFinder.project)
+def apply_card_work_plan(
+    project_uid: str,
+    plan: WorkPlan,
+    expected_revision: str,
+    request_id: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    _require_work_plan_project(project_uid, plan)
+    return WorkPlanService(user_or_bot, service).apply(plan, expected_revision, request_id)
+
+
+@McpTool.add(
+    modern_only=("profile",),
+    description=(
+        "Read compact card core, public creator identity, and workflow fields. Request description, people, classification, checklists, "
+        "comments, attachments, public metadata, or automation explicitly. Use returned opaque cursors for "
+        "rich description and every collection."
+    ),
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card_bundle(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    comments_limit: int = 5,
+    comments_cursor: str | None = None,
+    section_limit: int = 10,
+    section_cursor: str | None = None,
+    include: list[JsonCardBundleInclude] | None = None,
+    profile: ContextProfile | None = None,
+) -> CardBundleResponse:
+    """Read an agent-friendly card bundle with bounded continuation."""
+
+    try:
+        result = query_card_bundle(
+            _adapter(user_or_bot, service),
+            project_uid,
+            card_uid,
+            CommentPage(limit=comments_limit, cursor=comments_cursor),
+            SectionPage(limit=section_limit, cursor=section_cursor),
+            include,
+            profile,
+        )
+    except CardUnavailableError as exc:
+        raise ValidationError("CARD_UNAVAILABLE: Card not found in this project. Do not retry unchanged.") from exc
+    if result.card is not None:
+        params = _get_card_in_project(project_uid, card_uid)
+        if params and not params[1].is_linked_resource:
+            result.card.core["linked_wikis"] = visible_linked_wikis(*params, user_or_bot, service)
+    return result
+
+
+@McpTool.add(
+    description="Read authorized changed context sections. Replace sections, purge removed refs; on authorization error purge all cached card context. Incomplete projections require get_card_bundle continuations."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card_delta(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    since_context_cursor: str | None = None,
+    profile: ContextProfile = "full",
+) -> CardContextDelta:
+    with DbSession.atomic():
+        bundle = get_card_bundle(
+            project_uid,
+            card_uid,
+            user_or_bot,
+            service,
+            comments_limit=20,
+            section_limit=25,
+            profile=profile,
+        )
+        payload = bundle.model_dump(mode="json")
+        if isinstance(user_or_bot, User):
+            from ..wiki_workspace.infrastructure import NativeWikiRepository
+
+            repository = NativeWikiRepository(user_or_bot, service)
+            links = payload["card"]["core"].get("linked_wikis", [])
+            revisions = repository.linked_revisions(project_uid, [wiki["wiki_uid"] for wiki in links])
+            for wiki in links:
+                wiki["revision"] = revisions[wiki["wiki_uid"]]
+        elif payload["card"]["core"].get("linked_wikis"):
+            from fastmcp.exceptions import AuthorizationError
+            from ..wiki_workspace.domain import WikiSnapshot
+
+            for link in payload["card"]["core"]["linked_wikis"]:
+                wiki = service.project_wiki.get_by_id_like(link["wiki_uid"])
+                if wiki is None or not wiki.is_public:
+                    raise AuthorizationError("Linked wiki is no longer readable; purge cached card context")
+                link["revision"] = WikiSnapshot(wiki.get_uid(), wiki.title, wiki.content.content).revision
+        return card_context_delta(
+            payload,
+            project_uid=project_uid,
+            actor_uid=user_or_bot.get_uid(),
+            profile=profile,
+            cursor=since_context_cursor,
+            key=Env.JWT_SECRET_KEY,
+        )
+
+
+@McpTool.add(
+    "user", description="Append reviewer evidence for the current card revision; never approve gates or move the card."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def record_card_verification_evidence(
+    project_uid: str,
+    card_uid: str,
+    expected_change_seq: int,
+    decision: Literal["verified", "partial", "unverified"],
+    evidence: list[VerificationEvidence],
+    user: User,
+    service: DomainService,
+    expected_record_uid: str | None = None,
+    required_checkitem_uids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Bind one explicit evidence receipt to the signed-in reviewer and current source cursor."""
+
+    submission = VerificationSubmission(
+        expected_change_seq=expected_change_seq,
+        expected_record_uid=expected_record_uid,
+        decision=decision,
+        evidence=evidence,
+        required_checkitem_uids=required_checkitem_uids or [],
+    )
+    record = service.card.record_verification_evidence(user, project_uid, card_uid, submission)
+    if record is None:
+        raise ValueError("Card not found in project or unavailable for verification")
+    return {"verification": record}
+
+
+@McpTool.add(description="Return a project's stable identity and bounded active workflow columns.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_project_identity(
+    project_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> ProjectIdentityResponse:
+    """Read project identity and the active columns required for safe card moves."""
+
+    return query_project_identity(_adapter(user_or_bot, service), project_uid)
+
+
+@McpTool.add(description="List compact project members without email addresses.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def list_project_members(project_uid: str, service: DomainService) -> dict[str, Any]:
+    """Return the bounded public member directory needed for assignments."""
+
+    project = service.project.get_by_id_like(project_uid)
+    if not project:
+        raise ValueError("Project not found")
+    members = service.project.get_api_assigned_user_list(project)
+    items = []
+    for member in members[:50]:
+        fields = ("uid", "username")
+        # Invitation placeholders store an email in firstname; expose names only for real users.
+        if member.get("type") == User.USER_TYPE:
+            fields += ("firstname", "lastname")
+        items.append({key: member[key] for key in fields if key in member})
+    return {"items": items, "total_count": len(members), "truncated": len(members) > 50}
+
+
+@McpTool.add(description="List a bounded newest-updated-first page of cards in a project.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def list_project_cards(
+    project_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: int = 20,
+    cursor: str | None = None,
+    include_closed: bool = False,
+    workflow_stages: list[str] | None = None,
+) -> ProjectCardListResponse:
+    """Read one safe project card page with an opaque keyset cursor."""
+
+    return query_project_cards(
+        _adapter(user_or_bot, service),
+        project_uid,
+        limit,
+        cursor,
+        include_closed=include_closed,
+        workflow_stages=workflow_stages,
+    )
+
+
+@McpTool.add(
+    description=(
+        "Atomically apply one or more exact edits to Plate-compatible Markdown. Pass edits for a multi-hunk patch, "
+        "or old_text/new_text for backwards compatibility. Fails without writing when the revision or any reviewed "
+        "fragment is stale or ambiguous."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def patch_card_description(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    old_text: str | None = None,
+    new_text: str | None = None,
+    edits: list[JsonExactTextReplacement] | None = None,
+    expected_revision: str | None = None,
+) -> dict[str, Any]:
+    """Conditionally apply one approved Markdown patch."""
+
+    if edits is not None:
+        if old_text is not None or new_text is not None:
+            raise ValueError("Pass either edits or old_text/new_text, not both")
+        replacements = edits
+    else:
+        if old_text is None or new_text is None:
+            raise ValueError("old_text and new_text are required when edits is omitted")
+        replacements = [ExactTextReplacement(old_text=old_text, new_text=new_text)]
+
+    try:
+        return replace_description_text(
+            _adapter(user_or_bot, service),
+            project_uid,
+            card_uid,
+            replacements,
+            expected_revision,
+        )
+    except DescriptionPatchConflict as exc:
+        raise ValidationError(f"{exc}. No changes saved; read the description and review a new patch.") from exc
+
+
+@McpTool.add(description="Replace a complete card description after reviewing its current revision.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def replace_card_description(
+    project_uid: str,
+    card_uid: str,
+    description: str,
+    expected_revision: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Safely initialize, clear, or replace the complete Markdown body."""
+
+    try:
+        return replace_description(
+            _adapter(user_or_bot, service), project_uid, card_uid, description, expected_revision
+        )
+    except DescriptionPatchConflict as exc:
+        raise ValidationError(f"{exc}. No changes saved; read the description and review the replacement.") from exc
+
+
+@McpTool.add(description="Add a rich-text comment to a card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def add_card_comment(
+    project_uid: str,
+    card_uid: str,
+    content: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Add a native card comment."""
+
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Comment is required")
+    comment = service.card_comment.create(
+        user_or_bot, project_uid, card_uid, EditorContentModel(content=content.strip())
+    )
+    if comment is None:
+        raise ValueError("Card not found in project")
+    return {"comment": public_comment(comment.api_response())}
+
+
+@McpTool.add(description="Toggle one reaction supported by Langboard on a card comment.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def toggle_card_comment_reaction(
+    project_uid: str,
+    card_uid: str,
+    comment_uid: str,
+    reaction: CardCommentReactionType,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Toggle a native comment reaction after project-card-comment validation."""
+
+    comment = service.card_comment.get_by_id_like(comment_uid)
+    if not comment:
+        raise ValueError("Card comment not found")
+    is_reacted = service.card_comment.toggle_reaction(user_or_bot, project_uid, card_uid, comment, reaction)
+    if is_reacted is None:
+        raise ValueError("Card comment not found")
+    return {"is_reacted": is_reacted}
+
+
+@McpTool.add(description="Update a card comment owned by the current actor.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def update_card_comment(
+    project_uid: str,
+    card_uid: str,
+    comment_uid: str,
+    content: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Update an owned native comment."""
+
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Comment is required")
+    comment = service.card_comment.update(
+        user_or_bot, project_uid, card_uid, comment_uid, EditorContentModel(content=content.strip())
+    )
+    if comment is None:
+        raise PermissionError("Comment not found or not owned by current actor")
+    return {"comment": public_comment(comment.api_response())}
+
+
+@McpTool.add(description="Delete a card comment owned by the current actor.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def delete_card_comment(
+    project_uid: str,
+    card_uid: str,
+    comment_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete an owned native comment."""
+
+    if not service.card_comment.delete(user_or_bot, project_uid, card_uid, comment_uid):
+        raise PermissionError("Comment not found or not owned by current actor")
+    return {"deleted": True}
+
+
+@McpTool.add(description="Create a checklist on a card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_checklist(
+    project_uid: str,
+    card_uid: str,
+    title: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Create a native checklist."""
+
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Checklist title is required")
+    checklist = service.checklist.create(user_or_bot, project_uid, card_uid, title.strip())
+    if checklist is None:
+        raise ValueError("Card not found in project")
+    return {"checklist": public_checklist({**checklist.api_response(), "checkitems": []})}
+
+
+@McpTool.add(description="Update a card checklist title and/or checked state atomically validated.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_checklist(
+    project_uid: str,
+    card_uid: str,
+    checklist_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    title: str | None = None,
+    is_checked: bool | None = None,
+) -> dict[str, Any]:
+    """Update a native checklist after validating every requested field."""
+
+    if title is None and is_checked is None:
+        raise ValueError("At least one checklist field is required")
+    if title is not None and (not isinstance(title, str) or not title.strip()):
+        raise ValueError("Checklist title is required")
+    if is_checked is not None and not isinstance(is_checked, bool):
+        raise ValueError("is_checked must be a boolean")
+    _, card = _require_task_card(project_uid, card_uid)
+    checklist = service.checklist.get_by_id_like(checklist_uid)
+    if checklist is None or checklist.card_id != card.id:
+        raise ValueError("Checklist not found in card")
+    if title is not None and checklist.title != title.strip():
+        if not service.checklist.change_title(user_or_bot, project_uid, card_uid, checklist, title.strip()):
+            raise ValueError("Checklist not found in card")
+    if is_checked is not None and not service.checklist.toggle_checked(
+        user_or_bot, project_uid, card_uid, checklist, desired_checked=is_checked
+    ):
+        raise ValueError("Checklist not found in card")
+    checklists = service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
+    return {
+        "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
+    }
+
+
+@McpTool.add(description="Delete a checklist from a card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_card_checklist(
+    project_uid: str,
+    card_uid: str,
+    checklist_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete a native checklist and its checkitems."""
+
+    if not service.checklist.delete(user_or_bot, project_uid, card_uid, checklist_uid):
+        raise ValueError("Checklist not found in card")
+    return {"deleted": True}
+
+
+@McpTool.add(description="Create a checkitem in a card checklist.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checklist_uid: str,
+    title: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Create a native checkitem."""
+
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Checkitem title is required")
+    item = service.checkitem.create(user_or_bot, project_uid, card_uid, checklist_uid, title.strip())
+    if item is None:
+        raise ValueError("Checklist not found in card")
+    return {"checkitem": public_checkitem(item.api_response())}
+
+
+@McpTool.add(
+    description=(
+        "Create a card from one existing checkitem in an explicit active project column. "
+        "The checkitem remains linked to the resulting card."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def cardify_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    project_column_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Promote one native checkitem to a linked card."""
+
+    normalized = [
+        value.strip() if isinstance(value, str) else ""
+        for value in (project_uid, card_uid, checkitem_uid, project_column_uid)
+    ]
+    if not all(normalized):
+        raise ValueError("Project, card, checkitem, and column UIDs are required")
+    project_uid, card_uid, checkitem_uid, project_column_uid = normalized
+    project, card = _require_task_card(project_uid, card_uid)
+    item = service.checkitem.get_by_id_like(checkitem_uid)
+    checklist = service.checklist.get_by_id_like(item.checklist_id) if item is not None else None
+    if item is None or checklist is None or checklist.card_id != card.id:
+        raise ValueError("Checkitem not found in card")
+    if item.cardified_id:
+        raise ValueError("Checkitem is already cardified")
+    column = service.project_column.get_by_id_like(project_column_uid)
+    if column is None or column.project_id != project.id or column.is_archive:
+        raise ValueError("Destination column is not active in the source project")
+    if not service.checkitem.cardify(user_or_bot, project_uid, card_uid, item, project_column_uid):
+        raise ValueError("Checkitem could not be cardified in the requested column")
+    persisted = service.checkitem.get_by_id_like(checkitem_uid)
+    created = service.card.get_by_id_like(persisted.cardified_id) if persisted is not None else None
+    if created is None:
+        raise RuntimeError("Cardified card could not be read back")
+    return {
+        "card": public_card_summary(created.board_api_response(0, [], [], [])),
+        "source_checkitem_uid": checkitem_uid,
+    }
+
+
+@McpTool.add(
+    description=(
+        "Idempotently reconcile one bot-authored checklist by stable keys. "
+        "The server checkpoints native identities and writes the content receipt last."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def reconcile_card_checklist_projection(
+    project_uid: str,
+    card_uid: str,
+    projection_key: str,
+    title: str,
+    items: list[JsonChecklistProjectionItem],
+    user_or_bot: User | Bot,
+    service: DomainService,
+    expected_receipt: str | None = None,
+) -> dict[str, Any]:
+    """Converge one integration-owned checklist without title matching."""
+
+    return reconcile_checklist(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        projection_key,
+        title,
+        items,
+        expected_receipt,
+    )
+
+
+@McpTool.add(description="Update checkitem title, deadline, and/or checked state after full validation.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    title: str | None = None,
+    deadline_at: str | None = None,
+    is_checked: bool | None = None,
+) -> dict[str, Any]:
+    """Update a native checkitem after validating every requested field."""
+
+    if title is None and deadline_at is None and is_checked is None:
+        raise ValueError("At least one checkitem field is required")
+    if title is not None and (not isinstance(title, str) or not title.strip()):
+        raise ValueError("Checkitem title is required")
+    if is_checked is not None and not isinstance(is_checked, bool):
+        raise ValueError("is_checked must be a boolean")
+    deadline = None
+    if deadline_at:
+        deadline = SafeDateTime.fromisoformat(deadline_at)
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=SafeDateTime.now().astimezone().tzinfo)
+    _, card = _require_task_card(project_uid, card_uid)
+    item = service.checkitem.get_by_id_like(checkitem_uid)
+    checklist = service.checklist.get_by_id_like(item.checklist_id) if item is not None else None
+    if item is None or checklist is None or checklist.card_id != card.id:
+        raise ValueError("Checkitem not found in card")
+    if title is not None and item.title != title.strip():
+        if not service.checkitem.change_title(user_or_bot, project_uid, card_uid, item, title.strip()):
+            raise ValueError("Checkitem not found in card")
+    if deadline_at is not None and not service.checkitem.change_deadline(project_uid, card_uid, item, deadline):
+        raise ValueError("Checkitem not found in card")
+    if is_checked is not None and not service.checkitem.toggle_checked(
+        user_or_bot, project_uid, card_uid, item, desired_checked=is_checked
+    ):
+        raise ValueError("Checkitem not found in card")
+    checklists = service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
+    return {
+        "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
+    }
+
+
+@McpTool.add("user", description="Start, pause, resume, stop, or complete my checklist work timer.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def change_card_checkitem_work(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    action: Literal["start", "pause", "resume", "stop", "complete"],
+    user: User,
+    service: DomainService,
+    replace_active: bool = False,
+) -> dict[str, Any]:
+    """Change only the signed-in user's timer, after card ancestry and owner checks."""
+
+    _, card = _require_task_card(project_uid, card_uid)
+    item = service.checkitem.get_by_id_like(checkitem_uid)
+    checklist = service.checklist.get_by_id_like(item.checklist_id) if item is not None else None
+    if item is None or checklist is None or checklist.card_id != card.id or item.cardified_id:
+        raise ValueError("Checkitem not found in card")
+    if item.user_id and item.user_id != user.id:
+        raise ValueError("Checkitem belongs to another worker")
+
+    target = {
+        "start": CheckitemStatus.Started,
+        "pause": CheckitemStatus.Paused,
+        "resume": CheckitemStatus.Started,
+        "stop": CheckitemStatus.Stopped,
+        "complete": CheckitemStatus.Stopped,
+    }[action]
+    if action == "pause" and item.status != CheckitemStatus.Started:
+        raise ValueError("Only running work can be paused")
+    if action == "resume" and item.status != CheckitemStatus.Paused:
+        raise ValueError("Only paused work can be resumed")
+    if action in {"start", "resume"} and not replace_active:
+        other_active = [
+            work for work in service.checkitem.get_active_work(user) if work["checkitem"]["uid"] != item.get_uid()
+        ]
+        if other_active:
+            raise ValueError("Another work timer is active; set replace_active to pause it")
+    with DbSession.atomic():
+        if not service.checkitem.change_status(
+            user, project_uid, card_uid, item, target, from_api=action == "complete"
+        ):
+            raise ValueError("Work timer transition failed")
+        if action == "complete" and item.status == CheckitemStatus.Stopped and not item.is_checked:
+            if not service.checkitem.toggle_checked(user, project_uid, card_uid, item, desired_checked=True):
+                raise ValueError("Work item could not be completed")
+        current = service.checkitem.get_by_id_like(checkitem_uid)
+        if current is None:
+            raise ValueError("Checkitem not found after transition")
+        return {
+            "checkitem_uid": current.get_uid(),
+            "status": current.status.value,
+            "is_checked": current.is_checked,
+            "user_uid": user.get_uid(),
+        }
+
+
+@McpTool.add(description="Delete a checkitem from a card checklist.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete a native checkitem after ancestry validation."""
+
+    if not service.checkitem.delete(user_or_bot, project_uid, card_uid, checkitem_uid):
+        raise ValueError("Checkitem not found in card")
+    return {"deleted": True}
+
+
+@McpTool.add(description="Replace a card's assigned members and/or labels after validating every UID.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def set_card_people_and_labels(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    assign_user_uids: list[str] | None = None,
+    label_uids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Replace optional native member and label sets."""
+
+    if assign_user_uids is None and label_uids is None:
+        raise ValueError("At least one member or label field is required")
+    normalized: dict[str, list[str]] = {}
+    for field, values in (("assign_user_uids", assign_user_uids), ("label_uids", label_uids)):
+        if values is None:
+            continue
+        uids = [value.strip() if isinstance(value, str) else "" for value in values]
+        if any(not uid for uid in uids):
+            raise ValueError(f"{field} is required")
+        if len(uids) != len(set(uids)):
+            raise ValueError(f"{field} contains duplicates")
+        normalized[field] = uids
+    project, card = _require_task_card(project_uid, card_uid)
+    if assign_user_uids is not None:
+        available = {
+            member["uid"]
+            for member in service.project.get_api_assigned_user_list(
+                project, where_user_in=normalized["assign_user_uids"]
+            )
+        }
+        unknown = next((uid for uid in normalized["assign_user_uids"] if uid not in available), None)
+        if unknown:
+            raise ValueError(f"Unknown project member: {unknown}")
+    if label_uids is not None:
+        available = {
+            label["uid"]
+            for label in service.project_label.get_api_list_by_project(project, where_in=normalized["label_uids"])
+        }
+        unknown = next((uid for uid in normalized["label_uids"] if uid not in available), None)
+        if unknown:
+            raise ValueError(f"Unknown label: {unknown}")
+    result: dict[str, Any] = {}
+    if assign_user_uids is not None:
+        users = service.card.update_assigned_users(user_or_bot, project, card, normalized["assign_user_uids"])
+        if users is None:
+            raise RuntimeError("Validated member replacement failed")
+        result["member_uids"] = [user.get_uid() for user in users]
+    if label_uids is not None:
+        if not service.card.update_labels(user_or_bot, project, card, normalized["label_uids"]):
+            raise RuntimeError("Validated label replacement failed")
+        result["labels"] = [public_label(label) for label in service.project_label.get_api_list_by_card(card)]
+    return result
+
+
+@McpTool.add(description="Replace one direction of a card's typed relationships after full validation.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def set_card_relationships(
+    project_uid: str,
+    card_uid: str,
+    is_parent: bool,
+    relationships: list[tuple[str, str]],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Replace native parent or child relationship edges."""
+
+    return replace_relationships(_adapter(user_or_bot, service), project_uid, card_uid, is_parent, relationships)
+
+
+@McpTool.add("user", description="Update attachment name and/or order without bytes or user email.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_attachment(
+    project_uid: str,
+    card_uid: str,
+    attachment_uid: str,
+    user: User,
+    service: DomainService,
+    name: str | None = None,
+    order: int | None = None,
+) -> dict[str, Any]:
+    """Update native attachment metadata after full field validation."""
+
+    if name is None and order is None:
+        raise ValueError("At least one attachment field is required")
+    if name is not None and (not isinstance(name, str) or not name.strip()):
+        raise ValueError("Attachment name is required")
+    if order is not None and (isinstance(order, bool) or order < 0):
+        raise ValueError("Attachment order must be a non-negative integer")
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found in project")
+    project, card = params
+    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    if attachment is None or attachment.card_id != card.id:
+        raise ValueError("Attachment not found in card")
+    if name is not None and not service.card_attachment.change_name(user, project, card, attachment, name.strip()):
+        raise ValueError("Attachment not found in card")
+    if order is not None and not service.card_attachment.change_order(project, card, attachment, order):
+        raise ValueError("Attachment not found in card")
+    attachments = service.card_attachment.get_api_list_by_card(card_uid, limit=26)
+    return {
+        "attachments": bounded_items(
+            [public_attachment(item) for item in attachments], CardBundleSection.Attachments, 25
+        )
+    }
+
+
+@McpTool.add("user", description="Delete a card attachment without exposing file bytes.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_card_attachment(
+    project_uid: str,
+    card_uid: str,
+    attachment_uid: str,
+    user: User,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete a native card attachment after ancestry validation."""
+
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found in project")
+    project, card = params
+    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    if attachment is None or attachment.card_id != card.id:
+        raise ValueError("Attachment not found in card")
+    if not service.card_attachment.delete(user, project, card, attachment):
+        raise ValueError("Attachment not found in card")
+    return {"deleted": True}
+
+
+@McpTool.add(description="List bounded public card metadata; reserved and secret-like keys are hidden.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_public_card_metadata(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> BoundedItemsDto:
+    """Read public metadata only."""
+
+    return query_public_metadata(_adapter(user_or_bot, service), project_uid, card_uid, limit, cursor)
+
+
+@McpTool.add(description="Read one public card metadata entry by key.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_public_card_metadata_by_key(
+    project_uid: str,
+    card_uid: str,
+    key: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Read one explicitly public metadata entry."""
+
+    return query_public_metadata_key(_adapter(user_or_bot, service), project_uid, card_uid, key)
+
+
+@McpTool.add(description="Save one public card metadata entry; secret-like keys are rejected.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def save_public_card_metadata(
+    project_uid: str,
+    card_uid: str,
+    key: str,
+    value: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    old_key: str | None = None,
+) -> dict[str, Any]:
+    """Create, update, or rename public metadata."""
+
+    normalized_key = require_public_metadata_key(key)
+    normalized_old_key = require_public_metadata_key(old_key) if old_key is not None else None
+    _, card = _require_task_card(project_uid, card_uid)
+    metadata = service.metadata.save(CardMetadata, card, normalized_key, value, normalized_old_key)
+    if metadata is None:
+        raise RuntimeError("Failed to save metadata")
+    return public_metadata({normalized_key: metadata.value})[0]
+
+
+@McpTool.add(description="Delete public card metadata keys; reserved keys are rejected.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_public_card_metadata(
+    project_uid: str,
+    card_uid: str,
+    keys: list[str],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete one or more explicitly public metadata entries."""
+
+    if not keys:
+        raise ValueError("At least one metadata key is required")
+    normalized = [require_public_metadata_key(key) for key in keys]
+    if len(normalized) != len(set(normalized)):
+        raise ValueError("Duplicate metadata key")
+    _, card = _require_task_card(project_uid, card_uid)
+    if not service.metadata.delete(CardMetadata, card, normalized):
+        raise ValueError("Metadata not found")
+    return {"deleted": True}
+
+
+@McpTool.add(
+    description=(
+        "Create a structured content block on a card. block_type must be "
+        "'code' (payload: language, source, optional title) or 'diagram' "
+        "(payload: engine mermaid|plantuml|graphviz|flowchart, source, "
+        "optional view_mode source|rendered|both) or 'rich_text' (payload: text). "
+        "No Markdown delimiters are needed."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_content_block(
+    project_uid: str,
+    card_uid: str,
+    block_type: str,
+    payload: dict[str, Any],
+    order: int | None = None,
+    after_block_uid: str | None = None,
+    user_or_bot: User | Bot = None,
+    service: DomainService = None,
+) -> dict[str, Any]:
+    """Create one typed content block anchored to a card."""
+
+    if block_type not in ("rich_text", "code", "diagram"):
+        raise ValueError("block_type must be rich_text, code or diagram")
+    block = service.card_content_block.create(
+        user_or_bot, project_uid, card_uid, block_type, payload, order, after_block_uid
+    )
+    if block is None:
+        raise ValueError("Card not found in project")
+    return {"content_block": _public_content_block(block)}
+
+
+@McpTool.add(
+    description=(
+        "Partially update a card content block. Requires the block's current "
+        "revision for optimistic locking; a mismatch fails with a conflict error."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_content_block(
+    project_uid: str,
+    card_uid: str,
+    block_uid: str,
+    expected_revision: int,
+    payload: dict[str, Any],
+    user_or_bot: User | Bot = None,
+    service: DomainService = None,
+) -> dict[str, Any]:
+    """Update one content block under optimistic locking."""
+
+    if expected_revision < 1:
+        raise ValueError("expected_revision must be positive")
+    block = service.card_content_block.update(user_or_bot, project_uid, card_uid, block_uid, expected_revision, payload)
+    if block is None:
+        raise PermissionError("Block not found in card")
+    return {"content_block": _public_content_block(block)}
+
+
+@McpTool.add(description="Delete a card content block by uid.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_card_content_block(
+    project_uid: str,
+    card_uid: str,
+    block_uid: str,
+    user_or_bot: User | Bot = None,
+    service: DomainService = None,
+) -> dict[str, bool]:
+    """Delete one content block after project-card-block validation."""
+
+    if not service.card_content_block.delete(user_or_bot, project_uid, card_uid, block_uid):
+        raise PermissionError("Block not found in card")
+    return {"deleted": True}
+
+
+@McpTool.add(description="Reposition a card content block using after_block_uid or an explicit order (not both).")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def move_card_content_block(
+    project_uid: str,
+    card_uid: str,
+    block_uid: str,
+    after_block_uid: str | None = None,
+    order: int | None = None,
+    user_or_bot: User | Bot = None,
+    service: DomainService = None,
+) -> dict[str, bool]:
+    """Move one content block within its card."""
+
+    if after_block_uid is not None and order is not None:
+        raise ValueError("pass either after_block_uid or order, not both")
+    if not service.card_content_block.move(user_or_bot, project_uid, card_uid, block_uid, after_block_uid, order):
+        raise PermissionError("Block not found in card")
+    return {"moved": True}
+
+
+def _public_content_block(block: Any) -> dict[str, Any]:
+    return {
+        "block_uid": block.get_uid(),
+        "type": block.block_type,
+        "order": block.order,
+        "revision": block.revision,
+        "payload": block.payload,
+        "updated_at": block.updated_at.isoformat() if block.updated_at else None,
+    }

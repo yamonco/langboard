@@ -1,0 +1,87 @@
+{
+  "project": {
+    "Category": "프로젝트",
+    "conditions": {
+      "project_updated": "수정됨",
+      "project_deleted": "삭제됨"
+    }
+  },
+  "project_label": {
+    "Category": "프로젝트 라벨",
+    "conditions": {
+      "project_label_created": "생성됨",
+      "project_label_updated": "수정됨",
+      "project_label_deleted": "삭제됨"
+    }
+  },
+  "project_wiki": {
+    "Category": "프로젝트 위키",
+    "conditions": {
+      "project_wiki_created": "생성됨",
+      "project_wiki_updated": "수정됨",
+      "project_wiki_publicity_changed": "공개 상태 변경됨",
+      "project_wiki_deleted": "삭제됨"
+    }
+  },
+  "project_column": {
+    "Category": "프로젝트 열",
+    "conditions": {
+      "project_column_created": "생성됨",
+      "project_column_name_changed": "이름 변경됨",
+      "project_column_deleted": "삭제됨"
+    }
+  },
+  "card": {
+    "Category": "카드",
+    "conditions": {
+      "card_created": "생성됨",
+      "card_updated": "수정됨",
+      "card_moved": "이동됨",
+      "card_labels_updated": "라벨 수정됨",
+      "card_relationships_updated": "관계 수정됨",
+      "card_deleted": "삭제됨"
+    }
+  },
+  "card_attachment": {
+    "Category": "카드 첨부 파일",
+    "conditions": {
+      "card_attachment_uploaded": "업로드됨",
+      "card_attachment_name_changed": "이름 변경됨",
+      "card_attachment_deleted": "삭제됨"
+    }
+  },
+  "card_comment": {
+    "Category": "카드 댓글",
+    "conditions": {
+      "card_comment_added": "추가됨",
+      "card_comment_updated": "수정됨",
+      "card_comment_deleted": "삭제됨",
+      "card_comment_reacted": "반응 추가됨",
+      "card_comment_unreacted": "반응 취소됨"
+    }
+  },
+  "card_checklist": {
+    "Category": "카드 체크리스트",
+    "conditions": {
+      "card_checklist_created": "생성됨",
+      "card_checklist_title_changed": "제목 변경됨",
+      "card_checklist_checked": "체크됨",
+      "card_checklist_unchecked": "체크 해제됨",
+      "card_checklist_deleted": "삭제됨"
+    }
+  },
+  "card_checkitem": {
+    "Category": "카드 체크 항목",
+    "conditions": {
+      "card_checkitem_created": "생성됨",
+      "card_checkitem_title_changed": "제목 변경됨",
+      "card_checkitem_timer_started": "타이머 시작됨",
+      "card_checkitem_timer_paused": "타이머 일시 정지됨",
+      "card_checkitem_timer_stopped": "타이머 중지됨",
+      "card_checkitem_checked": "체크됨",
+      "card_checkitem_unchecked": "체크 해제됨",
+      "card_checkitem_cardified": "카드로 변환됨",
+      "card_checkitem_deleted": "삭제됨"
+    }
+  }
+}

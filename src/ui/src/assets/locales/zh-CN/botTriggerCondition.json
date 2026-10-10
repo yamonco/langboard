@@ -1,0 +1,87 @@
+{
+  "project": {
+    "Category": "项目",
+    "conditions": {
+      "project_updated": "已更新",
+      "project_deleted": "已删除"
+    }
+  },
+  "project_label": {
+    "Category": "项目标签",
+    "conditions": {
+      "project_label_created": "已创建",
+      "project_label_updated": "已更新",
+      "project_label_deleted": "已删除"
+    }
+  },
+  "project_wiki": {
+    "Category": "项目 Wiki",
+    "conditions": {
+      "project_wiki_created": "已创建",
+      "project_wiki_updated": "已更新",
+      "project_wiki_publicity_changed": "已更改公开状态",
+      "project_wiki_deleted": "已删除"
+    }
+  },
+  "project_column": {
+    "Category": "项目列",
+    "conditions": {
+      "project_column_created": "已创建",
+      "project_column_name_changed": "已更改名称",
+      "project_column_deleted": "已删除"
+    }
+  },
+  "card": {
+    "Category": "卡片",
+    "conditions": {
+      "card_created": "已创建",
+      "card_updated": "已更新",
+      "card_moved": "已移动",
+      "card_labels_updated": "已更新标签",
+      "card_relationships_updated": "已更新关系",
+      "card_deleted": "已删除"
+    }
+  },
+  "card_attachment": {
+    "Category": "卡片附件",
+    "conditions": {
+      "card_attachment_uploaded": "已上传",
+      "card_attachment_name_changed": "已更改名称",
+      "card_attachment_deleted": "已删除"
+    }
+  },
+  "card_comment": {
+    "Category": "卡片评论",
+    "conditions": {
+      "card_comment_added": "已添加",
+      "card_comment_updated": "已更新",
+      "card_comment_deleted": "已删除",
+      "card_comment_reacted": "已添加回应",
+      "card_comment_unreacted": "已取消回应"
+    }
+  },
+  "card_checklist": {
+    "Category": "卡片检查清单",
+    "conditions": {
+      "card_checklist_created": "已创建",
+      "card_checklist_title_changed": "已更改标题",
+      "card_checklist_checked": "已勾选",
+      "card_checklist_unchecked": "已取消勾选",
+      "card_checklist_deleted": "已删除"
+    }
+  },
+  "card_checkitem": {
+    "Category": "卡片检查项",
+    "conditions": {
+      "card_checkitem_created": "已创建",
+      "card_checkitem_title_changed": "已更改标题",
+      "card_checkitem_timer_started": "已启动计时器",
+      "card_checkitem_timer_paused": "已暂停计时器",
+      "card_checkitem_timer_stopped": "已停止计时器",
+      "card_checkitem_checked": "已勾选",
+      "card_checkitem_unchecked": "已取消勾选",
+      "card_checkitem_cardified": "已转换为卡片",
+      "card_checkitem_deleted": "已删除"
+    }
+  }
+}

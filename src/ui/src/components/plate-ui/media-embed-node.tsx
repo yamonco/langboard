@@ -51,7 +51,7 @@ export const MediaEmbedElement = withHOC(ResizableProvider, function MediaEmbedE
                             isYoutube ? (
                                 <LiteYouTubeEmbed
                                     id={embed!.id!}
-                                    title="youtube"
+                                    title={t("card.YouTube video")}
                                     wrapperClass={cn(
                                         "rounded-sm",
                                         focused && selected && "ring-2 ring-ring ring-offset-2",
@@ -85,7 +85,7 @@ export const MediaEmbedElement = withHOC(ResizableProvider, function MediaEmbedE
                                             isVideo && "border-0",
                                             focused && selected && "ring-2 ring-ring ring-offset-2"
                                         )}
-                                        title="embed"
+                                        title={t("editor.Embed")}
                                         src={embed!.url}
                                         allowFullScreen
                                     />

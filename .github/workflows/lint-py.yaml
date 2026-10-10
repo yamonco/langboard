@@ -1,22 +1,17 @@
 name: Lint Python
 
-on:
-  push:
-    paths: &py_paths
-      - "**/*.py"
-      - "**/uv.lock"
-      - "**/pyproject.toml"
-      - "src/shared/py/**"
-      - "src/graph/**"
-      - ".github/workflows/lint-py.yaml"
-  pull_request:
-    paths: *py_paths
-  workflow_dispatch:
+on: workflow_dispatch
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   run-core-linter:
     name: Lint (src/shared/py via uv)
-    runs-on: ubuntu-latest
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     defaults:
       run:
         working-directory: src/shared/py
@@ -26,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -49,19 +44,23 @@ jobs:
           uv run ruff check .
   run-root-linter:
     name: Lint (root via uv)
-    runs-on: ubuntu-latest
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     strategy:
       matrix:
         python-version:
           - "3.13"
           - "3.12"
+          - "3.11"
+          - "3.10"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -84,7 +83,9 @@ jobs:
           uv run ruff check .
   run-graph-linter:
     name: Lint (src/graph via uv)
-    runs-on: ubuntu-latest
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     defaults:
       run:
         working-directory: src/graph
@@ -94,7 +95,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv

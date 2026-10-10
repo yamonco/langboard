@@ -1,11 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import type { TImageElement } from "platejs";
 import type { PlateElementProps } from "platejs/react";
 import { useDraggable } from "@platejs/dnd";
-import { Image, ImagePlugin, useMediaState } from "@platejs/media/react";
+import { useImage, ImagePlugin, openImagePreview, useMediaState } from "@platejs/media/react";
 import { ResizableProvider, useResizableValue } from "@platejs/resizable";
 import { PlateElement, useEditorRef, withHOC } from "platejs/react";
+import useProtectedImage from "@/core/hooks/useProtectedImage";
 import { cn } from "@/core/utils/ComponentUtils";
 import { Caption, CaptionTextarea } from "@/components/plate-ui/caption";
 import { MediaToolbar } from "@/components/plate-ui/media-toolbar";
@@ -17,6 +19,8 @@ import type { MouseEvent, SyntheticEvent } from "react";
 
 export const ImageElement = withHOC(ResizableProvider, function ImageElement(props: PlateElementProps<TImageElement>) {
     const [t] = useTranslation();
+    const { props: imageProps } = useImage();
+    const image = useProtectedImage(props.element.url);
     const { align = "center", focused, readOnly, selected } = useMediaState();
     const width = useResizableValue("width");
     const editor = useEditorRef();
@@ -62,19 +66,36 @@ export const ImageElement = withHOC(ResizableProvider, function ImageElement(pro
                         }}
                     >
                         <ResizeHandle className={mediaResizeHandleVariants({ direction: "left" })} options={{ direction: "left" }} />
-                        <Image
+                        <img
+                            {...imageProps}
+                            src={image.src}
                             ref={handleRef}
                             className={cn(
                                 "block h-auto max-w-full cursor-pointer object-cover px-0",
                                 hasExplicitWidth ? "w-full" : "w-auto",
-                                !hasExplicitWidth && "max-w-2xl",
+                                !hasExplicitWidth && "max-w-[min(100%,42rem)]",
                                 !hasExplicitWidth && align === "center" && "mx-auto",
                                 !hasExplicitWidth && align === "right" && "ml-auto",
                                 "rounded-sm",
+                                readOnly && "max-h-[min(60vh,24rem)] w-auto object-contain",
                                 focused && selected && "ring-2 ring-ring ring-offset-2",
                                 isDragging && "opacity-50"
                             )}
-                            alt=""
+                            alt={(props.attributes as any).alt}
+                            role={readOnly ? "button" : undefined}
+                            tabIndex={readOnly ? 0 : undefined}
+                            aria-label={readOnly ? t("editor.Image") : undefined}
+                            onClick={readOnly ? () => openImagePreview(editor, props.element) : undefined}
+                            onKeyDown={
+                                readOnly
+                                    ? (event) => {
+                                          if (event.key === "Enter" || event.key === " ") {
+                                              event.preventDefault();
+                                              openImagePreview(editor, props.element);
+                                          }
+                                      }
+                                    : undefined
+                            }
                             onLoad={setInitialImageWidth}
                         />
                         <ResizeHandle

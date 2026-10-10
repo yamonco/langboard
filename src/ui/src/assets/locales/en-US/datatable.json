@@ -1,12 +1,12 @@
 {
-  "{count} New Records": "{{count}} New Records",
-  "Showing {start} to {end} of {total} results": "Showing {{start}} to {{end}} of {{total}} results",
+  "{count} New Records": "{{count, number}} New Records",
+  "Showing {start} to {end} of {total} results": "Showing {{start, number}} to {{end, number}} of {{total, number}} results",
   "Search...": "Search...",
   "Active filters": "Active filters",
   "Next Page": "Next Page",
   "Previous Page": "Previous Page",
   "More Pages": "More Pages",
-  "Page {page}": "Page {{page}}",
+  "Page {page}": "Page {{page, number}}",
   "No data available": "No data available",
   "Try adjusting your search or filter criteria": "Try adjusting your search or filter criteria"
 }

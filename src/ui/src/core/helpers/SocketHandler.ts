@@ -1,5 +1,5 @@
 import { useSocketOutsideProvider } from "@/core/providers/SocketProvider";
-import { TDefaultEvents, TEventName, TSocketScopedTopic } from "@/core/stores/SocketStore";
+import { TDefaultEvents, TEventName } from "@/core/stores/SocketStore";
 import { Utils } from "@langboard/core/utils";
 import { ESocketTopic } from "@langboard/core/enums";
 
@@ -50,7 +50,7 @@ interface ITopicUseSocketHandlerProps<TResponse, TRawResponse = TResponse> exten
     TRawResponse,
     Exclude<TEventName, TDefaultEvents>
 > {
-    topic: TSocketScopedTopic;
+    topic: Exclude<ESocketTopic, ESocketTopic.None>;
     topicId: string;
 }
 
@@ -78,123 +78,62 @@ export type TUseSocketHandlerProps<TResponse, TRawResponse = TResponse> =
 
 const useSocketHandler = <TResponse, TRawResponse = TResponse, TRequest = unknown>(props: TUseSocketHandlerProps<TResponse, TRawResponse>) => {
     const socket = useSocketOutsideProvider();
-    const { topic, topicId, onProps, eventKey } = props;
+    const { topic, topicId, onProps, sendProps, eventKey } = props;
     const onCallback = onProps?.callback;
     const onResponseConverter = onProps?.responseConverter;
-
-    const addEvent = <TEventResponse>(callback: (data: TEventResponse) => void) => {
-        if (!props.onProps) {
-            return;
-        }
-        if (props.topic === undefined) {
-            socket.on({
-                event: props.onProps.name,
-                eventKey,
-                callback,
-            });
-            return;
-        }
-
-        const event = props.onProps.params ? Utils.String.format(props.onProps.name, props.onProps.params) : props.onProps.name;
-        if (props.topic === ESocketTopic.None || props.topic === ESocketTopic.Global) {
-            socket.on({
-                topic: props.topic,
-                event,
-                eventKey,
-                callback,
-            });
-            return;
-        }
-
-        socket.on({
-            topic: props.topic,
-            topicId: props.topicId,
-            event,
-            eventKey,
-            callback,
-        });
-    };
-
-    const removeEvent = <TEventResponse>(callback: (data: TEventResponse) => void) => {
-        if (!props.onProps) {
-            return;
-        }
-        if (props.topic === undefined) {
-            socket.off({
-                event: props.onProps.name,
-                eventKey,
-                callback,
-            });
-            return;
-        }
-
-        const event = props.onProps.params ? Utils.String.format(props.onProps.name, props.onProps.params) : props.onProps.name;
-        if (props.topic === ESocketTopic.None || props.topic === ESocketTopic.Global) {
-            socket.off({
-                topic: props.topic,
-                event,
-                eventKey,
-                callback,
-            });
-            return;
-        }
-
-        socket.off({
-            topic: props.topic,
-            topicId: props.topicId,
-            event,
-            eventKey,
-            callback,
-        });
-    };
-
+    const onEventName = onProps ? (onProps.params ? Utils.String.format(onProps.name, onProps.params) : onProps.name) : undefined;
+    const sendEventName = sendProps ? (sendProps.params ? Utils.String.format(sendProps.name, sendProps.params) : sendProps.name) : undefined;
+    const hasSendProps = !!sendProps;
     const on = () => {
-        if (!onProps) {
+        if (!onEventName) {
             return () => {};
         }
 
-        if (onResponseConverter) {
-            const event = (data: TRawResponse) => {
-                const response = onResponseConverter(data);
-                onCallback?.(response);
-            };
+        const event = (data: TResponse | TRawResponse) => {
+            let newData;
+            if (onResponseConverter) {
+                newData = onResponseConverter(data as TRawResponse);
+            } else {
+                newData = data as unknown as TResponse;
+            }
 
-            addEvent(event);
-
-            return () => {
-                removeEvent(event);
-            };
-        }
-
-        const event = (data: TResponse) => {
-            onCallback?.(data);
+            onCallback?.(newData);
         };
 
-        addEvent(event);
+        socket.on<TResponse>({
+            topic: topic as never,
+            topicId,
+            event: onEventName,
+            eventKey,
+            callback: event,
+        });
 
         return () => {
-            removeEvent(event);
+            socket.off({
+                topic: topic as never,
+                topicId,
+                event: onEventName,
+                eventKey,
+                callback: event as unknown as (data: unknown) => void,
+            });
         };
     };
 
-    const send = (data: TRequest): ReturnType<typeof socket.send> | undefined => {
-        if (!props.sendProps || props.topic === undefined) {
-            return undefined;
-        }
-
-        const eventName = props.sendProps.params ? Utils.String.format(props.sendProps.name, props.sendProps.params) : props.sendProps.name;
-        if (props.topic === ESocketTopic.None || props.topic === ESocketTopic.Global) {
-            return socket.send({
-                topic: props.topic,
-                eventName,
-                data,
-            });
+    const send: (
+        data: TRequest
+    ) => TUseSocketHandlerProps<TResponse, TRawResponse>["sendProps"] extends undefined ? undefined : ReturnType<typeof socket.send> = (
+        data: TRequest
+    ) => {
+        if (!hasSendProps || !sendEventName) {
+            return undefined as unknown as TUseSocketHandlerProps<TResponse, TRawResponse>["sendProps"] extends undefined
+                ? undefined
+                : ReturnType<typeof socket.send>;
         }
 
         return socket.send({
-            topic: props.topic,
-            topicId: props.topicId,
-            eventName,
+            topic: topic as never,
+            topicId,
+            eventName: sendEventName,
             data,
         });
     };

@@ -24,6 +24,8 @@ import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
 
 export interface Interface extends IBaseModel {
+    read_state_version?: number;
+    work_state?: IWorkState;
     project_uid: string;
     project_column_uid: string;
     title: string;
@@ -32,22 +34,137 @@ export interface Interface extends IBaseModel {
     order: number;
     deadline_at?: Date;
     archived_at?: Date;
+    can_delete?: bool;
+    creator?: {
+        uid: string;
+        type: "user" | "bot";
+        name: string;
+        avatar: string | null;
+        created_at: string;
+    };
+    source_type?: "project_wiki" | (string & {});
+    source_uid?: string;
+    linked_resource?: {
+        type: "project_wiki" | (string & {});
+        uid: string;
+        status: "available" | "forbidden" | "missing";
+        title?: string;
+        preview?: string;
+        content?: IEditorContent;
+    };
+    last_change_seq?: number;
+    last_change_target_type?: string;
+    last_change_target_uid?: string;
+    last_change_at?: Date | null;
+    has_unread_change?: bool;
+}
+
+export interface IWorkState {
+    version: number;
+    workflow_stage: string | null;
+    completed?: boolean | null;
+    active_queue_policy?: "include" | "exclude" | "conditional" | null;
+    overdue_policy?: "normal" | "suppress" | null;
+    overdue_suppressed?: boolean | null;
+    verification_state: "not_required" | "unverified" | "partial" | "verified" | "stale";
+    verification_source_change_seq: number;
+    verification: {
+        uid: string;
+        source_change_seq: number;
+        decision: "unverified" | "partial" | "verified";
+        recorded_at: string;
+        recorded_by_user_uid: string | null;
+        recorded_by_bot_uid: string | null;
+        evidence: Array<{
+            reference: string;
+            source_revision: string;
+            environment: string;
+            checkitem_uid: string | null;
+        }>;
+        required_checkitem_uids: string[];
+    } | null;
+    pending_approval_count?: number;
+    execution_generation?: number | null;
+    execution_state: "idle" | "human_active" | "agent_active" | "paused" | "failed" | null;
+    blocker_state: "clear" | "blocked" | "needs_input" | "needs_approval" | null;
+    dependency_state?: {
+        state: "clear" | "blocked" | null;
+        direct_blockers: Array<{
+            relationship_uid: string;
+            card_uid: string | null;
+            title: string | null;
+            accessible: boolean;
+            code: string;
+        }> | null;
+    };
+    material_kind: "work" | "reference" | "meeting" | "wiki-like";
+    lifecycle: "active" | "archived";
+    active_queue_eligible: boolean | null;
+    checklist_progress: { total: number; completed: number };
+    reasons: Array<{ code: string; message: string; source_ref: string }>;
+    state_inconsistency: Array<{ code: string; message: string; source_ref: string }>;
+}
+
+export interface IContentBlock {
+    block_uid: string;
+    type: "rich_text" | "code" | "diagram";
+    order: number;
+    revision: number;
+    payload: Record<string, unknown>;
+    updated_at: string | null;
 }
 
 export interface IStore extends Interface {
     count_comment: number;
     member_uids: string[];
+    active_workers?: Array<{
+        user_uid: string;
+        status: "started" | "paused";
+        started_at: string | null;
+        elapsed_seconds: number;
+        checkitem_uid: string;
+        title: string;
+        checkitems: Array<{
+            uid: string;
+            title: string;
+            status: "started" | "paused";
+            started_at: string | null;
+            elapsed_seconds: number;
+            sampled_at: string;
+        }>;
+    }>;
     project_column_name: string;
+    content_blocks?: IContentBlock[];
+    description_content_source?: "blocks" | "description";
     current_auth_role_actions: ProjectRole.TActions[];
     project_members: User.Interface[];
     labels: ProjectLabel.Interface[];
     relationships: ProjectCardRelationship.Interface[];
+    // summary flag from the board API; absent on stale payloads and treated as false
+    has_description?: bool;
+    // check-card summary flags from the board API
+    completed?: bool;
+    is_check_card?: bool;
+    checklist_total_count?: number;
+    checklist_completed_count?: number;
 
     // variable set from the client side
     isCollapseOpened?: bool;
 }
 
 class ProjectCard extends BaseModel<IStore> {
+    public get read_state_version(): number {
+        return this.getValue("read_state_version") ?? 0;
+    }
+    public set read_state_version(value: number) {
+        this.update({ read_state_version: value });
+    }
+    public get work_state() {
+        return this.getValue("work_state");
+    }
+    public set work_state(value) {
+        this.update({ work_state: value });
+    }
     public static override get FOREIGN_MODELS() {
         return {
             project_members: User.Model.MODEL_NAME,
@@ -65,39 +182,46 @@ class ProjectCard extends BaseModel<IStore> {
     constructor(model: Record<string, unknown>) {
         super(model);
 
-        this.subscribeSocketEvents(
-            [
-                useCardDetailsChangedHandlers,
-                useCardCommentAddedHandlers,
-                useCardCommentDeletedHandlers,
-                useCardCommentReactedHandlers,
-                useCardProjectUsersUpdatedHandlers,
-                useCardAssignedUsersUpdatedHandlers,
-                useCardLabelsUpdatedHandlers,
-                useCardChecklistCreatedHandlers,
-                useCardChecklistTitleChangedHandlers,
-                useCardChecklistCheckedChangedHandlers,
-                useCardChecklistDeletedHandlers,
-                useCardAttachmentUploadedHandlers,
-                useCardAttachmentDeletedHandlers,
-                useCardColumnChangedHandlers,
-                useCardDeletedHandlers,
-            ],
-            {
-                projectUID: this.project_uid,
-                uid: this.uid,
-                cardUID: this.uid,
-                card: this,
-            }
-        );
+        const cardSocketHandlers =
+            this.source_type === "project_wiki"
+                ? [useCardColumnChangedHandlers, useCardDeletedHandlers]
+                : [
+                      useCardDetailsChangedHandlers,
+                      useCardCommentAddedHandlers,
+                      useCardCommentDeletedHandlers,
+                      useCardCommentReactedHandlers,
+                      useCardProjectUsersUpdatedHandlers,
+                      useCardAssignedUsersUpdatedHandlers,
+                      useCardLabelsUpdatedHandlers,
+                      useCardChecklistCreatedHandlers,
+                      useCardChecklistTitleChangedHandlers,
+                      useCardChecklistCheckedChangedHandlers,
+                      useCardChecklistDeletedHandlers,
+                      useCardAttachmentUploadedHandlers,
+                      useCardAttachmentDeletedHandlers,
+                      useCardColumnChangedHandlers,
+                      useCardDeletedHandlers,
+                  ];
 
-        this.subscribeSocketEvents([useMetadataUpdatedHandlers, useMetadataDeletedHandlers], {
-            type: "card",
+        this.subscribeSocketEvents(cardSocketHandlers, {
+            projectUID: this.project_uid,
             uid: this.uid,
+            cardUID: this.uid,
+            card: this,
         });
+
+        if (this.source_type !== "project_wiki") {
+            this.subscribeSocketEvents([useMetadataUpdatedHandlers, useMetadataDeletedHandlers], {
+                type: "card",
+                uid: this.uid,
+            });
+        }
     }
 
     public static convertModel(model: IStore): IStore {
+        if (model.source_type === "project_wiki") {
+            model.title = model.linked_resource?.status === "available" ? (model.linked_resource.title ?? "") : "";
+        }
         if (Utils.Type.isString(model.deadline_at)) {
             model.deadline_at = new Date(model.deadline_at);
         }
@@ -121,8 +245,31 @@ class ProjectCard extends BaseModel<IStore> {
         this.update({ project_column_uid: value });
     }
 
+    public get completed() {
+        return this.getValue("completed");
+    }
+    public set completed(value) {
+        this.update({ completed: value });
+    }
+
     public get title() {
         return this.getValue("title");
+    }
+
+    public get creator() {
+        return this.getValue("creator");
+    }
+
+    public get source_type() {
+        return this.getValue("source_type");
+    }
+
+    public get source_uid() {
+        return this.getValue("source_uid");
+    }
+
+    public get linked_resource() {
+        return this.getValue("linked_resource");
     }
     public set title(value) {
         this.update({ title: value });
@@ -145,6 +292,10 @@ class ProjectCard extends BaseModel<IStore> {
     public get archived_at(): Date | undefined {
         return this.getValue("archived_at");
     }
+
+    public get can_delete() {
+        return this.getValue("can_delete") ?? false;
+    }
     public set archived_at(value: string | Date | undefined) {
         this.update({ archived_at: value as unknown as Date });
     }
@@ -152,8 +303,31 @@ class ProjectCard extends BaseModel<IStore> {
     public get count_comment() {
         return this.getValue("count_comment");
     }
+
+    public get content_blocks(): IContentBlock[] {
+        return (this.getValue("content_blocks") as IContentBlock[] | undefined) ?? [];
+    }
     public set count_comment(value) {
         this.update({ count_comment: value });
+    }
+
+    public get has_unread_change(): bool {
+        return this.getValue("has_unread_change") ?? false;
+    }
+    public set has_unread_change(value: bool) {
+        this.update({ has_unread_change: value });
+    }
+
+    public get last_change_target_type(): string | undefined {
+        return this.getValue("last_change_target_type");
+    }
+
+    public get last_change_seq(): number | undefined {
+        return this.getValue("last_change_seq");
+    }
+
+    public get last_change_target_uid(): string | undefined {
+        return this.getValue("last_change_target_uid");
     }
 
     public get member_uids() {

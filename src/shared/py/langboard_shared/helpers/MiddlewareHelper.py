@@ -3,6 +3,7 @@ from fastapi import status
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from ..core.security import AuthSecurity
+from ..core.security.CollaborationChannel import CollaborationChannel
 from ..core.utils.decorators import staticclass
 from ..domain.models import Bot, User
 from ..security import Auth
@@ -62,6 +63,8 @@ class MiddlewareHelper:
 
     @staticmethod
     def validate_auth(scope: Scope) -> User | Bot | int:
+        # Reset untrusted/preexisting hints before validating any credential.
+        scope["collaboration_channel"] = CollaborationChannel.Api
         headers = Headers(scope=scope)
         if headers.get(AuthSecurity.API_TOKEN_HEADER, headers.get(AuthSecurity.API_TOKEN_HEADER.lower())):
             validation_result = Auth.validate_user_by_api_token(headers)
@@ -71,6 +74,7 @@ class MiddlewareHelper:
 
             validation_result = Auth.validate_bot(headers)
             if isinstance(validation_result, Bot):
+                scope["collaboration_channel"] = CollaborationChannel.Bot
                 scope["auth"] = validation_result
                 return validation_result
             return validation_result
@@ -85,9 +89,56 @@ class MiddlewareHelper:
 
         validation_result = Auth.validate(headers)
         if isinstance(validation_result, User):
+            # Native session requires both the verified bearer and refresh cookie.
+            # An API credential with a session fallback is still an API call.
+            if not MiddlewareHelper._is_api_key_used(headers):
+                scope["collaboration_channel"] = CollaborationChannel.HumanUI
             scope["auth"] = validation_result
+            return validation_result
+
+        oidc_user = MiddlewareHelper._validate_oidc_user(headers)
+        if oidc_user:
+            scope["auth"] = oidc_user
+            return oidc_user
 
         return validation_result
+
+    @staticmethod
+    def _validate_oidc_user(headers: Headers) -> User | None:
+        """Resolve a resource-scoped OIDC token through an explicit identity link."""
+
+        from ..core.security import OidcClient
+        from ..domain.models import IdentityProvider
+        from ..domain.services import DomainService
+        from ..Env import Env
+
+        if not Env.OIDC_BEARER_ENABLED:
+            return None
+        authorization = headers.get(AuthSecurity.AUTHORIZATION_HEADER, "")
+        scheme, separator, token = authorization.partition(" ")
+        token = token.strip()
+        if not separator or scheme.lower() != "bearer" or not token:
+            return None
+        try:
+            claims = OidcClient.validate_access_token(token)
+            subject = str(claims.get("sub", "")).strip()
+            issuer = str(claims.get("iss", "")).strip().rstrip("/")
+            if not subject or not issuer:
+                return None
+            service = DomainService()
+            try:
+                user = service.identity_link.get_user_by_provider_external_id(
+                    IdentityProvider.Oidc,
+                    subject,
+                    issuer,
+                )
+                if not user or not user.activated_at or user.deleted_at:
+                    return None
+                return user
+            finally:
+                service.close()
+        except Exception:
+            return None
 
     @staticmethod
     def _is_api_key_used(headers: Headers) -> bool:

@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import { useDataTable } from "@/components/base/DataTable/Provider";
 import IconComponent from "@/components/base/IconComponent";
@@ -66,7 +67,7 @@ function DataTablePagination() {
 }
 
 function DataTablePaginationPage({ type, totalPages }: { type: "previous" | "next" | "ellipsis" | number; totalPages: number }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { currentPage, paginate } = useDataTable();
     const isDisabled = useMemo(() => {
         switch (type) {
@@ -100,7 +101,7 @@ function DataTablePaginationPage({ type, totalPages }: { type: "previous" | "nex
             title = t("datatable.More Pages");
             break;
         default:
-            content = type;
+            content = formatNumber(type, i18n.language);
             variant = currentPage === type ? ("default" as const) : ("ghost" as const);
             title = t("datatable.Page {page}", { page: type });
             break;

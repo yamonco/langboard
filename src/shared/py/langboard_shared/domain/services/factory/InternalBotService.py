@@ -1,3 +1,4 @@
+from json import loads
 from typing import Any, Literal
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
@@ -20,6 +21,35 @@ class InternalBotService(BaseDomainService):
     def get_by_id_like(self, internal_bot: TInternalBotParam | None) -> InternalBot | None:
         internal_bot = InfraHelper.get_by_id_like(InternalBot, internal_bot)
         return internal_bot
+
+    def get_document_vision_binding(self) -> InternalBot | None:
+        """Resolve the global document-vision alias independently of project bots."""
+        return self.repo.internal_bot.get_default_by_type(InternalBotType.DocumentVision)
+
+    def get_document_embedding_binding(self) -> InternalBot | None:
+        """Global embedding configuration is independent of executable project bots."""
+        return self.repo.internal_bot.get_default_by_type(InternalBotType.DocumentEmbedding)
+
+    def is_document_embedding_enabled(self) -> bool:
+        binding = self.get_document_embedding_binding()
+        if not binding:
+            return False
+        from ....tasks.docling.DocumentEmbedding import validate_embedding_config
+
+        try:
+            _, settings = validate_embedding_config(binding.value)
+            return settings.enabled
+        except (ValueError, TypeError):
+            return False
+
+    def is_document_processing_enabled(self) -> bool:
+        binding = self.get_document_vision_binding()
+        if not binding:
+            return False
+        try:
+            return loads(binding.value).get("document_processing_enabled", True) is True
+        except (ValueError, AttributeError):
+            return False
 
     def get_api_list(self, is_setting: bool) -> list[dict[str, Any]]:
         internal_bots = InfraHelper.get_all(InternalBot)

@@ -8,9 +8,12 @@ function PreferenceLanguage() {
     const [t] = useTranslation();
 
     return (
-        <Flex items="center" pb="3" gap="3">
-            <h4 className="text-lg font-semibold tracking-tight">{t("myAccount.Language")}</h4>
-            <UserPreferenceLanguageSwitcher currentUser={currentUser} variant="outline" />
+        <Flex items="center" pb="3" gap="3" className="flex-wrap">
+            <div className="min-w-0 flex-1">
+                <h4 className="text-lg font-semibold tracking-tight">{t("myAccount.Default language")}</h4>
+                <p className="text-sm text-muted-foreground">{t("myAccount.Default language description")}</p>
+            </div>
+            <UserPreferenceLanguageSwitcher currentUser={currentUser} variant="outline" triggerType="text" />
         </Flex>
     );
 }

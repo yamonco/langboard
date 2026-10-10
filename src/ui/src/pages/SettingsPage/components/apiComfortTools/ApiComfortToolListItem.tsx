@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
@@ -34,7 +35,7 @@ function ApiComfortToolListItem({
     onEdit,
     setDeletingName,
 }: IApiComfortToolListItemProps) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { setIsValidating } = useAppSetting();
     const { mutateAsync: deleteApiComfortToolMutateAsync } = useDeleteApiComfortTool(comfortTool, { interceptToast: true });
     const label = comfortTool.useField("label");
@@ -69,7 +70,7 @@ function ApiComfortToolListItem({
                         </Box>
                     </Box>
                     <Box textSize="sm" className="whitespace-nowrap text-muted-foreground">
-                        {t("settings.Selected base tools")}: {apiNames.length}
+                        {t("settings.Selected base tools")}: {formatNumber(apiNames.length, i18n.language)}
                     </Box>
                 </Flex>
                 <Box mt="2" textSize="sm" className="text-muted-foreground">

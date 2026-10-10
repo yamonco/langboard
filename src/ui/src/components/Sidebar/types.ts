@@ -16,6 +16,7 @@ export interface ISidebarProps {
 
 interface IBaseSidebarNavItemsProps {
     isFloating?: bool;
+    isCollapsed?: bool;
     navs: ISidebarNavItem[];
 }
 

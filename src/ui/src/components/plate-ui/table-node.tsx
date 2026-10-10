@@ -36,7 +36,8 @@ export const TableElement = withHOC(TableProvider, function TableElement({ child
     const readOnly = useReadOnly();
     const isSelectionAreaVisible = usePluginOption(BlockSelectionPlugin, "isSelectionAreaVisible");
     const hasControls = !readOnly && !isSelectionAreaVisible;
-    const { isSelectingCell, marginLeft, props: tableProps } = useTableElement();
+    const { marginLeft, props: tableProps } = useTableElement();
+    const isSelectingCell = useEditorSelector((editor) => editor.getApi(TablePlugin).table.isSelectingCell(), []);
 
     const isSelectingTable = useBlockSelected(props.element.id as string);
 
@@ -75,13 +76,16 @@ function TableFloatingToolbar({ children, ...props }: React.ComponentProps<typeo
     const selected = useSelected();
     const element = useElement<TTableElement>();
     const { props: buttonProps } = useRemoveNodeButton({ element });
-    const collapsedInside = useEditorSelector((editor) => selected && editor.api.isCollapsed(), [selected]);
+    const singleCellInside = useEditorSelector(
+        (editor) => selected && (editor.getApi(TablePlugin).table.getSelectedCellIds()?.length ?? 0) === 0,
+        [selected]
+    );
     const isFocusedLast = useFocusedLast();
 
     const { canMerge, canSplit } = useTableMergeState();
 
     return (
-        <Popover.Root open={isFocusedLast && (canMerge || canSplit || collapsedInside)} modal={false}>
+        <Popover.Root open={isFocusedLast && (canMerge || canSplit || singleCellInside)} modal={false}>
             <Popover.Anchor asChild>{children}</Popover.Anchor>
             <Popover.Content asChild onOpenAutoFocus={(e) => e.preventDefault()} contentEditable={false} {...props}>
                 <Toolbar
@@ -99,14 +103,14 @@ function TableFloatingToolbar({ children, ...props }: React.ComponentProps<typeo
                                 <SquareSplitHorizontalIcon className="size-4" />
                             </ToolbarButton>
                         )}
-                        {collapsedInside && (
+                        {singleCellInside && (
                             <ToolbarButton tooltip={t("editor.Delete table")} {...buttonProps}>
                                 <Trash2Icon className="size-4" />
                             </ToolbarButton>
                         )}
                     </ToolbarGroup>
 
-                    {collapsedInside && (
+                    {singleCellInside && (
                         <ToolbarGroup>
                             <ToolbarButton
                                 onClick={() => {
@@ -114,6 +118,7 @@ function TableFloatingToolbar({ children, ...props }: React.ComponentProps<typeo
                                 }}
                                 onMouseDown={(e) => e.preventDefault()}
                                 tooltip={t("editor.Insert row before")}
+                                aria-label={t("editor.Insert row before")}
                             >
                                 <ArrowUp className="size-4" />
                             </ToolbarButton>
@@ -123,6 +128,7 @@ function TableFloatingToolbar({ children, ...props }: React.ComponentProps<typeo
                                 }}
                                 onMouseDown={(e) => e.preventDefault()}
                                 tooltip={t("editor.Insert row after")}
+                                aria-label={t("editor.Insert row after")}
                             >
                                 <ArrowDown className="size-4" />
                             </ToolbarButton>
@@ -132,13 +138,14 @@ function TableFloatingToolbar({ children, ...props }: React.ComponentProps<typeo
                                 }}
                                 onMouseDown={(e) => e.preventDefault()}
                                 tooltip={t("editor.Delete row")}
+                                aria-label={t("editor.Delete row")}
                             >
                                 <XIcon className="size-4" />
                             </ToolbarButton>
                         </ToolbarGroup>
                     )}
 
-                    {collapsedInside && (
+                    {singleCellInside && (
                         <ToolbarGroup>
                             <ToolbarButton
                                 onClick={() => {
@@ -146,6 +153,7 @@ function TableFloatingToolbar({ children, ...props }: React.ComponentProps<typeo
                                 }}
                                 onMouseDown={(e) => e.preventDefault()}
                                 tooltip={t("editor.Insert column before")}
+                                aria-label={t("editor.Insert column before")}
                             >
                                 <ArrowLeft className="size-4" />
                             </ToolbarButton>
@@ -155,6 +163,7 @@ function TableFloatingToolbar({ children, ...props }: React.ComponentProps<typeo
                                 }}
                                 onMouseDown={(e) => e.preventDefault()}
                                 tooltip={t("editor.Insert column after")}
+                                aria-label={t("editor.Insert column after")}
                             >
                                 <ArrowRight className="size-4" />
                             </ToolbarButton>
@@ -164,6 +173,7 @@ function TableFloatingToolbar({ children, ...props }: React.ComponentProps<typeo
                                 }}
                                 onMouseDown={(e) => e.preventDefault()}
                                 tooltip={t("editor.Delete column")}
+                                aria-label={t("editor.Delete column")}
                             >
                                 <XIcon className="size-4" />
                             </ToolbarButton>
@@ -186,7 +196,7 @@ export function TableRowElement(props: PlateElementProps<TTableRowElement>) {
     const { isDragging, nodeRef, previewRef, handleRef } = useDraggable({
         element,
         type: element.type,
-        canDropNode: ({ dragEntry, dropEntry }) => PathApi.equals(PathApi.parent(dragEntry[1]), PathApi.parent(dropEntry[1])),
+        canDropNode: ({ dragEntry, dropEntry }) => !!dragEntry && PathApi.equals(PathApi.parent(dragEntry[1]), PathApi.parent(dropEntry[1])),
         onDropHandler: (_, { dragItem }) => {
             const dragElement = (dragItem as { element: TElement }).element;
 

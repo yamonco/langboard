@@ -1,6 +1,5 @@
-import { IHeaderNavItem } from "@/components/Header/types";
 import { DashboardStyledLayout } from "@/components/Layout";
-import { ISidebarNavItem } from "@/components/Sidebar/types";
+import { IActivityRailItem } from "@/components/Layout/ActivityRail";
 import useGetSettingRoles from "@/controllers/api/settings/useGetSettingRoles";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -12,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { useSocket } from "@/core/providers/SocketProvider";
 import { EHttpStatus, ESettingSocketTopicID, ESocketTopic } from "@langboard/core/enums";
 import { IS_OLLAMA_RUNNING } from "@/constants";
-import { Navigate } from "react-router";
+import { Navigate, useLocation } from "react-router";
 import BotsPage from "@/pages/SettingsPage/BotsPage";
 import ApiComfortToolsPage from "@/pages/SettingsPage/ApiComfortToolsPage";
 import GlobalRelationshipsPage from "@/pages/SettingsPage/GlobalRelationshipsPage";
@@ -27,22 +26,22 @@ import { AuthUser } from "@/core/models";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { ApiKeyRole, McpRole, SettingRole } from "@/core/models/roles";
 import useGetOllamaHealth from "@/controllers/api/settings/ollama/useGetOllamaHealth";
+import WorkflowStagesPage from "@/pages/SettingsPage/WorkflowStagesPage";
+import GlobalLabelsPage from "@/pages/SettingsPage/GlobalLabelsPage";
 import ProjectTemplatesPage from "@/pages/SettingsPage/ProjectTemplatesPage";
+import { settingsRedirect } from "@/pages/SettingsPage/SettingsNavigation";
 
 function SettingsProxy(): React.JSX.Element {
     const { currentUser } = useAuth();
+    const [t] = useTranslation();
     const socket = useSocket();
     const navigate = usePageNavigateRef();
-    const pathname = location.pathname.split("/").slice(0, 3).join("/");
-    const { data, isFetching, error } = useGetSettingRoles();
+    const pathname = useLocation().pathname.split("/").slice(0, 3).join("/");
+    const { data, error } = useGetSettingRoles();
     const [isReady, setIsReady] = useState(false);
     const [isOllamaAvailable, setIsOllamaAvailable] = useState(false);
     const [isOllamaHealthChecked, setIsOllamaHealthChecked] = useState(!IS_OLLAMA_RUNNING);
     const { mutateAsync: getOllamaHealthMutateAsync } = useGetOllamaHealth({ interceptToast: false });
-
-    if (pathname === ROUTES.SETTINGS.OLLAMA && !IS_OLLAMA_RUNNING) {
-        return <Navigate to={ROUTES.SETTINGS.API_KEYS} replace />;
-    }
 
     useEffect(() => {
         if (!error) {
@@ -59,7 +58,7 @@ function SettingsProxy(): React.JSX.Element {
     }, [error]);
 
     useEffect(() => {
-        if (!data || isFetching) {
+        if (!data) {
             setIsReady(() => false);
             return;
         }
@@ -79,7 +78,7 @@ function SettingsProxy(): React.JSX.Element {
         return () => {
             socket.unsubscribe(ESocketTopic.AppSettings, topicIds);
         };
-    }, [currentUser, data, isFetching, socket]);
+    }, [currentUser, data, socket]);
 
     useEffect(() => {
         if (!IS_OLLAMA_RUNNING) {
@@ -112,6 +111,10 @@ function SettingsProxy(): React.JSX.Element {
             isMounted = false;
         };
     }, []);
+
+    if (pathname === ROUTES.SETTINGS.OLLAMA && !IS_OLLAMA_RUNNING) {
+        return <Navigate to={ROUTES.SETTINGS.API_KEYS} replace />;
+    }
 
     let skeletonContent;
     switch (pathname) {
@@ -152,10 +155,10 @@ function SettingsProxy(): React.JSX.Element {
 
     return (
         <>
-            {isReady && isOllamaHealthChecked && currentUser ? (
+            {isReady && currentUser && (pathname !== ROUTES.SETTINGS.OLLAMA || isOllamaHealthChecked) ? (
                 <SettingsProxyDisplay currentUser={currentUser} isOllamaAvailable={isOllamaAvailable} />
             ) : (
-                <DashboardStyledLayout headerNavs={[]} sidebarNavs={[]}>
+                <DashboardStyledLayout headerNavs={[]} headerTitle={t("board.Settings")} activityRailItems={[]} inert aria-busy>
                     {skeletonContent}
                 </DashboardStyledLayout>
             )}
@@ -163,10 +166,16 @@ function SettingsProxy(): React.JSX.Element {
     );
 }
 
-function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser: AuthUser.TModel; isOllamaAvailable: bool }): React.JSX.Element {
+function SettingsProxyDisplay({
+    currentUser,
+    isOllamaAvailable,
+}: {
+    currentUser: AuthUser.TModel;
+    isOllamaAvailable: bool;
+}): React.JSX.Element {
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
-    const pathname = location.pathname.split("/").slice(0, 3).join("/");
+    const pathname = useLocation().pathname.split("/").slice(0, 3).join("/");
     const apiKeyRoleActions = currentUser.useField("api_key_role_actions");
     const settingRoleActions = currentUser.useField("setting_role_actions");
     const mcpRoleActions = currentUser.useField("mcp_role_actions");
@@ -174,106 +183,122 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     const { hasRoleAction: hasSettingRoleAction } = useRoleActionFilter(settingRoleActions);
     const { hasRoleAction: hasMcpRoleAction } = useRoleActionFilter(mcpRoleActions);
 
-    const headerNavs: Record<string, IHeaderNavItem> = {};
-
-    const sidebarNavs: Record<string, ISidebarNavItem> = {
+    const settingsNavs: Record<string, IActivityRailItem> = {
+        [ROUTES.SETTINGS.WORKFLOW_STAGES]: {
+            icon: "list-tree",
+            label: t("settings.Workflow stages"),
+            onClick: () => navigate(ROUTES.SETTINGS.WORKFLOW_STAGES),
+            hidden: !currentUser.is_admin || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.WorkflowStage),
+        },
+        [ROUTES.SETTINGS.GLOBAL_LABELS]: {
+            icon: "tags",
+            label: t("settings.Global labels"),
+            onClick: () => navigate(ROUTES.SETTINGS.GLOBAL_LABELS),
+            hidden: !currentUser.is_admin || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.GlobalLabel),
+        },
         [ROUTES.SETTINGS.PROJECT_TEMPLATES]: {
             icon: "layout-template",
-            name: t("settings.Project templates"),
-            onClick: () => navigate(ROUTES.SETTINGS.PROJECT_TEMPLATES, { smooth: true }),
-            hidden: !hasSettingRoleAction(SettingRole.EAction.ProjectTemplateUpdate),
+            label: t("settings.Project templates"),
+            onClick: () => navigate(ROUTES.SETTINGS.PROJECT_TEMPLATES),
+            hidden: !currentUser.is_admin,
         },
         [ROUTES.SETTINGS.API_KEYS]: {
             icon: "key-round",
-            name: t("settings.API keys"),
+            label: t("settings.API keys"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.API_KEYS, { smooth: true });
+                navigate(ROUTES.SETTINGS.API_KEYS);
             },
             hidden: !hasApiKeyRoleAction(...Object.values(ApiKeyRole.EAction)),
         },
         [ROUTES.SETTINGS.USERS]: {
             icon: "users",
-            name: t("settings.Users"),
+            label: t("settings.Users"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.USERS, { smooth: true });
+                navigate(ROUTES.SETTINGS.USERS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.User),
         },
         [ROUTES.SETTINGS.BOTS]: {
             icon: "bot",
-            name: t("settings.Bots"),
+            label: t("settings.Bots"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.BOTS, { smooth: true });
+                navigate(ROUTES.SETTINGS.BOTS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Bot),
         },
         [ROUTES.SETTINGS.INTERNAL_BOTS]: {
             icon: "bot-message-square",
-            name: t("settings.Internal bots"),
+            label: t("settings.Internal bots"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.INTERNAL_BOTS, { smooth: true });
+                navigate(ROUTES.SETTINGS.INTERNAL_BOTS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.InternalBot),
         },
         [ROUTES.SETTINGS.GLOBAL_RELATIONSHIPS]: {
             icon: "waypoints",
-            name: t("settings.Global relationships"),
+            label: t("settings.Global relationships"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.GLOBAL_RELATIONSHIPS, { smooth: true });
+                navigate(ROUTES.SETTINGS.GLOBAL_RELATIONSHIPS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.GlobalRelationship),
         },
         [ROUTES.SETTINGS.API_COMFORT_TOOLS]: {
             icon: "package-plus",
-            name: t("settings.API comfort tools"),
+            label: t("settings.API comfort tools"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.API_COMFORT_TOOLS, { smooth: true });
+                navigate(ROUTES.SETTINGS.API_COMFORT_TOOLS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.ApiComfortTool),
         },
         [ROUTES.SETTINGS.WEBHOOKS]: {
             icon: "webhook",
-            name: t("settings.Webhooks"),
+            label: t("settings.Webhooks"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.WEBHOOKS, { smooth: true });
+                navigate(ROUTES.SETTINGS.WEBHOOKS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Webhook),
         },
         [ROUTES.SETTINGS.NOTIFICATION_SCHEDULE]: {
             icon: "bell",
-            name: t("settings.Notification schedule"),
+            label: t("settings.Notification schedule"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.NOTIFICATION_SCHEDULE, { smooth: true });
+                navigate(ROUTES.SETTINGS.NOTIFICATION_SCHEDULE);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.NotificationSchedule),
         },
         [ROUTES.SETTINGS.MCP_TOOL_GROUPS]: {
             icon: "package",
-            name: t("mcp.MCP Server"),
+            label: t("mcp.MCP Server"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.MCP_TOOL_GROUPS, { smooth: true });
+                navigate(ROUTES.SETTINGS.MCP_TOOL_GROUPS);
             },
             hidden: !hasMcpRoleAction(...Object.values(McpRole.EAction)),
         },
     };
 
     if (IS_OLLAMA_RUNNING && isOllamaAvailable) {
-        sidebarNavs[ROUTES.SETTINGS.OLLAMA] = {
+        settingsNavs[ROUTES.SETTINGS.OLLAMA] = {
             icon: "ollama",
-            name: t("settings.Ollama"),
+            label: t("settings.Ollama"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.OLLAMA, { smooth: true });
+                navigate(ROUTES.SETTINGS.OLLAMA);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Ollama),
         };
     }
 
-    if (sidebarNavs[pathname]) {
-        sidebarNavs[pathname].current = true;
+    if (settingsNavs[pathname]) {
+        settingsNavs[pathname].active = true;
     }
 
     let pageContent;
     switch (pathname) {
+        case ROUTES.SETTINGS.WORKFLOW_STAGES:
+            pageContent = <WorkflowStagesPage currentUser={currentUser} />;
+            break;
+        case ROUTES.SETTINGS.GLOBAL_LABELS:
+            pageContent = <GlobalLabelsPage currentUser={currentUser} />;
+            break;
         case ROUTES.SETTINGS.PROJECT_TEMPLATES:
             pageContent = <ProjectTemplatesPage />;
             break;
@@ -310,68 +335,12 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     }
 
     useEffect(() => {
-        const foundAvailableRoute = Object.entries(sidebarNavs).find(([_, nav]) => !nav.hidden)?.[0];
-        switch (pathname) {
-            case ROUTES.SETTINGS.PROJECT_TEMPLATES:
-                if (!hasSettingRoleAction(SettingRole.EAction.ProjectTemplateUpdate)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.API_KEYS:
-                if (!hasApiKeyRoleAction(...Object.values(ApiKeyRole.EAction))) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.USERS:
-                if (!hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.User)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.BOTS:
-                if (!hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Bot)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.INTERNAL_BOTS:
-                if (!hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.InternalBot)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.GLOBAL_RELATIONSHIPS:
-                if (!hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.GlobalRelationship)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.API_COMFORT_TOOLS:
-                if (!hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.ApiComfortTool)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.WEBHOOKS:
-                if (!hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Webhook)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.NOTIFICATION_SCHEDULE:
-                if (!hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.NotificationSchedule)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.MCP_TOOL_GROUPS:
-                if (!hasMcpRoleAction(...Object.values(McpRole.EAction))) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-            case ROUTES.SETTINGS.OLLAMA:
-                if (!IS_OLLAMA_RUNNING || !isOllamaAvailable || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Ollama)) {
-                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
-                }
-                break;
-        }
-    }, [hasApiKeyRoleAction, hasSettingRoleAction, hasMcpRoleAction, isOllamaAvailable]);
+        const redirect = settingsRedirect(settingsNavs, pathname, ROUTES.DASHBOARD.PROJECTS.ALL);
+        if (redirect) navigate(redirect, { replace: true });
+    }, [pathname, currentUser.is_admin, hasApiKeyRoleAction, hasSettingRoleAction, hasMcpRoleAction, isOllamaAvailable]);
 
     return (
-        <DashboardStyledLayout headerNavs={Object.values(headerNavs)} sidebarNavs={Object.values(sidebarNavs)}>
+        <DashboardStyledLayout headerNavs={[]} headerTitle={t("board.Settings")} activityRailItems={Object.values(settingsNavs)}>
             <AppSettingProvider currentUser={currentUser}>{pageContent}</AppSettingProvider>
         </DashboardStyledLayout>
     );

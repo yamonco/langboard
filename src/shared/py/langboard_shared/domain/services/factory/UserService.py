@@ -32,7 +32,8 @@ class UserService(BaseDomainService):
         return "user"
 
     def get_by_id_like(self, user: TUserParam | None) -> User | None:
-        return InfraHelper.get_by_id_like(User, user)
+        project = InfraHelper.get_by_id_like(User, user)
+        return project
 
     def create_cache_name(self, cache_type: str, email: str) -> str:
         return f"{cache_type}:{email}"
@@ -260,6 +261,9 @@ class UserService(BaseDomainService):
 
         return True
 
+    def get_preferred_lang(self, user: User) -> str:
+        return self.repo.user.get_preferred_lang(user)
+
     def update_preferred_lang(self, user: User, lang: str):
         if lang in LangEnum.__members__:
             lang = LangEnum[lang].value
@@ -268,8 +272,8 @@ class UserService(BaseDomainService):
         else:
             return False
 
+        self.repo.user.update_preferred_lang(user, lang)
         user.preferred_lang = lang
-        self.repo.user.update(user)
 
         return True
 

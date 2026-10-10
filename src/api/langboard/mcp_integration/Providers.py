@@ -1,0 +1,299 @@
+"""FastMCP provider adapter for the existing native domain registry."""
+
+import json
+from collections.abc import Callable
+from functools import wraps
+from inspect import signature
+from typing import Annotated, Any
+from fastmcp.exceptions import AuthorizationError
+from fastmcp.prompts import Prompt
+from fastmcp.resources import Resource, ResourceTemplate
+from fastmcp.server.providers.local_provider import LocalProvider
+from fastmcp.server.transforms import Visibility
+from fastmcp.server.transforms.search import RegexSearchTransform
+from fastmcp.tools import Tool
+from pydantic import Field
+from ..card_workspace.application.dtos import ProjectCardIndexResponse, ProjectCardListResponse
+from ..card_workspace.domain.value_objects import MAX_COMMENT_LIMIT, MAX_SECTION_LIMIT
+from ..middlewares.McpAuthMiddleware import mcp_auth_context
+from .Annotations import ToolAnnotationTransform, tool_annotations
+from .Apps import WORK_PLAN_TOOL_META, add_native_app_resources
+from .BoardOutputs import BOARD_OUTPUTS
+from .BotOutputs import BOT_OUTPUTS
+from .CardLinks import with_card_links
+from .ContentOutputs import CONTENT_OUTPUTS
+from .CreationOutputs import CREATION_OUTPUTS
+from .GraphOutputs import GRAPH_OUTPUTS
+from .NotificationOutputs import NOTIFICATION_OUTPUTS
+from .Outputs import with_typed_output
+from .ProjectOutputs import PROJECT_OUTPUTS
+from .ProjectDiscovery import with_project_discovery
+from .ResourceOutputs import RESOURCE_OUTPUTS
+from .Tool import McpTool
+from .ToolGroupMiddleware import ToolGroupMiddleware
+from .WorkOutputs import WORK_OUTPUTS
+
+
+# Existing canonical entry points; profile selection never grants permission.
+# Optional employee directory commands remain searchable and directly callable,
+# without imposing an organization policy on the default work catalog.
+AGENT_CORE_TOOLS = frozenset(
+    {
+        "diagnose_connection",
+        "get_projects",
+        "get_project_identity",
+        "create_project",
+        "list_project_cards",
+        "search_project_cards",
+        "get_card_bundle",
+        "get_card_delta",
+        "preview_card_work_plan",
+        "create_card",
+        "update_card",
+        "change_card_checklist",
+        "change_card_comment",
+        "patch_card_description",
+        "assign_card_to_me",
+        "apply_card_graph_patch",
+        "record_card_verification_evidence",
+        "submit_card_execution_review",
+        "get_card_execution_receipts",
+        "change_card_checkitem_work",
+        "list_my_work",
+        "list_project_members",
+        "search_project_people",
+        "add_project_people",
+        "list_project_wikis",
+        "read_wiki_content",
+        "read_wiki",
+        "update_wiki",
+        "patch_wiki_content",
+        "create_project_wiki",
+        "get_unread_notifications",
+        "mark_notification_read",
+        "mark_notifications_read",
+        "read_card_attachment",
+        "read_card_document",
+        "search_card_document",
+        "read_card_images",
+        "get_project_label_catalog",
+        "get_shared_user_activities",
+        "update_card_comment",
+        "create_card_checklist",
+        "create_card_checkitem",
+        "update_card_checkitem",
+    }
+)
+
+
+def create_native_tool(name, metadata, wrap_tool, *, modern_annotations: bool = True) -> Tool:
+    """Build the same authorized native command for core and explicit extensions."""
+    handler = wrap_tool(name, metadata["handler"])
+    if not modern_annotations and metadata.get("modern_only"):
+        handler = without_modern_parameters(handler, metadata["modern_only"])
+    if modern_annotations:
+        handler = with_read_page_bounds(name, handler)
+        if name == "get_card_bundle":
+            handler = with_card_links(handler)
+        if name == "get_projects":
+            handler = with_project_discovery(handler)
+        handler = with_typed_output(
+            name,
+            handler,
+            (ProjectCardIndexResponse if name == "list_project_cards" else None)
+            or WORK_OUTPUTS.get(name)
+            or CONTENT_OUTPUTS.get(name)
+            or BOT_OUTPUTS.get(name)
+            or BOARD_OUTPUTS.get(name)
+            or RESOURCE_OUTPUTS.get(name)
+            or CREATION_OUTPUTS.get(name)
+            or GRAPH_OUTPUTS.get(name)
+            or NOTIFICATION_OUTPUTS.get(name)
+            or PROJECT_OUTPUTS.get(name),
+        )
+    elif name == "list_project_cards":
+        handler = with_legacy_card_list(handler)
+    return Tool.from_function(
+        handler,
+        name=name,
+        description=metadata["description"],
+        annotations=tool_annotations(name) if modern_annotations else None,
+        meta=WORK_PLAN_TOOL_META if modern_annotations and name == "preview_card_work_plan" else None,
+    )
+
+
+def create_native_domain_provider(
+    wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]],
+    *,
+    modern_annotations: bool = False,
+) -> LocalProvider:
+    """Adapt the native registry once; every profile uses identical domain wrappers."""
+    provider = LocalProvider(on_duplicate="error")
+    for name, metadata in McpTool.get_tools().items():
+        provider.add_tool(create_native_tool(name, metadata, wrap_tool, modern_annotations=modern_annotations))
+    if modern_annotations and McpTool.get_tool("preview_card_work_plan"):
+        add_native_app_resources(provider)
+    provider.add_resource(
+        Resource.from_function(_workflow_policy, uri="langboard://policy/workflow", name="workflow_policy")
+    )
+    provider.add_prompt(Prompt.from_function(_workflow_policy_prompt, name="apply_workflow_policy"))
+    metadata = McpTool.get_tool("get_card_bundle")
+    if metadata:
+        read_bundle = wrap_tool("get_card_bundle", metadata["handler"])
+
+        async def card_workflow(project_uid: str, card_uid: str) -> str:
+            """Read current card workflow using the same grants and domain query as the tool."""
+            auth = mcp_auth_context.get()
+            if (
+                not auth or auth.get("transport") != "oauth"
+            ) and "get_card_bundle" not in ToolGroupMiddleware._allowed_tools():
+                raise AuthorizationError("get_card_bundle is not allowed")
+            result = await read_bundle(project_uid=project_uid, card_uid=card_uid, include=[])
+            data = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+            card = data.get("card")
+            if not card:
+                raise ValueError("Card not found")
+            return json.dumps(
+                {"workflow": card.get("workflow"), "work_state": card.get("work_state")},
+                ensure_ascii=False,
+            )
+
+        provider.add_resource(
+            ResourceTemplate.from_function(
+                card_workflow,
+                uri_template="langboard://projects/{project_uid}/cards/{card_uid}/workflow",
+                name="card_workflow",
+                mime_type="application/json",
+            )
+        )
+
+        async def apply_card_workflow(project_uid: str, card_uid: str) -> str:
+            """Apply current server workflow and work state without changing the card."""
+            return _workflow_policy() + "\nCurrent server state:\n" + await card_workflow(project_uid, card_uid)
+
+        provider.add_prompt(Prompt.from_function(apply_card_workflow, name="apply_card_workflow"))
+    return provider
+
+
+def create_compatibility_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Preserve the complete legacy catalog without visibility changes."""
+    return create_native_domain_provider(wrap_tool)
+
+
+def create_native_agent_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Default native discovery pins core actions and searches every other command."""
+    provider = create_native_domain_provider(wrap_tool, modern_annotations=True)
+    provider.add_transform(
+        RegexSearchTransform(
+            max_results=5,
+            always_visible=sorted(AGENT_CORE_TOOLS),
+            search_tool_name="search_raw_tools",
+            call_tool_name="call_raw_tool",
+        )
+    )
+    provider.add_transform(ToolAnnotationTransform())
+    return provider
+
+
+def create_agent_core_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Expose canonical entry points using FastMCP's native visibility transform."""
+    provider = create_native_domain_provider(wrap_tool, modern_annotations=True)
+    provider.add_transform(Visibility(False, components={"tool"}))
+    provider.add_transform(Visibility(True, names=set(AGENT_CORE_TOOLS), components={"tool"}))
+    return provider
+
+
+def create_raw_primitive_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Keep primitive and compatibility actions outside the compact core catalog."""
+    provider = create_native_domain_provider(wrap_tool, modern_annotations=True)
+    provider.add_transform(Visibility(False, names=set(AGENT_CORE_TOOLS), components={"tool"}))
+    return provider
+
+
+def _workflow_policy() -> str:
+    """Return server-owned workflow policy shared by MCP clients."""
+    return (
+        "Langboard workflow policy\n"
+        "1. Treat server workflow_stage, column_description, workflow_stage_description, "
+        "workflow_guidance, and workflow_stage_status as authoritative.\n"
+        "2. For a project, read get_project_identity before choosing a column or stage.\n"
+        "3. For a card, read get_card_bundle workflow and work_state before claiming, moving, "
+        "completing, or reporting readiness.\n"
+        "4. Preserve review, verification, dependency, and blocker gates; checklist progress "
+        "does not prove approval.\n"
+        "5. Never infer a workflow stage from a localized column name or client defaults."
+    )
+
+
+def _workflow_policy_prompt() -> str:
+    """Tell an agent how to apply the server-owned workflow policy."""
+    return _workflow_policy()
+
+
+def with_legacy_card_list(handler):
+    """Retain the legacy list schema and repeated column names on compatibility transport."""
+
+    @wraps(handler)
+    async def legacy(**kwargs):
+        result = await handler(**kwargs)
+        payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else dict(result)
+        columns = payload.pop("columns", {})
+        for card in payload["cards"]["items"]:
+            column = columns.get(card.get("project_column_uid"))
+            if column is not None:
+                card["project_column_name"] = column["name"]
+        return ProjectCardListResponse.model_validate(payload)
+
+    return legacy
+
+
+def without_modern_parameters(handler, names):
+    """Preserve compatibility input schemas while modern profiles evolve."""
+
+    @wraps(handler)
+    async def legacy(**kwargs):
+        if set(kwargs) & set(names):
+            raise ValueError("Parameter requires modern MCP")
+        return await handler(**kwargs)
+
+    sig = signature(handler)
+    legacy.__signature__ = sig.replace(parameters=[param for key, param in sig.parameters.items() if key not in names])
+    return legacy
+
+
+READ_PAGE_BOUNDS = {
+    "get_card_bundle": {"comments_limit": MAX_COMMENT_LIMIT, "section_limit": MAX_SECTION_LIMIT},
+    "list_project_cards": {"limit": 25},
+    "get_public_card_metadata": {"limit": 25},
+    "list_project_wikis": {"limit": 50},
+    "list_wiki_revisions": {"limit": 50},
+    "read_wiki_content": {"limit": 16000},
+    "read_wiki_revision": {"limit": 16000},
+    "get_shared_user_activities": {"limit": 50, "max_chars": 8000},
+}
+
+
+def with_read_page_bounds(name, handler):
+    """Expose existing native page limits only on modern transports."""
+    bounds = READ_PAGE_BOUNDS.get(name)
+    if not bounds:
+        return handler
+
+    @wraps(handler)
+    async def bounded(**kwargs):
+        return await handler(**kwargs)
+
+    current = signature(handler)
+    bounded.__signature__ = current.replace(
+        parameters=[
+            parameter.replace(annotation=Annotated[int, Field(ge=1, le=bounds[parameter.name], strict=True)])
+            if parameter.name in bounds
+            else parameter
+            for parameter in current.parameters.values()
+        ]
+    )
+    bounded.__annotations__ = dict(handler.__annotations__)
+    for parameter in bounded.__signature__.parameters.values():
+        if parameter.name in bounds:
+            bounded.__annotations__[parameter.name] = parameter.annotation
+    return bounded

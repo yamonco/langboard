@@ -9,10 +9,15 @@ from langboard.card_workspace.application.queries import (
     get_card_bundle,
     get_project_identity,
     get_public_card_metadata,
-    get_public_card_metadata_by_key,
     list_project_cards,
 )
-from langboard.card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
+from langboard.card_workspace.domain import (
+    CardBundleInclude,
+    CardBundleSection,
+    CommentPage,
+    SectionCursor,
+    SectionPage,
+)
 
 
 class FakeQueryPort:
@@ -29,7 +34,11 @@ class FakeQueryPort:
                 "updated_at": "2026-08-04T11:00:00+09:00",
                 "project_column_uid": "column-1",
                 "project_column_name": "Backlog",
+                "workflow_stage": None,
                 "member_uids": ["assigned"],
+                "active_workers": [
+                    {"user_uid": "unassigned", "status": "started", "checkitems": [{"uid": "ci1", "title": "Work"}]}
+                ],
                 "project_members": [
                     {"uid": "assigned", "username": "member", "email": "member@example.com"},
                     {"uid": "unassigned", "username": "directory", "email": "directory@example.com"},
@@ -61,6 +70,7 @@ class FakeQueryPort:
             },
             bot_scopes=[{"uid": "s1", "bot_uid": "b1", "prompt": "internal prompt"}],
             bot_schedules=[{"uid": "bs1", "bot_uid": "b1", "status": "active", "token": "secret"}],
+            content_blocks=[{"block_uid": f"b{i}", "order": i} for i in range(30)],
         )
 
     def get_card_bundle_source(
@@ -82,7 +92,10 @@ class FakeQueryPort:
                 "content": "y" * 9_000 if i == 0 else f"Comment {i}",
                 "created_at": f"2026-08-04T10:0{i}:00+09:00",
                 "user": {"uid": "assigned", "email": "member@example.com"},
-                "reactions": {"secret": ["u1"]},
+                "reactions": {
+                    "thumbs-up": ["u1", "u2"],
+                    "secret": ["must-not-leak"],
+                },
             }
             for i in range(limit)
         ]
@@ -94,6 +107,9 @@ class FakeQueryPort:
         limit: int,
         before_updated_at: str | None,
         before_card_uid: str | None,
+        *,
+        include_closed: bool = False,
+        workflow_stages: list[str] | None = None,
     ) -> ProjectCardPageSource:
         return ProjectCardPageSource(
             [
@@ -134,14 +150,15 @@ class FakeQueryPort:
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         return self.source.metadata
 
-    def get_public_card_metadata_by_key(
-        self,
-        project_uid: str,
-        card_uid: str,
-        key: str,
-    ) -> dict[str, str] | None:
-        value = self.source.metadata.get(key)
-        return {"key": key, "value": value} if value is not None else None
+
+def test_card_workflow_stage_uses_explicit_mapping_not_column_name() -> None:
+    port = FakeQueryPort()
+    port.source.details["project_column_name"] = "Done"
+    port.source.details["workflow_stage"] = "review"
+    response = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage())
+    assert response.card is not None
+    assert response.card.workflow["project_column_name"] == "Done"
+    assert response.card.workflow["workflow_stage"] == "review"
 
 
 def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
@@ -166,11 +183,14 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     )
 
     assert response.card is not None
+    assert response.card.workflow["workflow_stage"] is None
     assert response.card.people.total_count == 1
     assert response.card.people.items == [{"uid": "assigned", "username": "member"}]
+    assert response.card.people.active_workers[0]["user_uid"] == "unassigned"
     assert len(response.card.classification.labels.items) == 10
     assert response.card.classification.labels.next_cursor
     assert response.card.core["description"]["total_chars"] == 8_050
+    assert len(response.card.core["description"]["revision"]) == 64
     assert response.card.core["description"]["next_cursor"]
     checklist = response.card.checklists.items[0]
     assert len(checklist["checkitems"]) == 25
@@ -179,6 +199,8 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     assert response.card.comments.items[0]["content_total_chars"] == 9_000
     assert len(response.card.comments.items[0]["content"]) == 8_000
     assert response.card.comments.items[0]["content_truncated"] is True
+    assert response.card.comments.items[0]["reactions"] == {"thumbs-up": ["u1", "u2"]}
+    assert response.card.comments.items[0]["reaction_counts"] == {"thumbs-up": 2}
     attachment = response.card.attachments.items[0]  # type: ignore[union-attr]
     assert attachment["user"] == {"uid": "assigned", "username": "member"}
     assert "storage_key" not in attachment
@@ -204,6 +226,34 @@ def test_project_identity_exposes_only_bounded_move_destinations() -> None:
     assert response.columns.next_cursor is None
 
 
+def test_checkitem_projection_exposes_only_cardified_card_identity() -> None:
+    """Cardification can be read back without leaking the generated card body."""
+
+    port = FakeQueryPort()
+    port.source.checklists[0]["checkitems"][0]["cardified_card"] = {
+        "uid": "promoted-card",
+        "title": "Promoted task",
+        "description": "must-not-leak",
+        "created_at": "2026-08-04T12:00:00+09:00",
+    }
+
+    response = get_card_bundle(
+        port,
+        "p1",
+        "c1",
+        CommentPage(),
+        SectionPage(),
+        [CardBundleInclude.Checklists],
+    )
+
+    assert response.card is not None
+    assert response.card.checklists.items[0]["checkitems"][0]["cardified_card"] == {
+        "uid": "promoted-card",
+        "title": "Promoted task",
+        "created_at": "2026-08-04T12:00:00+09:00",
+    }
+
+
 def test_section_continuation_rejects_changed_projection() -> None:
     """Offset cursors fail closed if the native section changed between calls."""
 
@@ -226,6 +276,26 @@ def test_section_continuation_rejects_changed_projection() -> None:
         get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=10, cursor=cursor))
 
 
+def test_content_blocks_share_the_bundle_source_and_page_independently() -> None:
+    port = FakeQueryPort()
+    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=25), [CardBundleInclude.ContentBlocks])
+
+    assert first.card is not None
+    assert first.card.content_blocks is not None
+    assert [block["block_uid"] for block in first.card.content_blocks.items] == [f"b{i}" for i in range(25)]
+    cursor = first.card.content_blocks.next_cursor
+    assert cursor and SectionCursor.decode(cursor).section == CardBundleSection.ContentBlocks
+    assert port.requested_sections == [frozenset({CardBundleSection.ContentBlocks.value})]
+
+    second = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=25, cursor=cursor))
+
+    assert second.continuation is not None
+    assert second.continuation.section == CardBundleSection.ContentBlocks
+    assert [block["block_uid"] for block in second.continuation.page.items] == [f"b{i}" for i in range(25, 30)]
+    assert second.continuation.page.next_cursor is None
+    assert port.requested_sections[-1] == frozenset({CardBundleSection.ContentBlocks.value})
+
+
 def test_optional_native_sections_are_requested_lazily() -> None:
     """Default and comment reads fetch no unrelated native sections."""
 
@@ -243,6 +313,7 @@ def test_optional_native_sections_are_requested_lazily() -> None:
         "workflow": {
             "project_column_uid": "column-1",
             "project_column_name": "Backlog",
+            "workflow_stage": None,
         },
     }
 
@@ -319,18 +390,239 @@ def test_public_metadata_exposes_opaque_continuation() -> None:
     assert second.items[0]["key"] != first.items[0]["key"]
 
 
-def test_public_metadata_key_uses_the_single_record_port() -> None:
-    """A key lookup does not materialize the card's metadata collection."""
+def test_project_list_forwards_completion_and_stage_filters_before_paging():
+    from unittest.mock import Mock
 
-    class KeyOnlyQueryPort(FakeQueryPort):
-        def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
-            raise AssertionError("single-key lookup loaded the metadata collection")
+    port = FakeQueryPort()
+    port.get_project_card_page = Mock(return_value=ProjectCardPageSource([], 0, None))
+    list_project_cards(port, "p1")
+    assert port.get_project_card_page.call_args.kwargs == {"include_closed": False, "workflow_stages": None}
+    list_project_cards(port, "p1", include_closed=True, workflow_stages=["released"])
+    assert port.get_project_card_page.call_args.kwargs == {"include_closed": True, "workflow_stages": ["released"]}
+    with pytest.raises(ValueError, match="workflow_stages"):
+        list_project_cards(port, "p1", workflow_stages=[""])
 
-    result = get_public_card_metadata_by_key(KeyOnlyQueryPort(), "p1", "c1", "public.topic")
 
-    assert result == {
-        "key": "public.topic",
-        "value": "delivery",
-        "total_chars": 8,
-        "truncated": False,
+def test_project_identity_rejects_private_or_unrecognized_actor_fields() -> None:
+    port = FakeQueryPort()
+    original = port.get_project_identity
+    port.get_project_identity = lambda uid: {
+        **original(uid),
+        "authenticated_actor": {"uid": "actor", "type": "user", "email": "private@example.invalid"},
     }
+    with pytest.raises(ValueError):
+        get_project_identity(port, "p1")
+    port.get_project_identity = lambda uid: {**original(uid), "authenticated_actor": {"uid": "actor", "type": "admin"}}
+    with pytest.raises(ValueError):
+        get_project_identity(port, "p1")
+
+
+def test_project_list_compacts_repeated_workflow_without_inventing_completion():
+    from unittest.mock import Mock
+
+    port = FakeQueryPort()
+    state = {
+        "workflow_stage": "active",
+        "completed": False,
+        "verification_state": "unverified",
+        "execution_state": None,
+        "reasons": [{"code": "unknown", "message": "x" * 4000}],
+        "state_inconsistency": [{"code": "open_items", "message": "y" * 4000}],
+    }
+    definition = {"key": "active", "entry_effects": ["stop_running_timers"]}
+    items = [{"uid": str(i), "project_column_uid": "column", "work_state": state} for i in range(25)]
+    port.get_project_card_page = Mock(return_value=ProjectCardPageSource(items, 25, None, {"active": definition}))
+    response = list_project_cards(port, "p1", limit=25)
+    assert response.workflow_stages == {"active": definition}
+    assert len(response.cards.items) == 25
+    for item in response.cards.items:
+        assert item["work_state"]["completed"] is False
+        assert item["work_state"]["execution_state"] is None
+        assert item["work_state"]["reason_codes"] == ["unknown"]
+        assert item["work_state"]["inconsistency_codes"] == ["open_items"]
+        assert "entry_effects" not in item["work_state"]
+    assert len(json.dumps(response.model_dump())) < len(json.dumps(items)) / 10
+    items[0]["work_state"] = {"workflow_stage": None, "completed": None}
+    assert list_project_cards(port, "p1").cards.items[0]["work_state"]["completed"] is None
+
+
+def test_project_list_column_guidance_is_not_repeated_per_card():
+    from unittest.mock import Mock
+
+    port = FakeQueryPort()
+    guidance = {
+        "column": {
+            "name": "Doing",
+            "workflow_stage": None,
+            "workflow_index": "unclassified | Doing",
+            "workflow_guidance": "Only once",
+        }
+    }
+    items = [{"uid": str(i), "project_column_uid": "column", "project_column_name": "Doing"} for i in range(20)]
+    port.get_project_card_page = Mock(
+        return_value=ProjectCardPageSource(items, 20, ("2026-01-01T00:00:00Z", "last"), {}, guidance)
+    )
+    response = list_project_cards(port, "p1", limit=20)
+    assert response.columns == guidance
+    assert response.cards.next_cursor
+    assert len(response.cards.items) == 20
+    assert response.model_dump_json().count("Only once") == 1
+    assert all(
+        item["project_column_uid"] == "column" and "project_column_name" not in item for item in response.cards.items
+    )
+
+
+def test_execute_context_prioritizes_open_acceptance_and_retains_source():
+    port = FakeQueryPort()
+    port.source.checklists[0]["checkitems"] = [
+        {"uid": str(i), "title": f"Acceptance {i}", "is_checked": i < 7} for i in range(8)
+    ]
+    bundle = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=1), profile="execute")
+    assert [item["uid"] for item in bundle.card.checklists.items[0]["checkitems"]] == ["7"]
+    assert "open_checkitems" in port.requested_sections[-1]
+    assert len(port.source.checklists[0]["checkitems"]) == 8
+    assert bundle.card.comments is None and bundle.card.attachments is None
+    context = bundle.card.core["context"]
+    assert context["approval"] == "not_granted_by_read"
+    assert any(item["field"] == "execution_contract" for item in context["unavailable_fields"])
+    assert bundle.card.core["description"]["next_cursor"]
+    assert context["truncated"] is True
+    assert context["required_action"] == "read_continuations"
+    assert context["continuations"][0]["cursor"] == bundle.card.core["description"]["next_cursor"]
+    assert context["continuation_profile"] == "execute"
+
+
+def test_execute_nested_cursor_retains_profile_and_rejects_full_projection():
+    port = FakeQueryPort()
+    port.source.checklists[0]["checkitems"] = [
+        {"uid": str(i), "title": f"Acceptance {i}", "is_checked": i < 7} for i in range(40)
+    ]
+    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="execute")
+    checklist = first.card.checklists.items[0]
+    assert checklist["checkitems_total_count"] == 33
+    cursor = checklist["checkitems_next_cursor"]
+    assert cursor
+    page = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(cursor=cursor), profile="execute")
+    assert all(int(item["uid"]) >= 7 for item in page.continuation.page.items)
+    with pytest.raises(ValueError):
+        get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(cursor=cursor), profile="full")
+
+
+def test_review_context_excludes_stale_verification_and_history():
+    port = FakeQueryPort()
+    port.source.details["work_state"] = {"verification_state": "stale", "verification": {"evidence": ["old"]}}
+    result = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="review")
+    assert result.card.core["context"]["current_verification"] is None
+    assert result.card.core["context"]["verification_state"] == "stale"
+    assert "description" not in result.card.core
+    assert result.card.comments is None
+    assert result.card.attachments is None
+
+
+def test_full_context_matches_explicit_sections_and_triage_does_not_invent_decisions():
+    port = FakeQueryPort()
+    full = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="full")
+    explicit = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), list(CardBundleInclude))
+    actual = full.model_dump()
+    actual["card"]["core"].pop("context")
+    assert actual == explicit.model_dump()
+    triage = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="triage")
+    assert triage.card.classification is not None and triage.card.comments is None
+    assert any(field["field"] == "proposed_decision" for field in triage.card.core["context"]["unavailable_fields"])
+
+
+def test_profile_preserves_workflow_constraints_and_exposes_nested_continuations():
+    port = FakeQueryPort()
+    port.source.details["description"] = "Short request"
+    guidance = "constraint " * 2000
+    port.source.details["workflow_guidance"] = guidance
+    result = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="execute")
+    assert result.card.workflow["workflow_guidance"] == guidance
+    context = result.card.core["context"]
+    assert context["truncated"]
+    assert any(item["section"].startswith("checklists.items[0]") for item in context["continuations"])
+    assert all(item["cursor"] for item in context["continuations"])
+
+
+def test_profile_distinguishes_permission_denial_from_selection_omission():
+    from dataclasses import replace
+
+    port = FakeQueryPort()
+    port.source = replace(
+        port.source, omitted_sections=[{"section": "automation.bot_scopes", "reason": "permission_denied"}]
+    )
+    result = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="full")
+    assert result.card.core["context"]["omitted_sections"] == port.source.omitted_sections
+
+
+def test_missing_card_is_a_distinct_domain_query_outcome():
+    from types import SimpleNamespace
+    from langboard.card_workspace.domain import CardUnavailableError
+
+    port = SimpleNamespace(get_card_bundle_source=lambda *args: None)
+    with pytest.raises(CardUnavailableError, match="Card not found in project"):
+        get_card_bundle(port, "project", "missing", CommentPage(), SectionPage())
+
+
+def test_nested_continuation_projects_each_source_item_once(monkeypatch):
+    """A nested continuation needs one complete revision, not a second checklist preview."""
+    from langboard.card_workspace.application import projections
+
+    port = FakeQueryPort()
+    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), [CardBundleInclude.Checklists])
+    cursor = first.card.checklists.items[0]["checkitems_next_cursor"]
+    item_calls = 0
+    revision_calls = 0
+    original_item = projections.public_checkitem
+    original_revision = projections.projection_revision
+
+    def counted_item(item):
+        nonlocal item_calls
+        item_calls += 1
+        return original_item(item)
+
+    def counted_revision(items):
+        nonlocal revision_calls
+        revision_calls += 1
+        return original_revision(items)
+
+    monkeypatch.setattr(projections, "public_checkitem", counted_item)
+    monkeypatch.setattr(projections, "projection_revision", counted_revision)
+    response = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(cursor=cursor))
+    assert item_calls == 30
+    assert revision_calls == 1
+    assert [item["uid"] for item in response.continuation.page.items] == [f"ci{i}" for i in range(25, 30)]
+    assert response.continuation.page.next_cursor is None
+    assert all("private" not in item for item in response.continuation.page.items)
+
+    # Changes outside the returned page must still invalidate its full-source revision.
+    port.source.checklists[0]["checkitems"][0]["title"] = "Changed before this page"
+    with pytest.raises(ValueError, match="stale"):
+        get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(cursor=cursor))
+
+
+def test_label_continuation_does_not_project_unrequested_sections(monkeypatch):
+    """No checklist hashing or unrelated projection should occur on a label continuation."""
+    from langboard.card_workspace.application import queries
+
+    port = FakeQueryPort()
+    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=10), [CardBundleInclude.Classification])
+    cursor = first.card.classification.labels.next_cursor
+
+    def unrelated(*args, **kwargs):
+        raise AssertionError("Unrequested section was projected")
+
+    for name in (
+        "assigned_people",
+        "public_relationship",
+        "public_checklist",
+        "public_attachment",
+        "public_metadata",
+        "public_bot_scope",
+        "public_bot_schedule",
+    ):
+        monkeypatch.setattr(queries, name, unrelated)
+    response = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=10, cursor=cursor))
+    assert [item["uid"] for item in response.continuation.page.items] == [f"l{i}" for i in range(10, 20)]
+    assert response.continuation.page.total_count == 30
+    assert response.continuation.page.next_cursor

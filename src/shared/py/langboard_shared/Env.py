@@ -87,6 +87,38 @@ class Env:
         return [origin.strip().rstrip("/") for origin in origins.split(",") if origin.strip()]
 
     @property
+    def MCP_OAUTH_ENABLED(self) -> bool:
+        return self.__get_from_cache("MCP_OAUTH_ENABLED", "false").lower() == "true"
+
+    @property
+    def MCP_OAUTH_BASE_URL(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_BASE_URL", "")
+
+    @property
+    def MCP_OAUTH_DISCOVERY_URL(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_DISCOVERY_URL", "")
+
+    @property
+    def MCP_OAUTH_CLIENT_ID(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_CLIENT_ID", "")
+
+    @property
+    def MCP_OAUTH_CLIENT_SECRET(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_CLIENT_SECRET", "")
+
+    @property
+    def MCP_OAUTH_SIGNING_KEY(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_SIGNING_KEY", "")
+
+    @property
+    def MCP_OAUTH_SCOPES(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_SCOPES", "openid profile mcp:access")
+
+    @property
+    def MCP_OAUTH_PROMPT(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_PROMPT", "")
+
+    @property
     def UI_PORT(self) -> int:
         return int(self.__get_from_cache("UI_PORT", "5173"))
 
@@ -338,6 +370,22 @@ class Env:
         return int(self.__get_from_cache("OIDC_CLOCK_SKEW_SEC", "60"))
 
     @property
+    def OIDC_BEARER_ENABLED(self) -> bool:
+        return self.__get_from_cache("OIDC_BEARER_ENABLED", "false").lower() == "true"
+
+    @property
+    def OIDC_RESOURCE_AUDIENCE(self) -> str:
+        return self.__get_from_cache("OIDC_RESOURCE_AUDIENCE", "")
+
+    @property
+    def OIDC_AUTO_LINK_BY_EMAIL(self) -> bool:
+        return self.__get_from_cache("OIDC_AUTO_LINK_BY_EMAIL", "false").lower() == "true"
+
+    @property
+    def OIDC_AUTO_PROVISION(self) -> bool:
+        return self.__get_from_cache("OIDC_AUTO_PROVISION", "true").lower() == "true"
+
+    @property
     def SCIM_ENABLED(self) -> bool:
         return self.__get_from_cache("SCIM_ENABLED", "false").lower() == "true"
 
@@ -348,6 +396,15 @@ class Env:
     @property
     def SCIM_ISSUER(self) -> str:
         return self.__get_from_cache("SCIM_ISSUER", "")
+
+    @property
+    def MCP_EMPLOYEE_GROUP_IDS(self) -> list[str]:
+        """Explicit SCIM group external IDs whose members are employees.
+
+        Empty means the deployment has no employee classification policy.
+        """
+        raw = self.__get_from_cache("MCP_EMPLOYEE_GROUP_IDS", "")
+        return list(dict.fromkeys(value.strip() for value in raw.split(",") if value.strip()))
 
     @property
     def REFRESH_TOKEN_NAME(self) -> str:

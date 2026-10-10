@@ -1,3 +1,5 @@
+import { flipDraftKey, useCardFlipDraftStore } from "./CardFlipDraftStore";
+import BoardCardInlineDeadline from "@/pages/BoardPage/components/card/BoardCardInlineDeadline";
 import Button from "@/components/base/Button";
 import { useCollaborativeText } from "@/components/Collaborative/useCollaborativeText";
 import DateTimePicker from "@/components/base/DateTimePicker";
@@ -6,12 +8,19 @@ import IconComponent from "@/components/base/IconComponent";
 import Skeleton from "@/components/base/Skeleton";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
+import { useBoard } from "@/core/providers/BoardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useBoardCardSectionSaveActions } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
 import { EEditorCollaborationType } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 import { memo, type PointerEvent, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+    getDeadlinePressureLevel,
+    getOverdueDays,
+    getUpcomingDeadlineDays,
+    isDeadlineWarningSuppressed,
+} from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 
 export function SkeletonBoardCardDeadline() {
     return <Skeleton h={{ initial: "8", lg: "10" }} className="w-1/3" />;
@@ -41,13 +50,31 @@ const parseDeadline = (value: string) => {
     return nextValue;
 };
 
-const BoardCardDeadline = memo(() => {
-    const { card, hasRoleAction, isCardEditing } = useBoardCard();
-    const [t] = useTranslation();
+const BoardCardDeadlineDraft = memo(() => {
+    const { card, currentUser, projectUID, hasRoleAction, isCardEditing } = useBoardCard();
+    const [t, i18n] = useTranslation();
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const deadline = card.useField("deadline_at");
-    const [isEditing, setIsEditing] = useState(false);
-    const [draftDeadline, setDraftDeadline] = useState<Date | undefined>(deadline);
+    const archivedAt = card.useField("archived_at");
+    const checklistCompletedCount = card.useField("checklist_completed_count") ?? 0;
+    const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
+    const { deadlineClock } = useBoard();
+    const completed = card.useField("completed") ?? false;
+    const workState = card.useField("work_state");
+    const isFinished = isDeadlineWarningSuppressed({
+        archivedAt,
+        checklist: { completed: checklistCompletedCount, total: checklistTotalCount },
+        completed,
+        workState,
+    });
+    const isOverdue = getDeadlinePressureLevel({ deadlineAt: deadline, isCompleted: isFinished, now: deadlineClock }) === "overdue";
+    const overdueDays = getOverdueDays({ deadlineAt: deadline, now: deadlineClock });
+    const upcomingDays = getUpcomingDeadlineDays({ deadlineAt: deadline, now: deadlineClock, isCompleted: isFinished });
+    const restoredDraft = useCardFlipDraftStore.getState().drafts[flipDraftKey(currentUser.uid, projectUID, card.uid)];
+    const [isEditing, setIsEditing] = useState(() => restoredDraft?.deadline_at !== undefined);
+    const [draftDeadline, setDraftDeadline] = useState<Date | undefined>(() =>
+        restoredDraft?.deadline_at !== undefined ? (restoredDraft.deadline_at ? new Date(restoredDraft.deadline_at) : undefined) : deadline
+    );
     const canStartEditing = hasRoleAction(ProjectRole.EAction.CardUpdate) && isCardEditing;
     const editable = canStartEditing && isEditing;
 
@@ -67,7 +94,7 @@ const BoardCardDeadline = memo(() => {
         updateMeta: updateCollaborativeDeadlineMeta,
         updateValue: updateCollaborativeDeadline,
     } = useCollaborativeText({
-        defaultValue: serializeDeadline(deadline),
+        defaultValue: restoredDraft?.deadline_at ?? serializeDeadline(deadline),
         disabled: !editable,
         collaborationType: EEditorCollaborationType.Card,
         uid: card.uid,
@@ -100,11 +127,10 @@ const BoardCardDeadline = memo(() => {
             e.stopPropagation();
 
             requestAnimationFrame(() => {
-                setDraftDeadline(deadline);
                 setIsEditing(true);
             });
         },
-        [canStartEditing, deadline]
+        [canStartEditing]
     );
 
     const handleClearDeadline = useCallback(() => {
@@ -162,11 +188,24 @@ const BoardCardDeadline = memo(() => {
                         "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors",
                         "h-8 px-4 py-2 lg:h-10",
                         deadline ? "bg-primary text-primary-foreground shadow" : "border border-input bg-background shadow-sm",
+                        isOverdue && "bg-destructive/15 text-destructive ring-1 ring-destructive/50",
                         canStartEditing && "cursor-pointer hover:opacity-90"
                     )}
                     onPointerDown={handleStartEditing}
                 >
                     {deadline ? Utils.String.formatDateLocale(deadline) : t("card.No deadline")}
+                    {isOverdue && (
+                        <span className="font-semibold">
+                            {overdueDays > 0
+                                ? t("card.Overdue by {{count}} day", { count: overdueDays, formatParams: { count: { lng: i18n.language } } })
+                                : t("card.Overdue")}
+                        </span>
+                    )}
+                    {upcomingDays !== null && (
+                        <span className="font-semibold">
+                            {upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: upcomingDays, lng: i18n.language })}
+                        </span>
+                    )}
                 </span>
             ) : (
                 <Flex items="center">
@@ -199,6 +238,9 @@ const BoardCardDeadline = memo(() => {
                     />
                     {draftDeadline && (
                         <Button
+                            type="button"
+                            title={t("card.Remove deadline")}
+                            aria-label={t("card.Remove deadline")}
                             variant="default"
                             className="h-8 gap-2 rounded-l-none border-l border-l-secondary/70 px-2 lg:h-10"
                             onClick={handleClearDeadline}
@@ -211,6 +253,11 @@ const BoardCardDeadline = memo(() => {
             )}
         </>
     );
+});
+
+const BoardCardDeadline = memo(() => {
+    const { isCardEditing } = useBoardCard();
+    return isCardEditing ? <BoardCardDeadlineDraft /> : <BoardCardInlineDeadline />;
 });
 
 export default BoardCardDeadline;

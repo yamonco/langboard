@@ -210,7 +210,9 @@ class BaseDbModel(ABC, BaseModel):
     @model_serializer
     def serialize(self) -> dict[str, Any]:
         serialized = {}
-        for key in self.model_fields:
+        for key, field in type(self).model_fields.items():
+            if field.exclude:
+                continue
             value = getattr(self, key)
             if isinstance(value, datetime):
                 value = value.isoformat()

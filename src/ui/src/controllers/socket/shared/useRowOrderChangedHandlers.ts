@@ -10,6 +10,7 @@ interface IBaseRowOrderChangedResponse {
     column_uid?: string;
     uid: string;
     order: number;
+    updated_at?: string;
 }
 
 interface IInColumnRowOrderChangedResponse extends IBaseRowOrderChangedResponse {
@@ -70,6 +71,9 @@ const useRowOrderChangedHandlers = ({ callback, type, params, topicId }: IUseRow
                 const model = targetModel.getModel(data.uid);
                 if (model) {
                     model.order = data.order;
+                    if (data.updated_at && isModel(model, "ProjectCard")) {
+                        model.updated_at = data.updated_at;
+                    }
                     if (data.move_type === "to_column") {
                         model[targetModelColumn as "uid"] = data.column_uid;
                     }

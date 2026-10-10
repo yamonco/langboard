@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useGetProjectChatMessages from "@/controllers/api/board/chat/useGetProjectChatMessages";
 import Box from "@/components/base/Box";
+import Button from "@/components/base/Button";
 import Loading from "@/components/base/Loading";
 import { useBoardChat } from "@/core/providers/BoardChatProvider";
 import { ChatMessageList } from "@/components/Chat/ChatMessageList";
@@ -15,6 +16,9 @@ function Conversation(): React.JSX.Element {
     const [t] = useTranslation();
     const [isLoaded, setIsLoaded] = useState(false);
     const isFetchingRef = useRef(false);
+    const [historyError, setHistoryError] = useState<string>();
+    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+    const [historyRetry, setHistoryRetry] = useState(0);
     const [isFetched, setIsFetched] = useState(false);
     const { mutateAsync, isLastPage, setIsLastPage, pageRef, lastCurrentDateRef, lastPagesRef } = useGetProjectChatMessages(projectUID);
     const messages = ChatMessageModel.Model.useModels(
@@ -31,16 +35,17 @@ function Conversation(): React.JSX.Element {
         }
 
         isFetchingRef.current = true;
-        await new Promise((resolve) => {
-            setTimeout(async () => {
-                await mutateAsync({ session_uid: currentSessionUID });
-                isFetchingRef.current = false;
-                resolve(null);
-            }, 2500);
-        });
+        try {
+            await mutateAsync({ session_uid: currentSessionUID });
+        } finally {
+            isFetchingRef.current = false;
+        }
     };
 
     useEffect(() => {
+        let active = true;
+        setHistoryError(undefined);
+        setIsHistoryLoading(false);
         if (!currentSessionUID) {
             setIsLastPage(true);
             return;
@@ -56,14 +61,20 @@ function Conversation(): React.JSX.Element {
         }
 
         lastCurrentDateRef.current = new Date();
-        mutateAsync({
-            session_uid: currentSessionUID,
-        });
+        setIsHistoryLoading(true);
+        void mutateAsync({ session_uid: currentSessionUID })
+            .catch(() => {
+                if (active) setHistoryError(currentSessionUID);
+            })
+            .finally(() => {
+                if (active) setIsHistoryLoading(false);
+            });
 
         return () => {
+            active = false;
             pageRef.current = 0;
         };
-    }, [currentSessionUID]);
+    }, [currentSessionUID, historyRetry]);
 
     useEffect(() => {
         if (!conversationRef.current) {
@@ -87,8 +98,13 @@ function Conversation(): React.JSX.Element {
 
             lastChatListHeightRef.current = conversationRef.current!.scrollHeight;
             if (conversationRef.current!.scrollTop <= LOADING_ELEMENT_MIDDLE_Y) {
-                await nextPage();
-                setIsFetched(true);
+                try {
+                    await nextPage();
+                    setIsFetched(true);
+                } catch {
+                    // The API error handler reports the failure; the next scroll can retry.
+                    setIsFetched(false);
+                }
             }
         };
 
@@ -116,23 +132,32 @@ function Conversation(): React.JSX.Element {
 
     return (
         <Box className="min-h-0 flex-1">
-            <ChatMessageList scrollToBottomRef={scrollToBottomRef} isAtBottomRef={isAtBottomRef} ref={conversationRef}>
+            <ChatMessageList
+                className="overscroll-contain bg-background"
+                scrollToBottomRef={scrollToBottomRef}
+                isAtBottomRef={isAtBottomRef}
+                ref={conversationRef}
+            >
+                {historyError === currentSessionUID && historyError && (
+                    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <span>{t("errors.Server has been temporarily disabled. Please try again later.")}</span>
+                        <Button type="button" size="sm" variant="outline" onClick={() => setHistoryRetry((value) => value + 1)}>
+                            {t("common.Retry")}
+                        </Button>
+                    </div>
+                )}
+                {isHistoryLoading && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        {t("common.Loading...")}
+                    </p>
+                )}
                 {!isLastPage && <Loading size="3" variant="secondary" spacing="1" animate="bounce" my="3" />}
                 {sortedMessages.map((chatMessage) => (
                     <ChatMessage key={`chat-bubble-${chatMessage.uid}`} chatMessage={chatMessage} />
                 ))}
-                {!messages.length && (
-                    <Box
-                        mx="auto"
-                        mt="8"
-                        w="full"
-                        rounded="2xl"
-                        border
-                        px="4"
-                        py="6"
-                        className="max-w-md border-dashed border-border bg-card/60 text-center shadow-sm"
-                    >
-                        <h2 className="truncate text-nowrap text-sm font-medium text-accent-foreground">{t("project.Ask anything to {app} AI!")}</h2>
+                {!messages.length && !isHistoryLoading && (!historyError || historyError !== currentSessionUID) && (
+                    <Box mx="auto" mt="8" w="full" px="4" py="6" className="max-w-md text-center text-muted-foreground">
+                        <h2 className="text-sm font-medium leading-relaxed">{t("project.Ask anything to {app} AI!")}</h2>
                     </Box>
                 )}
             </ChatMessageList>

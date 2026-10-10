@@ -1,4 +1,5 @@
 from langboard_shared.core.routing import SocketTopic
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import (
     Bot,
     Card,
@@ -14,25 +15,18 @@ from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import MetadataPublisher
 from langboard_shared.security import RoleFinder
-from ..Constants import MCP_DEFAULT_LIST_LIMIT, TMcpListLimit
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
 @McpTool.add(description="Get card metadata.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_metadata(
-    project_uid: str,
-    card_uid: str,
-    user_or_bot: User | Bot,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+def get_card_metadata(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
+    params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
     if not params:
         raise ValueError("Project or card not found")
 
-    _, card = params
-    metadata = service.metadata.get_all_as_api(CardMetadata, card, as_dict=True, limit=limit)
+    _, card, _ = params
+    metadata = service.metadata.get_all_as_api(CardMetadata, card, as_dict=True)
     return {"metadata": metadata}
 
 
@@ -41,11 +35,11 @@ def get_card_metadata(
 def get_card_metadata_by_key(
     project_uid: str, card_uid: str, key: str, user_or_bot: User | Bot, service: DomainService
 ) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
     if not params:
         raise ValueError("Project or card not found")
 
-    _, card = params
+    _, card, _ = params
     metadata = service.metadata.get_by_key_as_api(CardMetadata, card, key)
     value = metadata.get("value", None) if metadata else None
     return {key: value}
@@ -92,13 +86,7 @@ def delete_card_metadata(
 
 @McpTool.add(description="Get wiki metadata.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_wiki_metadata(
-    project_uid: str,
-    wiki_uid: str,
-    user_or_bot: User | Bot,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
+def get_wiki_metadata(project_uid: str, wiki_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
     params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (ProjectWiki, wiki_uid))
     if not params:
         raise ValueError("Project or wiki not found")
@@ -108,7 +96,7 @@ def get_wiki_metadata(
     if isinstance(user_or_bot, User) and not service.project_wiki.is_assigned(user_or_bot, wiki):
         raise ValueError("User not assigned to wiki")
 
-    metadata = service.metadata.get_all_as_api(ProjectWikiMetadata, wiki, as_dict=True, limit=limit)
+    metadata = service.metadata.get_all_as_api(ProjectWikiMetadata, wiki, as_dict=True)
     return {"metadata": metadata}
 
 

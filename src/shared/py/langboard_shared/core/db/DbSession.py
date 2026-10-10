@@ -1,7 +1,22 @@
 from contextlib import contextmanager
+from contextvars import ContextVar
 from enum import Enum
 from time import sleep
-from typing import Any, ClassVar, Dict, Generic, Iterable, Mapping, Optional, Sequence, TypeVar, Union, cast, overload
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Generic,
+    Iterable,
+    Mapping,
+    Optional,
+    Sequence,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 from pydantic import ValidationError
 from sqlalchemy import CompoundSelect, Delete, Insert, Update, delete, insert, update
 from sqlalchemy import Sequence as SqlSequence
@@ -15,6 +30,7 @@ from sqlalchemy.util import EMPTY_DICT
 from ...Env import Env
 from ..logger import Logger
 from ..types import SafeDateTime, SnowflakeID
+from ..types.SnowflakeID import SnowflakeID as SnowflakeAllocator
 from .DbEngine import DbEngine
 from .Models import BaseDbModel, SoftDeleteModel
 from .queries.Select import SelectOfScalar, SelectRows
@@ -100,10 +116,36 @@ class DbSession:
     def __init__(self, session: Session, readonly: bool):
         self.__session = session
         self.__readonly = readonly
+        self.__after_commit: list[Callable[[], None]] = []
+
+    _atomic_session: ClassVar[ContextVar["DbSession | None"]] = ContextVar("atomic_db_session", default=None)
+
+    @staticmethod
+    def has_active_transaction() -> bool:
+        """Whether this context already owns a host atomic unit."""
+        return DbSession._atomic_session.get() is not None
+
+    @staticmethod
+    @contextmanager
+    def atomic():
+        """Share one write transaction across nested repository operations."""
+        if DbSession._atomic_session.get() is not None:
+            yield DbSession._atomic_session.get()
+            return
+        with DbSession.use(readonly=False) as db:
+            token = DbSession._atomic_session.set(db)
+            try:
+                yield db
+            finally:
+                DbSession._atomic_session.reset(token)
 
     @staticmethod
     @contextmanager
     def use(readonly: bool):
+        active = DbSession._atomic_session.get()
+        if active is not None:
+            yield active
+            return
         session = None
         db = None
         try:
@@ -116,6 +158,11 @@ class DbSession:
                 else:
                     with db_session.begin():
                         yield db
+                    for callback in db.__after_commit:
+                        try:
+                            callback()
+                        except Exception as error:
+                            _logger.exception("After-commit callback failed: %s", type(error).__name__)
         except Exception as e:
             _logger.exception(e)
             raise
@@ -131,6 +178,12 @@ class DbSession:
         self.__session = cast(Session, None)
         self.__readonly = True
 
+    def after_commit(self, callback: Callable[[], None]) -> None:
+        """Run best-effort dispatch only after a successful write commit."""
+        if self.__readonly:
+            raise RuntimeError("Cannot register after-commit callback on a readonly session")
+        self.__after_commit.append(callback)
+
     def insert(self, obj: BaseDbModel):
         """Inserts a new object into the database if it is new.
 
@@ -142,9 +195,29 @@ class DbSession:
         if not obj.is_new():
             return
 
-        obj.id = SnowflakeID()
         obj.updated_at = obj.created_at
-        self.__session.execute(insert(obj.__table__).values(self.__get_model_column_values(obj)))  # type: ignore[attr-defined]
+        dialect = self.__session.get_bind().dialect.name
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as insert_with_conflict
+        elif dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as insert_with_conflict
+        else:
+            obj.id = SnowflakeID()
+            self.__session.execute(insert(obj.__table__).values(self.__get_model_column_values(obj)))
+            return
+        # A hash cannot uniquely assign all processes/replicas. Arbitrate only ID
+        # conflicts in the DB; every other constraint error must propagate.
+        for _ in range(32):
+            obj.id = SnowflakeID()
+            statement = insert_with_conflict(obj.__table__).values(self.__get_model_column_values(obj))
+            result = self.__session.execute(
+                statement.on_conflict_do_nothing(index_elements=[obj.__table__.c.id]).returning(obj.__table__.c.id)
+            )
+            if result.scalar_one_or_none() is not None:
+                return
+            SnowflakeAllocator.advance_after_collision(obj.id)
+        obj.id = SnowflakeID(0)
+        raise RuntimeError("Snowflake ID allocation exhausted; no row inserted")
 
     def insert_all(self, objs: Iterable[BaseDbModel]):
         """Inserts new objects into the database if they are new.
@@ -366,6 +439,8 @@ class DbSession:
                     return self.__fetch_select_records(statement, self.__session, args, self.__readonly)
                 return self.__exec_select_with_new_session(statement, args, self.__readonly)
             except (SQLAlchemyError, IndexError, ValidationError) as e:
+                if DbSession._atomic_session.get() is not None:
+                    raise
                 last_error = e
                 if attempt < retry_attempts - 1:
                     _logger.warning(

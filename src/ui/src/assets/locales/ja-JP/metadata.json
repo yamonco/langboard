@@ -1,0 +1,10 @@
+{
+  "Metadata": "メタデータ",
+  "Key": "キー",
+  "Value": "値",
+  "Add a data": "データを追加",
+  "errors": {
+    "Key is required.": "キーを入力してください。",
+    "Invalid JSON format.": "JSON形式が無効です。"
+  }
+}

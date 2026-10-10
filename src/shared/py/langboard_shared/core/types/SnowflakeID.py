@@ -1,4 +1,4 @@
-from random import getrandbits
+import os
 from threading import Lock
 from time import time
 from typing import Any
@@ -12,6 +12,7 @@ class SnowflakeID(int):
     _lock = Lock()
     _sequence = 0
     _last_timestamp = -1
+    _machine_id = None
 
     def __new__(cls, value: int | str | None = None):
         if value is not None:
@@ -22,23 +23,34 @@ class SnowflakeID(int):
                     value = 0
             return super().__new__(cls, value)
 
-        machine_id = SnowflakeID.__get_machine_id()
-
-        with cls._lock:
-            current_timestamp = cls._current_millis()
-
-            if current_timestamp == cls._last_timestamp:
-                cls._sequence = (cls._sequence + 1) & 0xFFF
-                if cls._sequence == 0:
-                    current_timestamp = cls._wait_next_millis(current_timestamp)
+        with SnowflakeID._lock:
+            current_timestamp = max(cls._current_millis(), SnowflakeID._last_timestamp)
+            if current_timestamp == SnowflakeID._last_timestamp:
+                sequence = (SnowflakeID._sequence + 1) & 0xFFF
+                if sequence == 0:
+                    current_timestamp += 1
             else:
-                cls._sequence = 0
-
-            cls._last_timestamp = current_timestamp
-
-            snowflake_value = ((current_timestamp - SnowflakeID.EPOCH) << 22) | (machine_id << 12) | getrandbits(20)
+                sequence = 0
+            if not 0 <= current_timestamp - SnowflakeID.EPOCH < 2**41:
+                raise OverflowError("Snowflake timestamp is outside the signed 63-bit range")
+            if SnowflakeID._machine_id is None:
+                SnowflakeID._machine_id = SnowflakeID.__get_machine_id()
+            SnowflakeID._sequence = sequence
+            SnowflakeID._last_timestamp = current_timestamp
+            snowflake_value = (
+                ((current_timestamp - SnowflakeID.EPOCH) << 22) | (SnowflakeID._machine_id << 12) | sequence
+            )
 
         return super().__new__(cls, snowflake_value)
+
+    @classmethod
+    def advance_after_collision(cls, value: int) -> None:
+        """Skip a colliding worker's millisecond instead of retrying its used sequence range."""
+        with SnowflakeID._lock:
+            timestamp = (int(value) >> 22) + SnowflakeID.EPOCH
+            if timestamp >= SnowflakeID._last_timestamp:
+                SnowflakeID._last_timestamp = timestamp
+                SnowflakeID._sequence = 0xFFF
 
     @staticmethod
     def from_short_code(short_code: str) -> "SnowflakeID":
@@ -145,7 +157,19 @@ class SnowflakeID(int):
         modulo = 2**10
         mac = str(getnode())
         hostname = gethostname()
-        raw = mac + hostname
+        # Process identity reduces collisions; database PK arbitration remains authoritative.
+        raw = f"{mac}:{hostname}:{os.getpid()}"
         digest = sha256(raw.encode()).digest()
         int_val = int.from_bytes(digest, "little")
         return int_val % modulo
+
+
+def _reset_after_fork() -> None:
+    SnowflakeID._lock = Lock()
+    SnowflakeID._sequence = 0
+    SnowflakeID._last_timestamp = -1
+    SnowflakeID._machine_id = None
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_after_fork)

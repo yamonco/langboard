@@ -92,6 +92,7 @@ function TrackingRowCardTitle({ projectUIDRef }: ITrackingRowCardTitleProps) {
 }
 
 function TrackingRowTimeTaken() {
+    useTranslation();
     const { model: checkitem } = ModelRegistry.ProjectCheckitem.useContext();
     const status = checkitem.useField("status");
     const accumulatedSeconds = checkitem.useField("accumulated_seconds");

@@ -1,15 +1,24 @@
 """Side-effect-free read use cases for the card workspace feature."""
 
+from collections.abc import Callable
 from typing import Any
 from ...domain import (
     CardBundleInclude,
     CardBundleSection,
+    CardUnavailableError,
     CommentCursor,
     CommentPage,
     ProjectCardCursor,
     SectionCursor,
     SectionPage,
     require_public_metadata_key,
+)
+from ..context_profiles import (
+    ContextProfile,
+    profile_context,
+    profile_continuations,
+    profile_source,
+    select_profile_sections,
 )
 from ..dtos import (
     AutomationDto,
@@ -18,6 +27,8 @@ from ..dtos import (
     CardBundleDto,
     CardBundleResponse,
     ClassificationDto,
+    PeopleDto,
+    ProjectCardIndexResponse,
     ProjectCardListResponse,
     ProjectIdentityResponse,
 )
@@ -27,11 +38,11 @@ from ..projections import (
     bounded_items,
     bounded_text,
     pick,
+    public_actor,
     public_attachment,
     public_bot_schedule,
     public_bot_scope,
     public_card_summary,
-    public_checkitem,
     public_checklist,
     public_comment,
     public_label,
@@ -47,15 +58,21 @@ def get_card_bundle(
     comment_page: CommentPage,
     section_page: SectionPage,
     include: list[CardBundleInclude] | None = None,
+    profile: ContextProfile | None = None,
 ) -> CardBundleResponse:
     """Return one bounded and sanitized card aggregate or one continuation page."""
 
+    include = select_profile_sections(profile, include)
     section_cursor = SectionCursor.decode(section_page.cursor) if section_page.cursor else None
     requested_sections = _requested_source_sections(include, section_cursor, comment_page.cursor is not None)
+    if profile == "execute":
+        requested_sections |= frozenset({"open_checkitems"})
     source = port.get_card_bundle_source(project_uid, card_uid, requested_sections)
     if source is None:
-        raise ValueError("Card not found in project")
+        raise CardUnavailableError("Card not found in project")
 
+    original_source = source
+    source = profile_source(source, profile)
     if section_cursor:
         return _section_continuation(card_uid, source, section_cursor, section_page.limit)
 
@@ -81,20 +98,59 @@ def get_card_bundle(
         )
 
     details = source.details
-    core = pick(details, ("uid", "title", "created_at", "updated_at"))
+    core = pick(
+        details,
+        (
+            "uid",
+            "title",
+            "created_at",
+            "updated_at",
+            "can_delete",
+            "is_check_card",
+            "completed",
+            "last_change_seq",
+            "last_change_target_type",
+            "last_change_at",
+        ),
+    )
+    if isinstance(details.get("creator"), dict):
+        core["creator"] = public_actor(details["creator"])
     if CardBundleInclude.Description in requested:
         core["description"] = bounded_text(details.get("description"), CardBundleSection.CoreDescription).model_dump(
             mode="json"
         )
+    if profile is not None:
+        core["context"] = profile_context(profile, original_source, include or [])
     bundle = CardBundleDto(
         core=core,
-        workflow=pick(
-            details,
-            ("project_column_uid", "project_column_name", "order", "deadline_at", "archived_at"),
-        ),
+        workflow={
+            **pick(
+                details,
+                ("project_column_uid", "project_column_name", "workflow_stage", "order", "deadline_at", "archived_at"),
+            ),
+            **pick(
+                details,
+                ("workflow_stage_description", "column_description", "workflow_guidance", "workflow_stage_status"),
+                8192,
+            ),
+        },
+        work_state=details.get("work_state"),
     )
+    if profile in {"execute", "review", "triage"} and bundle.work_state is not None:
+        bundle.work_state = dict(bundle.work_state)
+        if bundle.work_state.get("verification_state") == "stale":
+            bundle.work_state["verification"] = None
+            core["context"]["omitted_sections"].append(
+                {"section": "stale_verification", "reason": "not_current_revision"}
+            )
     if CardBundleInclude.People in requested:
-        bundle.people = bounded_items(assigned_people(details), CardBundleSection.People, section_page.limit)
+        assignees = bounded_items(assigned_people(details), CardBundleSection.People, section_page.limit)
+        workers = [
+            {**worker, "checkitems": worker.get("checkitems", [])[:25]}
+            for worker in details.get("active_workers", [])[:25]
+            if isinstance(worker, dict)
+        ]
+        bundle.people = PeopleDto(**assignees.model_dump(), active_workers=workers)
     if CardBundleInclude.Classification in requested:
         labels = [public_label(item) for item in details.get("labels", []) if isinstance(item, dict)]
         relationships = [
@@ -107,6 +163,10 @@ def get_card_bundle(
     if CardBundleInclude.Checklists in requested:
         checklists = [public_checklist(item) for item in source.checklists if isinstance(item, dict)]
         bundle.checklists = bounded_items(checklists, CardBundleSection.Checklists, section_page.limit)
+    if CardBundleInclude.ContentBlocks in requested:
+        bundle.content_blocks = bounded_items(
+            source.content_blocks, CardBundleSection.ContentBlocks, section_page.limit
+        )
     if comment_projection is not None:
         bundle.comments = comment_projection
     if CardBundleInclude.Attachments in requested:
@@ -134,6 +194,16 @@ def get_card_bundle(
                 section_page.limit,
             ),
         )
+    if profile is not None:
+        # Workflow guidance may contain mandatory constraints; retain it without clipping.
+        for field in ("workflow_stage_description", "column_description", "workflow_guidance"):
+            if field in details:
+                bundle.workflow[field] = details[field]
+        context = core["context"]
+        context["continuation_profile"] = profile
+        context["continuations"] = profile_continuations(bundle.model_dump())
+        context["truncated"] = bool(context["continuations"])
+        context["required_action"] = "read_continuations" if context["truncated"] else "resolve_unavailable_fields"
     return CardBundleResponse(card_uid=card_uid, card=bundle)
 
 
@@ -151,23 +221,35 @@ def list_project_cards(
     project_uid: str,
     limit: int = 20,
     cursor: str | None = None,
+    *,
+    include_closed: bool = False,
+    workflow_stages: list[str] | None = None,
 ) -> ProjectCardListResponse:
     """List a bounded, newest-updated-first project card page."""
 
     if isinstance(limit, bool) or not 1 <= limit <= 25:
         raise ValueError("limit must be between 1 and 25")
+    if workflow_stages is not None:
+        if len(workflow_stages) > 30 or any(
+            not isinstance(stage, str) or not stage or len(stage) > 64 for stage in workflow_stages
+        ):
+            raise ValueError("workflow_stages must contain at most 30 nonempty stage keys of at most 64 characters")
     decoded = ProjectCardCursor.decode(cursor) if cursor else None
     page = port.get_project_card_page(
         project_uid,
         limit,
         decoded.updated_at if decoded else None,
         decoded.card_uid if decoded else None,
+        include_closed=include_closed,
+        workflow_stages=workflow_stages,
     )
     next_cursor = ProjectCardCursor(*page.next_cursor_fields).encode() if page.next_cursor_fields else None
-    return ProjectCardListResponse(
+    return ProjectCardIndexResponse(
         project_uid=project_uid,
+        workflow_stages=page.workflow_stages,
+        columns=page.columns,
         cards=BoundedItemsDto(
-            items=[public_card_summary(item) for item in page.items],
+            items=[public_card_summary(item, compact_workflow=True) for item in page.items],
             total_count=page.total_count,
             next_cursor=next_cursor,
             limit=limit,
@@ -207,10 +289,13 @@ def get_public_card_metadata_by_key(
     """Return one public metadata entry by an explicitly safe key."""
 
     normalized_key = require_public_metadata_key(key)
-    metadata = port.get_public_card_metadata_by_key(project_uid, card_uid, normalized_key)
+    metadata = port.get_public_card_metadata(project_uid, card_uid)
     if metadata is None:
+        raise ValueError("Card not found in project")
+    entries = {entry["key"]: entry for entry in public_metadata(metadata)}
+    if normalized_key not in entries:
         raise ValueError("Metadata not found")
-    return public_metadata({metadata["key"]: metadata["value"]})[0]
+    return entries[normalized_key]
 
 
 def _comment_page(
@@ -237,25 +322,26 @@ def _section_continuation(
         text = bounded_text(details.get("description"), section, cursor.offset, cursor.revision)
         continuation = CardBundleContinuationDto(section=section, text=text)
     else:
-        collections: dict[str, list[dict[str, Any]]] = {
-            CardBundleSection.People: assigned_people(details),
-            CardBundleSection.Labels: [
+        collections: dict[str, Callable[[], list[dict[str, Any]]]] = {
+            CardBundleSection.People: lambda: assigned_people(details),
+            CardBundleSection.Labels: lambda: [
                 public_label(item) for item in details.get("labels", []) if isinstance(item, dict)
             ],
-            CardBundleSection.Relationships: [
+            CardBundleSection.Relationships: lambda: [
                 public_relationship(item) for item in details.get("relationships", []) if isinstance(item, dict)
             ],
-            CardBundleSection.Checklists: [
+            CardBundleSection.Checklists: lambda: [
                 public_checklist(item) for item in source.checklists if isinstance(item, dict)
             ],
-            CardBundleSection.Attachments: [
+            CardBundleSection.ContentBlocks: lambda: source.content_blocks,
+            CardBundleSection.Attachments: lambda: [
                 public_attachment(item) for item in source.attachments if isinstance(item, dict)
             ],
-            CardBundleSection.Metadata: public_metadata(source.metadata),
-            CardBundleSection.BotScopes: [
+            CardBundleSection.Metadata: lambda: public_metadata(source.metadata),
+            CardBundleSection.BotScopes: lambda: [
                 public_bot_scope(item) for item in source.bot_scopes if isinstance(item, dict)
             ],
-            CardBundleSection.BotSchedules: [
+            CardBundleSection.BotSchedules: lambda: [
                 public_bot_schedule(item) for item in source.bot_schedules if isinstance(item, dict)
             ],
         }
@@ -271,11 +357,14 @@ def _section_continuation(
             )
             if raw is None:
                 raise ValueError("Checklist continuation no longer exists")
+            from ..projections import public_checkitem
+
             items = [public_checkitem(item) for item in raw if isinstance(item, dict)]
         else:
-            items = collections.get(section)
-            if items is None:
+            project_section = collections.get(section)
+            if project_section is None:
                 raise ValueError("Unsupported section cursor")
+            items = project_section()
         page = bounded_items(items, section, limit, cursor.offset, cursor.revision)
         continuation = CardBundleContinuationDto(section=section, page=page)
     return CardBundleResponse(card_uid=card_uid, continuation=continuation)
@@ -300,6 +389,8 @@ def _requested_source_sections(
         sections.update({CardBundleSection.Labels.value, CardBundleSection.Relationships.value})
     if CardBundleInclude.Checklists in requested:
         sections.add(CardBundleSection.Checklists.value)
+    if CardBundleInclude.ContentBlocks in requested:
+        sections.add(CardBundleSection.ContentBlocks.value)
     if CardBundleInclude.Attachments in requested:
         sections.add(CardBundleSection.Attachments.value)
     if CardBundleInclude.Metadata in requested:

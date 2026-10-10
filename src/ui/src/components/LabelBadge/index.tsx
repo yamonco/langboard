@@ -3,7 +3,12 @@ import Flex from "@/components/base/Flex";
 import Tooltip from "@/components/base/Tooltip";
 import { IModelMap, TPickedModel } from "@/core/models/ModelRegistry";
 import { Utils } from "@langboard/core/utils";
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
+import Popover from "@/components/base/Popover";
+import { cn } from "@/core/utils/ComponentUtils";
+import { ProjectLabel } from "@/core/models";
+import { useTranslation } from "react-i18next";
+import { globalLabelDisplay } from "@/core/utils/LabelDisplay";
 
 interface ILabelModel {
     name: string;
@@ -19,9 +24,25 @@ export type TLabelModel<TModelName extends TLabelModelName> = TPickedModel<TMode
 export interface ILabelBadgeProps extends ILabelModel {
     textColor?: string;
     noTooltip?: bool;
+    compact?: boolean;
+    emoji?: string;
 }
 
-export const LabelBadge = memo(({ name, color, textColor, description, noTooltip }: ILabelBadgeProps) => {
+export const LabelBadge = memo(({ name, color, textColor, description, noTooltip, compact, emoji }: ILabelBadgeProps) => {
+    const [expanded, setExpanded] = useState(false);
+    useEffect(() => {
+        if (!compact || !expanded) return;
+        // Hover leaves focus in the parent dialog. Collapse the visual preview
+        // before Radix dispatches Escape to that parent layer.
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            setExpanded(false);
+        };
+        document.addEventListener("keydown", closeOnEscape, true);
+        return () => document.removeEventListener("keydown", closeOnEscape, true);
+    }, [compact, expanded]);
     const currentColor = color || "#FFFFFF";
     const currentDescription = description || name;
 
@@ -56,6 +77,70 @@ export const LabelBadge = memo(({ name, color, textColor, description, noTooltip
         </Box>
     );
 
+    if (compact) {
+        return (
+            <Popover.Root open={expanded} onOpenChange={setExpanded}>
+                <Popover.Anchor asChild>
+                    <button
+                        type="button"
+                        data-compact-label=""
+                        aria-label={name}
+                        aria-expanded={expanded}
+                        className={cn(
+                            "inline-flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px]",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        )}
+                        style={{ backgroundColor: currentColor, borderColor: currentColor }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onPointerEnter={(event) => {
+                            if (event.pointerType !== "touch") setExpanded(true);
+                        }}
+                        onPointerLeave={(event) => {
+                            if (event.pointerType !== "touch") setExpanded(false);
+                        }}
+                        onKeyDown={(event) => {
+                            if (event.key !== "Escape" || !expanded) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setExpanded(false);
+                        }}
+                        onFocus={() => setExpanded(true)}
+                        onBlur={() => setExpanded(false)}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            setExpanded(true);
+                        }}
+                    >
+                        {emoji || null}
+                    </button>
+                </Popover.Anchor>
+                <Popover.Content
+                    side="right"
+                    align="center"
+                    sideOffset={-20}
+                    aria-label={name}
+                    data-compact-label-preview=""
+                    onKeyDown={(event) => {
+                        if (event.key !== "Escape") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setExpanded(false);
+                    }}
+                    className={cn(
+                        "pointer-events-none z-[130] w-auto max-w-[min(20rem,calc(100vw-2rem))]",
+                        "rounded-full border-0 bg-transparent p-0 shadow-none motion-reduce:!animate-none"
+                    )}
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                    onCloseAutoFocus={(event) => event.preventDefault()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <LabelBadge name={name} color={color} textColor={textColor} description={description} noTooltip />
+                </Popover.Content>
+            </Popover.Root>
+        );
+    }
+
     if (noTooltip) {
         return badge;
     }
@@ -70,12 +155,30 @@ export const LabelBadge = memo(({ name, color, textColor, description, noTooltip
 
 export interface ILabelModelBadgeProps {
     model: TLabelModel<TLabelModelName>;
+    compact?: boolean;
 }
 
-export const LabelModelBadge = memo(({ model }: ILabelModelBadgeProps) => {
+const BasicLabelModelBadge = memo(({ model, compact }: ILabelModelBadgeProps) => {
     const name = model.useField("name");
     const color = model.useField("color");
     const description = model.useField("description");
 
-    return <LabelBadge name={name} color={color} description={description} />;
+    return <LabelBadge name={name} color={color} description={description} compact={compact} />;
 });
+
+const GlobalProjectLabelBadge = ({ model, compact }: { model: ProjectLabel.TModel; compact?: boolean }) => {
+    const name = model.useField("name");
+    const color = model.useField("color");
+    const description = model.useField("description");
+    const display = model.useField("global_display");
+    const { i18n } = useTranslation();
+    return <LabelBadge {...globalLabelDisplay(name, description, display, i18n.language)} color={color} compact={compact} emoji={display?.emoji} />;
+};
+
+export const LabelModelBadge = memo(({ model, compact }: ILabelModelBadgeProps) =>
+    model instanceof ProjectLabel.Model ? (
+        <GlobalProjectLabelBadge model={model} compact={compact} />
+    ) : (
+        <BasicLabelModelBadge model={model} compact={compact} />
+    )
+);

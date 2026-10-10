@@ -77,6 +77,7 @@ class BaseOrderRepository(Generic[_TModel, _TParentModel], BaseRepository[_TMode
         new_order: int,
         new_parent_model: _TParentModel | TBaseParam | None = None,
         *,
+        preserve_shifted_updated_at: bool = False,
         model_cls: type[_TModelParam] | None = None,
         parent_model_cls: type[_TParentModelParam] | None = None,
     ):
@@ -88,6 +89,11 @@ class BaseOrderRepository(Generic[_TModel, _TParentModel], BaseRepository[_TMode
 
         with DbSession.use(readonly=False) as db:
             shared_update_query = SqlBuilder.update.table(model_class)
+            if preserve_shifted_updated_at:
+                # A neighbor shifting position was not edited by the user.
+                shared_update_query = shared_update_query.values(
+                    {model_class.column("updated_at"): model_class.column("updated_at")}
+                )
 
             if new_parent_id:
                 db.exec(
@@ -108,11 +114,10 @@ class BaseOrderRepository(Generic[_TModel, _TParentModel], BaseRepository[_TMode
                 update_query = update_query.where(model_class.column(parent_foreign_key_name) == old_parent_id)
                 db.exec(update_query)
 
-            db.exec(
-                SqlBuilder.update.table(model_class)
-                .where(model_class.column("id") == model_id)
-                .values({model_class.column("order"): new_order})
-            )
+            target_update = SqlBuilder.update.table(model_class).where(model_class.column("id") == model_id)
+            if preserve_shifted_updated_at:
+                target_update = target_update.values({model_class.column("updated_at"): model_class.column("updated_at")})
+            db.exec(target_update.values({model_class.column("order"): new_order}))
 
     def get_next_order(
         self,

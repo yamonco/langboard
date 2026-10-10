@@ -36,4 +36,6 @@ class RunBrokerCommand(BaseCommand):
         return bool
 
     def execute(self, _: RunBrokerCommandOptions) -> None:
+        from ..apps import GitHubHealthTask  # noqa: F401
+
         Broker.start(argv=["worker", "--loglevel=info", "--concurrency=1", "--pool=solo"])

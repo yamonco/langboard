@@ -8,6 +8,8 @@ export interface Interface extends IBaseModel {
     color: string;
     description: string;
     order: number;
+    global_label_uid?: string | null;
+    global_display?: { emoji?: string; translations: Record<string, { name: string; description: string }> } | null;
 }
 
 class ProjectLabel extends BaseModel<Interface> {
@@ -29,6 +31,17 @@ class ProjectLabel extends BaseModel<Interface> {
     }
     public set project_uid(value) {
         this.update({ project_uid: value });
+    }
+
+    public get global_label_uid() {
+        return this.getValue("global_label_uid");
+    }
+
+    public get global_display() {
+        return this.getValue("global_display");
+    }
+    public set global_display(value) {
+        this.update({ global_display: value });
     }
 
     public get name() {

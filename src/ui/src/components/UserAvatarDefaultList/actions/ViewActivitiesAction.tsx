@@ -1,14 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Popover from "@/components/base/Popover";
 import { AuthUser, Project } from "@/core/models";
-import ActivityList from "@/components/ActivityList";
+import SuspenseComponent from "@/components/base/SuspenseComponent";
 import { useTranslation } from "react-i18next";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUserAvatar } from "@/components/UserAvatar/Provider";
 import UserAvatar from "@/components/UserAvatar";
 import useHandleInteractOutside from "@/core/hooks/useHandleInteractOutside";
 import { IUserAvatarDefaultListContext } from "@/components/UserAvatarDefaultList/Provider";
 import { TActivityType } from "@/controllers/api/shared/types";
+
+const ActivityList = lazy(() => import("@/components/ActivityList"));
 
 export interface IUserAvatarDefaultViewActivitiesActionProps {
     scopeModels: Required<IUserAvatarDefaultListContext["scopeModels"]> & { project: Project.TModel };
@@ -109,13 +111,15 @@ function UserAvatarDefaultViewActivitiesAction({ scopeModels, currentUser }: IUs
                 onPointerDownOutside={onPointerDownOutside}
                 {...getAvatarHoverCardAttrs()}
             >
-                <ActivityList
-                    form={activityForm as any}
-                    currentUser={currentUser}
-                    outerClassName="max-h-[calc(var(--max-height)_-_theme(spacing.8))] px-4 pb-2.5 w-full"
-                    outerStyle={style as React.CSSProperties}
-                    viewType={currentUser.uid === userOrBot.uid ? "user" : "default"}
-                />
+                <SuspenseComponent shouldWrapChildren={false}>
+                    <ActivityList
+                        form={activityForm as any}
+                        currentUser={currentUser}
+                        outerClassName="max-h-[calc(var(--max-height)_-_theme(spacing.8))] px-4 pb-2.5 w-full"
+                        outerStyle={style as React.CSSProperties}
+                        viewType={currentUser.uid === userOrBot.uid ? "user" : "default"}
+                    />
+                </SuspenseComponent>
             </Popover.Content>
         </Popover.Root>
     );

@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import status
 from langboard_shared.core.routing import ApiErrorCode, BaseMiddleware, JsonResponse
 from langboard_shared.core.security import AuthSecurity
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import ApiKeySetting, User
 from langboard_shared.domain.models.McpRole import McpRoleAction
 from langboard_shared.domain.services import DomainService
@@ -103,19 +104,23 @@ class McpAuthMiddleware(BaseMiddleware):
                 await response(scope, receive, send)
                 return
 
-        if (
-            isinstance(validation_result, User)
-            and not validation_result.is_admin
-            and validation_result.email not in Env.FULL_ADMIN_ACCESS_EMAILS
-        ):
+        if isinstance(validation_result, User) and not validation_result.is_admin:
             mcp_role = service.mcp_tool_group.get_role(validation_result)
             if not mcp_role or not mcp_role.is_granted(McpRoleAction.Read):
                 response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
                 await response(scope, receive, send)
                 return
 
+        # MCP stays MCP even when authenticated with a native browser session.
+        scope["collaboration_channel"] = CollaborationChannel.Mcp
+
         # Store auth data and validated tool group in context
-        auth_data = {"user_or_bot": validation_result, "api_key": api_key, "tool_group": tool_group}
+        auth_data = {
+            "user_or_bot": validation_result,
+            "api_key": api_key,
+            "tool_group": tool_group,
+            "collaboration_channel": CollaborationChannel.Mcp,
+        }
         context_token = mcp_auth_context.set(auth_data)
         try:
             await MiddlewareHelper.log_api_key_usage(self.app, scope, receive, send, service)

@@ -17,6 +17,32 @@ from ..domain.models.Checkitem import CheckitemStatus
 @staticclass
 class CheckitemPublisher(BaseSocketPublisher):
     @staticmethod
+    def board_progress_changed(project: Project, card: Card) -> None:
+        project_uid = project.get_uid()
+        model = {"card_uid": card.get_uid()}
+        CheckitemPublisher.put_dispather(
+            model,
+            SocketPublishModel(
+                topic=SocketTopic.Board,
+                topic_id=project_uid,
+                event=f"board:card:checklist:progress:changed:{project_uid}",
+                data_keys=["card_uid"],
+            ),
+        )
+
+    @staticmethod
+    def workflow_effects_applied(project: Project, card: Card, checkitems: list[dict[str, Any]]) -> None:
+        """One committed batch summary; clients refresh board/card projections."""
+        CheckitemPublisher.put_dispather(
+            {"card_uid": card.get_uid(), "checkitems": checkitems},
+            SocketPublishModel(
+                topic=SocketTopic.Board, topic_id=project.get_uid(),
+                event=f"board:card:checklist:progress:changed:{project.get_uid()}",
+                data_keys=["card_uid", "checkitems"],
+            ),
+        )
+
+    @staticmethod
     def created(card: Card, checklist: Checklist, checkitem: Checkitem):
         topic_id = card.get_uid()
         model = {
@@ -240,7 +266,7 @@ class CheckitemPublisher(BaseSocketPublisher):
                 topic=SocketTopic.Dashboard,
                 topic_id=topic_id,
                 event=f"dashboard:card:created:{topic_id}",
-                custom_data={"column_uid": target_column.get_uid()},
+                custom_data={"project_column_uid": target_column.get_uid(), "source_type": None},
             ),
         ]
 

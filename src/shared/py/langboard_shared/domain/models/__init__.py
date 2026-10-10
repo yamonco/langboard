@@ -2,6 +2,9 @@ from .ApiComfortTool import ApiComfortTool
 from .ApiKeyRole import ApiKeyRole
 from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
+from .AppConnection import AppConnection
+from .AppResourceBinding import AppResourceBinding
+from .BoardAppBinding import BoardAppBinding
 from .Bot import Bot
 from .BotDefaultScopeBranch import BotDefaultScopeBranch
 from .BotLog import BotLog
@@ -18,8 +21,12 @@ from .CardBotSchedule import CardBotSchedule
 from .CardBotScope import CardBotScope
 from .CardComment import CardComment
 from .CardCommentReaction import CardCommentReaction
+from .CardContentBlock import CardContentBlock
+from .CardDocumentArtifact import CardDocumentArtifact
 from .CardMetadata import CardMetadata
 from .CardRelationship import CardRelationship
+from .CardVerificationRecord import CardVerificationRecord
+from .CardVisibilityChange import CardVisibilityChange
 from .ChatGraphApprovalRequest import ChatGraphApprovalRequest
 from .ChatHistory import ChatHistory
 from .ChatSession import ChatSession
@@ -28,7 +35,11 @@ from .Checkitem import Checkitem
 from .CheckitemTimerRecord import CheckitemTimerRecord
 from .Checklist import Checklist
 from .EditorGraphApprovalRequest import EditorGraphApprovalRequest
+from .ExternalImportRecord import ExternalImportRecord
+from .GitHubHealthJob import GitHubHealthJob
+from .GitHubLifecycleReceipt import GitHubLifecycleReceipt
 from .GlobalCardRelationshipType import GlobalCardRelationshipType
+from .GlobalLabel import GlobalLabel
 from .GraphApprovalRequest import GraphApprovalRequest
 from .InternalBot import InternalBot
 from .ManualScopeRunGraphApprovalRequest import ManualScopeRunGraphApprovalRequest
@@ -36,6 +47,7 @@ from .McpRole import McpRole
 from .McpToolGroup import McpToolGroup
 from .McpToolGroupUsage import McpToolGroupUsage
 from .NotificationScheduleRule import NotificationScheduleRule
+from .Organization import Organization
 from .Project import Project
 from .ProjectActivity import ProjectActivity
 from .ProjectAssignedInternalBot import ProjectAssignedInternalBot
@@ -50,8 +62,8 @@ from .ProjectColumnBotDefaultScope import ProjectColumnBotDefaultScope
 from .ProjectColumnBotLog import ProjectColumnBotLog
 from .ProjectColumnBotSchedule import ProjectColumnBotSchedule
 from .ProjectColumnBotScope import ProjectColumnBotScope
-from .ProjectEmailNotificationPolicy import ProjectEmailNotificationPolicy
-from .ProjectEmailNotificationRecipient import ProjectEmailNotificationRecipient
+from .ProjectEmailNotificationPolicy import ProjectEmailNotificationPolicy, ProjectEmailNotificationRecipient
+from .ProjectExecutionBinding import ProjectExecutionBinding
 from .ProjectInvitation import ProjectInvitation
 from .ProjectLabel import ProjectLabel
 from .ProjectRole import ProjectRole
@@ -64,9 +76,12 @@ from .ProjectWikiAttachment import ProjectWikiAttachment
 from .ProjectWikiMetadata import ProjectWikiMetadata
 from .ScimGroup import ScimGroup
 from .ScimGroupMember import ScimGroupMember
+from .SecretReference import SecretReference
+from .SecretReferenceAudit import SecretReferenceAudit
 from .SettingRole import SettingRole
 from .User import User
 from .UserActivity import UserActivity
+from .UserCardReadState import UserCardReadState
 from .UserEmail import UserEmail
 from .UserGroup import UserGroup
 from .UserGroupAssignedEmail import UserGroupAssignedEmail
@@ -76,9 +91,15 @@ from .UserNotificationUnsubscription import UserNotificationUnsubscription
 from .UserProfile import UserProfile
 from .UserSignInHistory import UserSignInHistory
 from .WebhookSetting import WebhookSetting
+from .WorkflowStageDefinition import WorkflowStageDefinition
 
 
 __all__ = [
+    "GitHubLifecycleReceipt",
+    "GitHubHealthJob",
+    "AppConnection",
+    "BoardAppBinding",
+    "AppResourceBinding",
     "ApiComfortTool",
     "ApiKeyRole",
     "ApiKeySetting",
@@ -95,13 +116,17 @@ __all__ = [
     "CardAssignedProjectLabel",
     "CardAssignedUser",
     "CardAttachment",
+    "CardDocumentArtifact",
     "CardBotLog",
     "CardBotSchedule",
     "CardBotScope",
     "CardComment",
     "CardCommentReaction",
+    "CardContentBlock",
     "CardMetadata",
     "CardRelationship",
+    "CardVerificationRecord",
+    "CardVisibilityChange",
     "ChatHistory",
     "ChatSession",
     "ChatTemplate",
@@ -109,10 +134,13 @@ __all__ = [
     "CheckitemTimerRecord",
     "Checklist",
     "GlobalCardRelationshipType",
+    "GlobalLabel",
+    "WorkflowStageDefinition",
     "BotScheduleGraphApprovalRequest",
     "BotTriggerGraphApprovalRequest",
     "ChatGraphApprovalRequest",
     "EditorGraphApprovalRequest",
+    "ExternalImportRecord",
     "ManualScopeRunGraphApprovalRequest",
     "GraphApprovalRequest",
     "IdentityProvider",
@@ -120,9 +148,11 @@ __all__ = [
     "McpToolGroup",
     "McpToolGroupUsage",
     "NotificationScheduleRule",
+    "Organization",
     "Project",
     "ProjectActivity",
     "ProjectEmailNotificationPolicy",
+    "ProjectExecutionBinding",
     "ProjectEmailNotificationRecipient",
     "ProjectAssignedInternalBot",
     "ProjectAssignedUser",
@@ -144,11 +174,14 @@ __all__ = [
     "ProjectWikiAssignedUser",
     "ProjectWikiAttachment",
     "ProjectWikiMetadata",
+    "SecretReference",
+    "SecretReferenceAudit",
     "SettingRole",
     "ScimGroup",
     "ScimGroupMember",
     "User",
     "UserActivity",
+    "UserCardReadState",
     "UserEmail",
     "UserSignInHistory",
     "UserGroup",

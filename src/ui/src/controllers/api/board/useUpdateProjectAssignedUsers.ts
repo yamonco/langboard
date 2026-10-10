@@ -6,6 +6,7 @@ import { Utils } from "@langboard/core/utils";
 export interface IUpdateProjectAssignedUsersForm {
     uid: string;
     emails: string[];
+    member_uids: string[];
 }
 
 const useUpdateProjectAssignedUsers = (options?: TMutationOptions<IUpdateProjectAssignedUsersForm>) => {

@@ -1,5 +1,7 @@
 "use client";
 
+import { normalizeLocale } from "@/core/utils/LocalePolicy";
+
 import type { TDateElement } from "platejs";
 import type { PlateElementProps } from "platejs/react";
 import { PlateElement, useReadOnly } from "platejs/react";
@@ -9,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/core/utils/ComponentUtils";
 
 export function DateElement(props: PlateElementProps<TDateElement>) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { editor, element } = props;
 
     const readOnly = useReadOnly();
@@ -32,7 +34,7 @@ export function DateElement(props: PlateElementProps<TDateElement>) {
                     if (isYesterday) return t("editor.Yesterday");
                     if (isTomorrow) return t("editor.Tomorrow");
 
-                    return elementDate.toLocaleDateString(undefined, {
+                    return elementDate.toLocaleDateString(normalizeLocale(i18n.language), {
                         day: "numeric",
                         month: "long",
                         year: "numeric",

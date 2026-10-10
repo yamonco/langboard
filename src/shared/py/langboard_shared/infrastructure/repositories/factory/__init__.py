@@ -11,8 +11,10 @@ from .CardAttachmentRepository import CardAttachmentRepository
 from .CardBotDefaultScopeRepository import CardBotDefaultScopeRepository
 from .CardBotScopeRepository import CardBotScopeRepository
 from .CardCommentRepository import CardCommentRepository
+from .CardContentBlockRepository import CardContentBlockRepository
 from .CardRelationshipRepository import CardRelationshipRepository
 from .CardRepository import CardRepository
+from .CardVerificationRepository import CardVerificationRepository
 from .ChatHistoryRepository import ChatHistoryRepository
 from .ChatSessionRepository import ChatSessionRepository
 from .ChatTemplateRepository import ChatTemplateRepository
@@ -20,12 +22,14 @@ from .CheckitemRepository import CheckitemRepository
 from .CheckitemTimerRecordRepository import CheckitemTimerRecordRepository
 from .ChecklistRepository import ChecklistRepository
 from .GlobalCardRelationshipTypeRepository import GlobalCardRelationshipTypeRepository
+from .GlobalLabelRepository import GlobalLabelRepository
 from .GraphApprovalRequestRepository import GraphApprovalRequestRepository
 from .InternalBotRepository import InternalBotRepository
 from .McpToolGroupRepository import McpToolGroupRepository
 from .McpToolGroupUsageRepository import McpToolGroupUsageRepository
 from .MetadataRepository import MetadataRepository
 from .NotificationScheduleRuleRepository import NotificationScheduleRuleRepository
+from .OrganizationRepository import OrganizationRepository
 from .ProjectAssignedInternalBotRepository import ProjectAssignedInternalBotRepository
 from .ProjectAssignedUserRepository import ProjectAssignedUserRepository
 from .ProjectBotDefaultScopeRepository import ProjectBotDefaultScopeRepository
@@ -46,6 +50,7 @@ from .ReactionRepository import ReactionRepository
 from .RoleRepository import RoleRepository
 from .ScimGroupMemberRepository import ScimGroupMemberRepository
 from .ScimGroupRepository import ScimGroupRepository
+from .UserCardReadStateRepository import UserCardReadStateRepository
 from .UserEmailRepository import UserEmailRepository
 from .UserGroupAssignedEmailRepository import UserGroupAssignedEmailRepository
 from .UserGroupRepository import UserGroupRepository
@@ -56,6 +61,7 @@ from .UserProfileRepository import UserProfileRepository
 from .UserRepository import UserRepository
 from .UserSignInHistoryRepository import UserSignInHistoryRepository
 from .WebhookSettingRepository import WebhookSettingRepository
+from .WorkflowStageRepository import WorkflowStageRepository
 
 
 __all__ = [
@@ -72,8 +78,10 @@ __all__ = [
     "CardBotDefaultScopeRepository",
     "CardBotScopeRepository",
     "CardCommentRepository",
+    "CardContentBlockRepository",
     "CardRelationshipRepository",
     "CardRepository",
+    "CardVerificationRepository",
     "ChatHistoryRepository",
     "ChatSessionRepository",
     "ChatTemplateRepository",
@@ -81,12 +89,15 @@ __all__ = [
     "CheckitemTimerRecordRepository",
     "ChecklistRepository",
     "GlobalCardRelationshipTypeRepository",
+    "GlobalLabelRepository",
+    "WorkflowStageRepository",
     "GraphApprovalRequestRepository",
     "InternalBotRepository",
     "McpToolGroupRepository",
     "McpToolGroupUsageRepository",
     "MetadataRepository",
     "NotificationScheduleRuleRepository",
+    "OrganizationRepository",
     "ProjectAssignedInternalBotRepository",
     "ProjectAssignedUserRepository",
     "ProjectBotDefaultScopeRepository",
@@ -107,6 +118,7 @@ __all__ = [
     "RoleRepository",
     "ScimGroupMemberRepository",
     "ScimGroupRepository",
+    "UserCardReadStateRepository",
     "UserEmailRepository",
     "UserGroupAssignedEmailRepository",
     "UserGroupRepository",

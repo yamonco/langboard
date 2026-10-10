@@ -24,13 +24,19 @@ import { TChatScope } from "@langboard/core/types";
 
 export interface IChatSidebarProps {
     ref: React.RefObject<HTMLDivElement | null>;
+    onClose?: () => void;
+    active?: bool;
 }
 
-const ChatSidebar = memo(({ ref }: IChatSidebarProps): React.JSX.Element => {
+const ChatSidebar = memo(({ ref, onClose, active = true }: IChatSidebarProps): React.JSX.Element => {
     const [t] = useTranslation();
     const { chatResizableSidebar } = useBoardController();
     const [state, setState] = useState<TDroppableAreaState>(DROPPABLE_AREA_IDLE);
-    const { setSelectedScope } = useBoardChat();
+    const { setSelectedScope, requestSessionList } = useBoardChat();
+
+    useEffect(() => {
+        if (active) requestSessionList();
+    }, [active, requestSessionList]);
 
     useEffect(() => {
         const area = ref?.current;
@@ -78,34 +84,46 @@ const ChatSidebar = memo(({ ref }: IChatSidebarProps): React.JSX.Element => {
                     {t("project.Drop here to add")}
                 </Flex>
             </Box>
-            <ChatSidebarDisplay />
+            <ChatSidebarDisplay onClose={onClose} />
         </Flex>
     );
 });
 
-function ChatSidebarDisplay() {
+function ChatSidebarDisplay({ onClose }: { onClose?: () => void }) {
     const [t] = useTranslation();
     const [height, setHeight] = useState(CHAT_INPUT_MIN_HEIGHT);
     const { isSessionListOpened } = useBoardChat();
 
     return (
         <>
-            <Box position="relative" h="16" className="border-b border-border">
-                <Flex items="center" justify="center" h="full" textSize={{ initial: "base", md: "lg" }} className="truncate text-nowrap">
+            <Box position="relative" className="relative h-[calc(3rem+env(safe-area-inset-top))] shrink-0 border-b border-border/50">
+                <Flex
+                    items="center"
+                    justify="center"
+                    h="full"
+                    textSize={{ initial: "base", md: "lg" }}
+                    className="truncate text-nowrap pl-14 pr-24 text-sm font-medium md:px-14"
+                >
                     {t("project.Chat with AI")}
                 </Flex>
                 <ChatSidebarSessionListButton />
-                <ChatSessionMoreMenuButton />
+                <ChatSessionMoreMenuButton hasCloseButton={!!onClose} />
+                {onClose && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 size-11 -translate-y-1/2"
+                        data-workbench-context-close=""
+                        aria-label={t("common.Close")}
+                        onClick={onClose}
+                    >
+                        <IconComponent icon="x" size="5" />
+                    </Button>
+                )}
             </Box>
-            <Flex justify="between" position="relative" h="full" minH="0" className="max-h-[calc(100%_-_theme(spacing.16))] overflow-hidden">
+            <Flex position="relative" minH="0" className="flex-1 overflow-hidden">
                 <ChatSessionList />
-                <Box
-                    h="full"
-                    className={cn(
-                        "flex w-full max-w-full flex-col overflow-hidden transition-all duration-200 ease-in-out",
-                        isSessionListOpened && "overflow-hidden md:max-w-[calc(100%_-_theme(spacing.60))]"
-                    )}
-                >
+                <Box h="full" className={cn("flex min-h-0 w-full min-w-0 flex-col overflow-hidden", isSessionListOpened && "hidden")}>
                     <Conversation />
                     <ChatInput height={height} setHeight={setHeight} />
                 </Box>
@@ -126,7 +144,9 @@ function ChatSidebarSessionListButton() {
         <Button
             variant="ghost"
             size="icon"
-            className={cn("absolute left-1 top-1/2 -translate-y-1/2 transform", isSessionListOpened && "bg-accent/50")}
+            className={cn("absolute left-1 top-1/2 size-11 -translate-y-1/2 transform", isSessionListOpened && "bg-accent/50")}
+            aria-label={t("project.Session list")}
+            aria-expanded={isSessionListOpened}
             title={t("project.Session list")}
             titleAlign="start"
             titleSide="bottom"
@@ -137,7 +157,7 @@ function ChatSidebarSessionListButton() {
     );
 }
 
-function ChatSessionMoreMenuButton() {
+function ChatSessionMoreMenuButton({ hasCloseButton }: { hasCloseButton: boolean }) {
     const { currentSessionUID } = useBoardChat();
     const session = ChatSessionModel.Model.useModel((model) => model.uid === currentSessionUID, [currentSessionUID]);
 
@@ -148,7 +168,7 @@ function ChatSessionMoreMenuButton() {
             menuButtonProps={{
                 variant: "ghost",
                 size: "icon",
-                className: "absolute left-12 right-[unset] top-1/2 -translate-y-1/2 transform md:left-[unset] md:right-1",
+                className: cn("absolute top-1/2 size-11 -translate-y-1/2 transform", hasCloseButton ? "right-12" : "right-1"),
             }}
             session={session}
         />

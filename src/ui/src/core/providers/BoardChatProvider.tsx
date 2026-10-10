@@ -32,6 +32,7 @@ export interface IBoardChatContext {
     lockedScope?: [TChatScope, string] | undefined;
     setLockedScope: React.Dispatch<React.SetStateAction<[TChatScope, string] | undefined>>;
     chatSessions: ChatSessionModel.TModel[];
+    requestSessionList: () => void;
     currentSessionUID?: string;
     setCurrentSessionUID: React.Dispatch<React.SetStateAction<string | undefined>>;
     chatTaskIdRef: React.RefObject<string | null>;
@@ -41,7 +42,7 @@ export interface IBoardChatContext {
 
 interface IBoardChatProviderProps {
     projectUID: string;
-    bot: InternalBotModel.TModel;
+    bot?: InternalBotModel.TModel;
     children: React.ReactNode;
 }
 
@@ -62,6 +63,7 @@ const initialContext = {
     lockedScope: undefined,
     setLockedScope: () => {},
     chatSessions: [],
+    requestSessionList: () => {},
     currentSessionUID: undefined,
     setCurrentSessionUID: () => {},
     chatTaskIdRef: { current: null },
@@ -72,6 +74,7 @@ const initialContext = {
 const BoardChatContext = createContext<IBoardChatContext>(initialContext);
 
 export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProviderProps): React.ReactNode => {
+    const enabled = !!bot;
     const socket = useSocket();
     const [t] = useTranslation();
     const [isSending, setIsSendingState] = useState(false);
@@ -104,6 +107,14 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
         [flatChatSessions]
     );
     const { mutateAsync } = useGetProjectChatSessions(projectUID);
+    const requestedProjectRef = useRef<string | undefined>(undefined);
+    const requestSessionList = useCallback(() => {
+        if (!enabled || requestedProjectRef.current === projectUID) return;
+        requestedProjectRef.current = projectUID;
+        void mutateAsync({}).catch(() => {
+            if (requestedProjectRef.current === projectUID) requestedProjectRef.current = undefined;
+        });
+    }, [enabled, projectUID, mutateAsync]);
     const isInitialMountedRef = useRef(false);
     const [currentSessionUID, setCurrentSessionUIDState] = useState<string | undefined>(() => getBoardChatStore().getCurrentSessionUID(projectUID));
     const currentSessionUIDRef = useRef(currentSessionUID);
@@ -256,18 +267,14 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
         [projectUID, startCallback, bufferCallback, endCallback, errorCallback]
     );
     const handlers = useMemo(
-        () => [sessionCreatedHandlers, sentHandlers, cancelledHandlers, streamHandlers],
-        [sessionCreatedHandlers, sentHandlers, cancelledHandlers, streamHandlers]
+        () => (enabled ? [sessionCreatedHandlers, sentHandlers, cancelledHandlers, streamHandlers] : []),
+        [enabled, sessionCreatedHandlers, sentHandlers, cancelledHandlers, streamHandlers]
     );
     useSwitchSocketHandlers({
         socket,
         handlers,
         dependencies: handlers,
     });
-
-    useEffect(() => {
-        mutateAsync({});
-    }, [projectUID]);
 
     useEffect(() => {
         const storedSessionUID = getBoardChatStore().getCurrentSessionUID(projectUID);
@@ -277,7 +284,7 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
     }, [projectUID]);
 
     useEffect(() => {
-        if (isInitialMountedRef.current || !chatSessions.length) {
+        if (!enabled || isInitialMountedRef.current || !chatSessions.length) {
             return;
         }
 
@@ -291,13 +298,13 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
         }
 
         isInitialMountedRef.current = true;
-    }, [chatSessions, currentSessionUID, setCurrentSessionUID]);
+    }, [enabled, chatSessions, currentSessionUID, setCurrentSessionUID]);
 
     return (
         <BoardChatContext.Provider
             value={{
                 projectUID,
-                bot,
+                bot: bot ?? initialContext.bot,
                 socket,
                 isSending,
                 setIsSending,
@@ -312,6 +319,7 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
                 lockedScope,
                 setLockedScope,
                 chatSessions,
+                requestSessionList,
                 currentSessionUID,
                 setCurrentSessionUID,
                 chatTaskIdRef,
@@ -319,7 +327,9 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
                 isAtBottomRef,
             }}
         >
-            {currentSession && <BoardChatSessionPermissionSync session={currentSession} setAgentPermissionLevel={setAgentPermissionLevel} />}
+            {enabled && currentSession && (
+                <BoardChatSessionPermissionSync session={currentSession} setAgentPermissionLevel={setAgentPermissionLevel} />
+            )}
             {children}
         </BoardChatContext.Provider>
     );

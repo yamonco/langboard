@@ -65,7 +65,7 @@ const BoardCardCheckitemTimer = memo(() => {
     return (
         <Popover.Root>
             <Popover.Trigger asChild>
-                <Button variant="ghost" size="sm" className="gap-2 px-2" title={t("card.Manage timer")}>
+                <Button variant="ghost" size="sm" className="gap-2 px-2" title={t("card.Manage timer")} aria-label={t("card.Manage timer")}>
                     {(!!accumulatedSeconds || status === ProjectCheckitem.ECheckitemStatus.Started) && (
                         <Box textSize={{ initial: "xs", sm: "sm" }}>{Utils.String.formatTimerDuration(duration)}</Box>
                     )}
@@ -140,6 +140,7 @@ function BoardCardCheckitemTimerManager() {
                 variant="ghost"
                 size="icon"
                 title={t("card.Start timer")}
+                aria-label={t("card.Start timer")}
                 className="rounded-r-none"
                 disabled={isValidating || status === ProjectCheckitem.ECheckitemStatus.Started}
                 data-value={ProjectCheckitem.ECheckitemStatus.Started}
@@ -151,6 +152,7 @@ function BoardCardCheckitemTimerManager() {
                 variant="ghost"
                 size="icon"
                 title={t("card.Pause timer")}
+                aria-label={t("card.Pause timer")}
                 className="rounded-none"
                 disabled={isValidating || status !== ProjectCheckitem.ECheckitemStatus.Started}
                 data-value={ProjectCheckitem.ECheckitemStatus.Paused}
@@ -162,6 +164,7 @@ function BoardCardCheckitemTimerManager() {
                 variant="ghost"
                 size="icon"
                 title={t("card.Stop timer")}
+                aria-label={t("card.Stop timer")}
                 className="rounded-l-none"
                 disabled={isValidating || status === ProjectCheckitem.ECheckitemStatus.Stopped}
                 data-value={ProjectCheckitem.ECheckitemStatus.Stopped}

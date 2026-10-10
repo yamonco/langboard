@@ -79,5 +79,22 @@
   },
   "Loading...": "Loading...",
   "Retry": "Retry",
-  "days": "days"
+  "days": "days",
+  "Logo": "Logo",
+  "Toggle navigation menu": "Toggle navigation menu",
+  "Explorer": "Explorer",
+  "Breadcrumb": "Breadcrumb",
+  "Sign in with another email": "Sign in with another email",
+  "Workflow stage": "Workflow stage",
+  "Avatar": "Avatar",
+  "Scroll to bottom": "Scroll to bottom",
+  "Workspace": "Workspace",
+  "Dismiss alert": "Dismiss alert",
+  "Filter...": "Filter...",
+  "Show thoughts...": "Show thoughts...",
+  "Thoughts": "Thoughts",
+  "Connect company SSO": "Connect company SSO",
+  "Could not connect company SSO. Please try again.": "Could not connect company SSO. Please try again.",
+  "User changed field": "User {{name}} changed {{field}}",
+  "Sign in with email": "Sign in with {{email}}"
 }

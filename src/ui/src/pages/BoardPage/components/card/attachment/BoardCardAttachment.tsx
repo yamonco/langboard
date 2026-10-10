@@ -1,3 +1,4 @@
+import { BoardCardAttachmentDocumentProgress } from "./BoardCardAttachmentDocument";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
@@ -150,6 +151,7 @@ const BoardCardAttachmentDisplay = memo(({ attachment, canReorder, draggableRef,
                         <Box textSize="xs" className="text-muted-foreground">
                             {t("card.Added {date}", { date: Utils.String.formatDateDistance(i18n, t, attachment.created_at) })}
                         </Box>
+                        <BoardCardAttachmentDocumentProgress attachmentUID={attachment.uid} />
                     </Box>
                 </Flex>
                 {canEdit && <BoardCardAttachmentMoreMenu attachment={attachment} isValidating={isValidating} setIsValidating={setIsValidating} />}

@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from typing import Any, Literal, TypeVar, cast, overload
 from urllib.parse import urlparse
-from ....core.db import BaseDbModel, EditorContentModel
+from ....core.db import BaseDbModel, DbSession, EditorContentModel, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.publisher import NotificationPublisher, NotificationPublishModel
 from ....core.resources.locales.EmailTemplateNames import TEmailTemplateName
+from ....core.security.CollaborationChannel import CollaborationChannel
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TNotificationParam, TUserOrBot, TUserParam
 from ....core.utils.EditorContentParser import change_date_element, find_mentioned
@@ -11,6 +13,7 @@ from ....core.utils.String import concat
 from ....Env import UI_QUERY_NAMES, Env
 from ....helpers import InfraHelper
 from ....tasks.bots import BotDefaultTask
+from ....tasks.notifications.NotificationWorkEventTask import publish_pending_work_events
 from ...models import (
     Bot,
     Card,
@@ -21,11 +24,14 @@ from ...models import (
     ProjectColumn,
     ProjectInvitation,
     ProjectWiki,
+    ProjectWikiAssignedUser,
     User,
     UserNotification,
 )
 from ...models.BaseNotificationScheduleModel import BaseNotificationScheduleModel
 from ...models.UserNotification import NotificationType
+from ...models.UserNotificationUnsubscription import NotificationChannel
+from .UserNotificationSettingService import UserNotificationSettingService
 
 
 _TModel = TypeVar(
@@ -41,12 +47,31 @@ class NotificationService(BaseDomainService):
         return "notification"
 
     def get_api_list(
-        self, user: User, time_range: Literal["3d", "7d", "1m", "all"] = "3d", page: int = 1, limit: int = 20
+        self,
+        user: User,
+        time_range: Literal["3d", "7d", "1m", "all"] = "3d",
+        page: int = 1,
+        limit: int = 20,
+        unread_only: bool = False,
+        authorized_projects_only: bool = False,
+        *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], bool, int]:
-        raw_notifications = self.repo.user_notification.get_list(user, time_range, page, limit)
+        """Return one notification page, optionally limited to unread rows."""
+
+        from .CardService import CardService
+
+        if not isinstance(user, User):
+            return [], False, 0
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(User).where(User.id == user.id)).first()
+        if current is None or current.deleted_at or not current.activated_at:
+            return [], False, 0
+        contexts = self._get_service(CardService).resolve_work_visibility_contexts(current, channel)
+        raw_notifications, unread_count = self.repo.user_notification.get_scoped_list(
+            current, time_range, page, limit, unread_only, contexts=contexts,
+        )
         has_more = len(raw_notifications) > limit
         raw_notifications = raw_notifications[:limit]
-        unread_count = self.repo.user_notification.count_unread(user)
 
         references: list[tuple[str, int]] = []
         for notification in raw_notifications:
@@ -84,7 +109,7 @@ class NotificationService(BaseDomainService):
                 }
             )
 
-        if notification_ids_should_delete:
+        if notification_ids_should_delete and not unread_only:
             self.repo.user_notification.delete_all_by_ids(notification_ids_should_delete)
 
         return notifications, has_more, unread_count
@@ -161,6 +186,11 @@ class NotificationService(BaseDomainService):
 
     def read_all(self, user: User):
         self.repo.user_notification.read_all_by_user(user)
+
+    def get_mentioned_card_ids(self, user: User, limit: int = 500) -> list[int]:
+        """Return recent card ids behind card/comment mentions without changing read state."""
+
+        return self.repo.user_notification.get_mentioned_card_ids(user, limit)
 
     def delete(self, user: User, notification: TNotificationParam | None) -> bool:
         notification = InfraHelper.get_by_id_like(UserNotification, notification)
@@ -386,6 +416,144 @@ class NotificationService(BaseDomainService):
                 dumped_models.append((type(model).__tablename__, model.model_dump()))
             BotDefaultTask.bot_mentioned(notifier, target_bot, mentioned_in, dumped_models)
 
+    def get_dispatch_context(self, user: User, notification_id: int) -> dict[str, Any] | None:
+        """Return current recipient facts only for their authorized durable notification."""
+        if not isinstance(user, User):
+            return None
+        with DbSession.use(readonly=False) as db:
+            notification = db.exec(SqlBuilder.select.table(UserNotification).where(
+                UserNotification.id == notification_id, UserNotification.receiver_id == user.id,
+            )).first()
+        if notification is None:
+            return None
+        models = {cls.__tablename__: cls for cls in (
+            Project, ProjectInvitation, ProjectWiki, Card, CardComment, Checklist, Checkitem,
+        )}
+        references = []
+        for table, record_id in notification.record_list:
+            cls = models.get(table)
+            if cls is None:
+                return None
+            references.append(cls.model_construct(id=record_id))
+        resolved = self._resolve_notification_recipient(user.id, notification.notification_type, references)
+        if resolved is None:
+            return None
+        current, _ = resolved
+        return {"email": current.email, "preferred_lang": current.preferred_lang, "firstname": current.firstname}
+
+    def can_dispatch_work_event(self, model) -> bool:
+        """Revalidate the durable source and its recipient at each outbound attempt."""
+        from ....tasks.webhooks.utils import build_notification_work_event
+
+        uid = model.data.get("notification_uid") if isinstance(model.data, dict) else None
+        if not isinstance(uid, str):
+            return False
+        try:
+            notification_id = SnowflakeID.from_short_code(uid)
+        except (ValueError, TypeError):
+            return False
+        with DbSession.use(readonly=False) as db:
+            notification = db.exec(SqlBuilder.select.table(UserNotification).where(
+                UserNotification.id == notification_id,
+            )).first()
+        if notification is None:
+            return False
+        expected = build_notification_work_event(notification)
+        if expected is None or expected.model_dump(exclude={"occurred_at"}) != model.model_dump(exclude={"occurred_at"}):
+            return False
+        try:
+            def utc_timestamp(value: str):
+                parsed = datetime.fromisoformat(value)
+                return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+            if utc_timestamp(expected.occurred_at) != utc_timestamp(model.occurred_at):
+                return False
+        except (TypeError, ValueError):
+            return False
+        models = {cls.__tablename__: cls for cls in (
+            Project, ProjectInvitation, ProjectWiki, Card, CardComment, Checklist, Checkitem,
+        )}
+        references = []
+        for table, record_id in notification.record_list:
+            cls = models.get(table)
+            if cls is None:
+                return False
+            references.append(cls.model_construct(id=record_id))
+        return self._resolve_notification_recipient(
+            notification.receiver_id, notification.notification_type, references,
+        ) is not None
+
+    def _resolve_notification_recipient(
+        self, target_user: TUserParam | None, notification_type: NotificationType,
+        references: list[_TModel],
+    ) -> tuple[User, list[_TModel]] | None:
+        """Authorize current references before persisting or scheduling outbound content."""
+        from .CardService import CardService
+
+        user_id = InfraHelper.convert_id(target_user) if target_user is not None else None
+        if not user_id or not references:
+            return None
+        allowed_models = (Project, ProjectInvitation, ProjectWiki, Card, CardComment, Checklist, Checkitem)
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(User).where(User.id == user_id)).first()
+            if current is None or current.deleted_at or not current.activated_at:
+                return None
+            canonical = []
+            for reference in references:
+                model = type(reference)
+                if model not in allowed_models:
+                    return None
+                record = db.exec(SqlBuilder.select.table(model).where(model.id == reference.id)).first()
+                if record is None or getattr(record, "deleted_at", None):
+                    return None
+                canonical.append(record)
+            projects = [record for record in canonical if isinstance(record, Project)]
+            if len(projects) != 1:
+                return None
+            project = projects[0]
+            contexts = self._get_service(CardService).resolve_work_visibility_contexts(current, CollaborationChannel.Api)
+            context = contexts.get(int(project.id))
+            invitation = notification_type == NotificationType.ProjectInvited
+            if invitation:
+                invites = [record for record in canonical if isinstance(record, ProjectInvitation)]
+                if len(canonical) != 2 or len(invites) != 1:
+                    return None
+                if invites[0].project_id != project.id or invites[0].email.casefold() != current.email.casefold():
+                    return None
+            elif context is None:
+                return None
+            for record in canonical:
+                if isinstance(record, Project):
+                    continue
+                if isinstance(record, ProjectInvitation):
+                    if not invitation:
+                        return None
+                    continue
+                if isinstance(record, ProjectWiki):
+                    assigned = db.exec(SqlBuilder.select.table(ProjectWikiAssignedUser).where(
+                        ProjectWikiAssignedUser.project_wiki_id == record.id,
+                        ProjectWikiAssignedUser.user_id == current.id,
+                    )).first()
+                    if record.project_id != project.id or not (record.is_public or project.owner_id == current.id or assigned):
+                        return None
+                    continue
+                card = record if isinstance(record, Card) else None
+                if isinstance(record, Checkitem):
+                    checklist = db.exec(SqlBuilder.select.table(Checklist).where(Checklist.id == record.checklist_id)).first()
+                    if checklist is None or checklist.deleted_at:
+                        return None
+                    card_id = checklist.card_id
+                elif isinstance(record, (CardComment, Checklist)):
+                    card_id = record.card_id
+                else:
+                    card_id = record.id
+                if card is None:
+                    card = db.exec(SqlBuilder.select.table(Card).where(Card.id == card_id)).first()
+                if card is None or card.deleted_at or card.project_id != project.id or context is None:
+                    return None
+                if not context.can_read_card(card.visibility, owner_user_id=card.owner_user_id):
+                    return None
+        return current, canonical
+
     def __notify(
         self,
         notifier: TUserOrBot,
@@ -398,8 +566,11 @@ class NotificationService(BaseDomainService):
         email_formats: dict[str, str] | None = None,
         allow_self: bool = False,
     ) -> bool:
-        target_user = InfraHelper.get_by_id_like(User, target_user)
-        if not target_user or (target_user.id == notifier.id and not allow_self):
+        resolved = self._resolve_notification_recipient(target_user, notification_type, references)
+        if resolved is None:
+            return False
+        target_user, references = resolved
+        if target_user.id == notifier.id and not allow_self:
             return False
 
         raw_record_list = self.create_record_list(references)
@@ -416,7 +587,6 @@ class NotificationService(BaseDomainService):
             email_formats["sender"] = notifier.get_fullname()
 
         notification = UserNotification(
-            id=SnowflakeID(),  # generate new ID
             notifier_type="user" if isinstance(notifier, User) else "bot",
             notifier_id=notifier.id,
             receiver_id=target_user.id,
@@ -425,15 +595,29 @@ class NotificationService(BaseDomainService):
             record_list=record_list,
         )
 
-        model = NotificationPublishModel(
+        subscription_model = NotificationPublishModel(
             notification=notification,
-            api_notification=self.convert_to_api_response(notification, references, notifier),
+            api_notification={},
             target_user=target_user,
             scope_models=scope_model_tuples,
             email_template_name=email_template_name,
             email_formats=email_formats,
         )
+        web_notification_visible = not self._get_service(UserNotificationSettingService).has_unsubscription(
+            subscription_model, NotificationChannel.Web
+        )
+        notification.web_visible = web_notification_visible
+        self.repo.user_notification.insert(notification)
+
+        model = subscription_model.model_copy(
+            update={
+                "api_notification": self.convert_to_api_response(notification, references, notifier),
+                "source_notification_persisted": True,
+                "web_notification_visible": web_notification_visible,
+            }
+        )
         NotificationPublisher.put_dispather(model)
+        publish_pending_work_events()
         return True
 
     def __create_redirect_url(self, project: Project, card_or_wiki: ProjectWiki | Card | None = None):

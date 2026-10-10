@@ -28,11 +28,26 @@ RUN cd /app && uv venv && uv sync --locked --no-dev --no-install-project
 
 COPY ./src/api ./src/api
 
-RUN cd /app && uv sync --locked --no-dev
+RUN cd /app && uv sync --locked --no-dev --extra document-retrieval
+
+FROM base AS with-aws
+
+RUN cd /app && uv sync --locked --no-dev --extra aws --extra document-retrieval
+
+FROM base AS with-azure-vault
+
+RUN cd /app && uv sync --locked --no-dev --extra azure-vault --extra document-retrieval
 
 FROM base AS with-document-processing
 
-RUN cd /app && uv sync --locked --no-dev --extra document-processing
+# PDF font substitution requires installed CJK glyphs, even with remote inference.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk \
+    && fc-cache -f \
+    && fc-match -f '%{family}\n' ':lang=ko' | grep -q 'Noto.*CJK' \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN cd /app && uv sync --locked --no-dev --extra document-processing --extra document-retrieval
 
 FROM base AS with-cron
 

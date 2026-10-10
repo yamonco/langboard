@@ -26,13 +26,13 @@ const useGetProjectChatMessages = (projectUID: string, limit: number = 20, optio
             pageRef.current = 0;
         }
 
-        ++pageRef.current;
+        const nextPage = pageRef.current + 1;
 
         const url = Utils.String.format(Routing.API.BOARD.CHAT.GET_MESSAGES, { uid: projectUID, session_uid: params.session_uid });
         const res = await api.get(url, {
             params: {
                 refer_time: lastCurrentDateRef.current,
-                page: pageRef.current,
+                page: nextPage,
                 limit,
             },
             env: {
@@ -41,7 +41,7 @@ const useGetProjectChatMessages = (projectUID: string, limit: number = 20, optio
         });
 
         ChatMessageModel.Model.fromArray(res.data.histories, true);
-
+        pageRef.current = nextPage;
         setIsLastPage(res.data.histories.length < limit);
     };
 

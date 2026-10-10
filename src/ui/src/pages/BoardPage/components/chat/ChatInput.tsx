@@ -77,7 +77,7 @@ function ChatInputDisplay() {
         const selectionEnd = chatInputRef.current.selectionEnd;
         let measuredHeight = measureTextAreaHeight(chatInputRef.current);
         measuredHeight = Math.max(measuredHeight, CHAT_INPUT_MIN_HEIGHT);
-        const maxHeight = window.innerHeight * 0.2;
+        const maxHeight = Math.max(CHAT_INPUT_MIN_HEIGHT, (window.visualViewport?.height ?? window.innerHeight) * 0.25);
         if (measuredHeight > maxHeight) {
             measuredHeight = maxHeight;
         }
@@ -162,17 +162,15 @@ function ChatInputDisplay() {
 
             const [scopeTable, scopeUID] = lockedScope || selectedScope || [undefined, undefined];
 
-            return (
-                sendChat({
-                    message: chatMessage,
-                    file_path: filePath,
-                    task_id: chatTaskIdRef.current,
-                    session_uid: currentSessionUID,
-                    scope_table: scopeTable,
-                    scope_uid: scopeUID,
-                    api_permission_level: agentPermissionLevel,
-                })?.isConnected ?? false
-            );
+            return sendChat({
+                message: chatMessage,
+                file_path: filePath,
+                task_id: chatTaskIdRef.current,
+                session_uid: currentSessionUID,
+                scope_table: scopeTable,
+                scope_uid: scopeUID,
+                api_permission_level: agentPermissionLevel,
+            }).isConnected;
         };
 
         const trySendChatWrapper = () => {
@@ -236,7 +234,11 @@ function ChatInputDisplay() {
     }, []);
 
     const handleTextAreaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.shiftKey && e.key === "Enter") {
+        if (e.nativeEvent.isComposing || e.keyCode === 229) {
+            return;
+        }
+
+        if ((e.shiftKey || window.matchMedia("(pointer: coarse)").matches) && e.key === "Enter") {
             return;
         }
 
@@ -248,11 +250,16 @@ function ChatInputDisplay() {
     };
 
     return (
-        <Flex direction="col" w="full" position="relative" className="shrink-0 border-t bg-background">
+        <Flex
+            direction="col"
+            w="full"
+            position="relative"
+            className="shrink-0 bg-background px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
+        >
             <Flex
                 direction="col"
                 className={cn(
-                    "relative w-full overflow-hidden border border-transparent bg-card",
+                    "relative w-full overflow-hidden rounded-xl border border-border/60 bg-muted/30",
                     "transition-colors focus-within:border-primary/60"
                 )}
             >
@@ -260,8 +267,8 @@ function ChatInputDisplay() {
                 <Textarea
                     placeholder={t("project.Enter a message")}
                     className={cn(
-                        "max-h-[20vh] min-h-20 resize-none overflow-y-auto rounded-none",
-                        "border-0 bg-transparent px-3 pb-11 pt-2 shadow-none focus-visible:ring-0"
+                        "max-h-[25dvh] min-h-20 resize-none overflow-y-auto rounded-none text-base md:text-sm",
+                        "border-0 bg-transparent px-3 pb-2 pt-2 shadow-none focus-visible:ring-0"
                     )}
                     resize="none"
                     disabled={isSending}
@@ -270,31 +277,21 @@ function ChatInputDisplay() {
                     onChange={updateHeight}
                     ref={chatInputRef}
                 />
-                <Flex
-                    ref={actionsContainerRef}
-                    position="absolute"
-                    bottom="0"
-                    minW="0"
-                    px="2"
-                    py="1"
-                    justify="between"
-                    items="center"
-                    className="pointer-events-none inset-x-0 bg-card/95 backdrop-blur"
-                >
-                    <Flex items="center" gap="1" className="pointer-events-auto min-w-0">
+                <Flex ref={actionsContainerRef} minW="0" px="2" py="1" justify="between" items="center" className="min-h-12 bg-transparent">
+                    <Flex items="center" gap="1" className="min-w-0">
                         {actionsMode === "more" ? (
                             <ChatInputMoreActions className="shrink-0" chatInputRef={chatInputRef} updateHeight={updateHeight} />
                         ) : (
                             <ChatInputActions chatInputRef={chatInputRef} updateHeight={updateHeight} />
                         )}
                     </Flex>
-                    <Flex items="center" gap="2" className="pointer-events-auto shrink-0">
+                    <Flex items="center" gap="2" className="shrink-0">
                         <ChatInputPermissionLevel showLabel={actionsMode === "full"} />
                         <Button
                             type="button"
                             variant={isSending ? "secondary" : "default"}
                             size={isSending || actionsMode === "more" ? "icon-sm" : "sm"}
-                            className={cn("gap-1.5 rounded-full", actionsMode === "more" ? "px-0" : "px-3")}
+                            className={cn("min-h-11 gap-1.5 rounded-full md:min-h-0", actionsMode === "more" ? "px-0" : "px-3")}
                             title={t(isSending ? "project.Stop" : "project.Send a message")}
                             titleSide="top"
                             onClick={send}
@@ -375,7 +372,7 @@ function ChatInputPermissionLevel({ showLabel }: { showLabel: bool }) {
             <Select.Trigger
                 disabled={isSending}
                 className={cn(
-                    "h-8 min-w-0 gap-2 px-2 py-1 text-xs [&>span]:min-w-0",
+                    "h-11 min-w-0 gap-2 md:h-8 px-2 py-1 text-xs [&>span]:min-w-0",
                     showLabel ? "w-36" : "w-16",
                     isFullAccess && "border-warning-border bg-warning text-warning-foreground focus:ring-warning-border"
                 )}

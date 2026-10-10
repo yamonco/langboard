@@ -1,39 +1,51 @@
-from fastapi import status
+from dataclasses import asdict
+from fastapi import Request, status
+from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
     ApiException,
     ApiPermission,
     AppRouter,
+    BaseFormModel,
     EEditorCollaborationType,
     JsonResponse,
     collaborative_block,
     collaborative_edit,
     collaborative_text,
     create_editor_collaboration_document_id,
+    form_model,
 )
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.utils.Converter import convert_python_data
 from langboard_shared.domain.models import (
     Bot,
     Card,
     ChatTemplate,
+    GlobalCardRelationshipType,
     InternalBot,
     Project,
     ProjectAssignedInternalBot,
     ProjectColumn,
+    ProjectExecutionBinding,
     ProjectLabel,
     ProjectRole,
     User,
+    WebhookSetting,
 )
 from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from langboard_shared.domain.models.SettingRole import SettingRoleAction
 from langboard_shared.domain.services import DomainService
-from langboard_shared.Env import Env
+from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageEditConflict
 from langboard_shared.filter import RoleFilter
+from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
+from langboard_shared.tasks.webhooks.ExecutionBindingPolicy import binding_invalid_reasons
+from langboard_shared.tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
+from langboard_shared.tasks.webhooks.utils import WORK_EXECUTION_EVENTS
+from pydantic import ConfigDict, Field
 from .forms import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
@@ -42,9 +54,127 @@ from .forms import (
     CreateProjectLabelForm,
     UpdateProjectDetailsForm,
     UpdateProjectEmailNotificationPolicyForm,
+    UpdateProjectExecutionBindingForm,
     UpdateProjectLabelDetailsForm,
     UpdateRolesForm,
+    UseGlobalProjectLabelForm,
 )
+
+
+def _execution_binding(project_uid: str) -> ProjectExecutionBinding | None:
+    project = InfraHelper.get_by_id_like(Project, project_uid)
+    if project is None:
+        return None
+    with DbSession.use(readonly=True) as db:
+        return db.exec(
+            SqlBuilder.select.table(ProjectExecutionBinding).where(
+                ProjectExecutionBinding.column("project_id") == project.id
+            )
+        ).first()
+
+
+def _validate_execution_binding(project: Project, form: UpdateProjectExecutionBindingForm) -> None:
+    if len(form.events) != len(set(form.events)):
+        raise ValueError("Execution events must be unique")
+    if not form.is_enabled:
+        return
+    states = set(form.column_semantics.values())
+    if not {"ready", "terminal"} <= states:
+        raise ValueError("Enabled binding needs ready and terminal columns")
+    if not form.prerequisite_relationship_type_uid or not form.webhook_uid:
+        raise ValueError("Enabled binding needs a relationship type and webhook")
+    if "io.langboard.work.ready.v1" not in form.events:
+        raise ValueError("Enabled binding must include work.ready")
+    for column_uid in form.column_semantics:
+        column = InfraHelper.get_by_id_like(ProjectColumn, column_uid)
+        if column is None or column.project_id != project.id or column.is_archive:
+            raise ValueError("Execution column must belong to this active board")
+    relation_type = InfraHelper.get_by_id_like(GlobalCardRelationshipType, form.prerequisite_relationship_type_uid)
+    if relation_type is None:
+        raise ValueError("Unknown prerequisite relationship type")
+    if relation_type.machine_semantic != "blocks" or not relation_type.is_active:
+        raise ValueError("Execution prerequisite relationship type must be active blocks")
+    webhook = InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid)
+    if webhook is None or not set(form.events) <= set(webhook.events or []):
+        raise ValueError("Webhook must explicitly allow every execution event")
+    if not webhook.secret_id:
+        raise ValueError("Execution webhook needs a signing secret")
+    if not set(form.events) <= WORK_EXECUTION_EVENTS:
+        raise ValueError("Unknown execution event")
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/execution-binding",
+    tags=["Board.Settings"],
+    responses=OpenApiSchema().suc({"binding": ProjectExecutionBinding}).auth().forbidden().get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def get_project_execution_binding(project_uid: str) -> JsonResponse:
+    binding = _execution_binding(project_uid)
+    reasons = binding_invalid_reasons(binding, "io.langboard.work.ready.v1") if binding else []
+    return JsonResponse(
+        content={
+            "binding": binding.api_response() if binding else None,
+            "binding_status": {
+                "state": "binding_invalid" if reasons else "valid" if binding else "unconfigured",
+                "reasons": reasons,
+            },
+        }
+    )
+
+
+@AppRouter.api.put(
+    "/board/{project_uid}/settings/execution-binding",
+    tags=["Board.Settings"],
+    responses=OpenApiSchema().suc({"binding": ProjectExecutionBinding}).auth().forbidden().get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def update_project_execution_binding(project_uid: str, form: UpdateProjectExecutionBindingForm) -> JsonResponse:
+    project = InfraHelper.get_by_id_like(Project, project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    try:
+        _validate_execution_binding(project, form)
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    with execution_readiness_uow() as execution:
+        execution.watch_project(project.id)
+        db = execution.db
+        binding = db.exec(
+            SqlBuilder.select.table(ProjectExecutionBinding)
+            .where(ProjectExecutionBinding.column("project_id") == project.id)
+            .with_for_update()
+        ).first()
+        if binding is None:
+            binding = ProjectExecutionBinding(project_id=project.id)
+            db.insert(binding)
+        binding.is_enabled = form.is_enabled
+        binding.column_semantics = dict(form.column_semantics)
+        binding.column_semantic_ids = (
+            {
+                str(InfraHelper.get_by_id_like(ProjectColumn, uid).id): state
+                for uid, state in form.column_semantics.items()
+            }
+            if form.is_enabled
+            else {}
+        )
+        binding.prerequisite_relationship_type_uid = form.prerequisite_relationship_type_uid
+        binding.prerequisite_relationship_type_id = (
+            InfraHelper.get_by_id_like(GlobalCardRelationshipType, form.prerequisite_relationship_type_uid).id
+            if form.is_enabled and form.prerequisite_relationship_type_uid
+            else None
+        )
+        binding.webhook_uid = form.webhook_uid
+        binding.webhook_id = (
+            InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid).id
+            if form.is_enabled and form.webhook_uid
+            else None
+        )
+        binding.events = list(form.events)
+        db.update(binding)
+    return JsonResponse(content={"binding": binding.api_response()})
 
 
 _EMAIL_NOTIFICATION_POLICY_SCHEMA = {
@@ -135,16 +265,9 @@ def update_project_email_notification_policy(
 def copy_project_as_template(
     project_uid: str,
     form: CopyProjectTemplateForm,
-    user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     """Snapshot reusable board structure while excluding cards, members, and schedules."""
-
-    setting_role = service.user.get_setting_role(user)
-    if user.email not in Env.FULL_ADMIN_ACCESS_EMAILS and not (
-        setting_role and setting_role.is_granted(SettingRoleAction.ProjectTemplateCreate)
-    ):
-        raise ApiException.Forbidden_403(ApiErrorCode.AU1001)
 
     project = service.project.get_by_id_like(project_uid)
     if not project:
@@ -181,7 +304,12 @@ def copy_project_as_template(
                     },
                 ),
                 "internal_bots": [InternalBot],
-                "project_columns": [(ProjectColumn, {"schema": {"count": "integer"}})],
+                "project_columns": [
+                    (
+                        ProjectColumn,
+                        {"schema": {"count": "integer", "open_count": "integer", "incomplete_count": "integer"}},
+                    )
+                ],
                 "cards": [(Card, {"schema": {"project_column_name": "string"}})],
             }
         )
@@ -194,8 +322,14 @@ def copy_project_as_template(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def get_project_details(
-    project_uid: str, user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
+    project_uid: str, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
+    channel = request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    resolved = service.card.resolve_visibility_context(project_uid, user_or_bot, channel)
+    if resolved is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    _, context = resolved
     result = service.project.get_details(user_or_bot, project_uid, is_setting=True)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
@@ -208,8 +342,8 @@ def get_project_details(
     response["internal_bot_settings"] = internal_bot_settings
 
     internal_bots = service.internal_bot.get_api_list(is_setting=False)
-    columns = service.project_column.get_api_list_by_project(project)
-    cards = service.card.get_api_list_by_project(project)
+    columns = service.project_column.get_api_list_by_project(project, context=context)
+    cards = service.card.get_api_list_by_project(project, user_or_bot, channel=channel)
     templates = service.chat.get_api_template_list(Project.__tablename__, project_uid)
 
     return JsonResponse(
@@ -329,6 +463,37 @@ def update_project_user_roles(
         raise ApiException.NotFound_404(ApiErrorCode.NF2006)
 
     return JsonResponse()
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/global-labels",
+    tags=["Board.Settings"],
+    description="Read existing global label definitions for board selection.",
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_board_global_labels(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+    return JsonResponse(content={"labels": service.global_label.get_api_list()})
+
+
+@AppRouter.schema(form=UseGlobalProjectLabelForm, permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/settings/global-labels/use",
+    tags=["Board.Settings"],
+    description="Reuse an existing global definition, preferring existing local labels.",
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add()
+def use_board_global_label(
+    project_uid: str,
+    form: UseGlobalProjectLabelForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.project_label.use_global(user_or_bot, project_uid, form.global_label_uid)
+    if not result:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=result)
 
 
 @AppRouter.schema(form=CreateProjectLabelForm, permission=ApiPermission.Create)
@@ -489,3 +654,127 @@ def delete_project(
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 
     return JsonResponse()
+
+
+# Board App workflow settings share the native board authentication boundary.
+
+
+@form_model
+class AppWorkflowMappingForm(BaseFormModel):
+    model_config = ConfigDict(extra="forbid")
+    binding_uid: str = Field(..., min_length=1, max_length=64)
+    workflow_mapping: dict[str, str] | None = Field(...)
+    expected_revision: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    enable_transitions: bool = Field(..., strict=True)
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get("/board/{project_uid}/settings/apps", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def get_board_app_catalog(
+    project_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    items = service.workflow_stage.get_app_catalog(user, project_uid)
+    if items is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content={"apps": items})
+
+
+@form_model
+class DisableBoardAppForm(BaseFormModel):
+    model_config = {"extra": "forbid"}
+    binding_uid: str = Field(..., min_length=1, max_length=64)
+    expected_revision: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+
+
+@AppRouter.schema(form=DisableBoardAppForm, permission=ApiPermission.Edit)
+@AppRouter.api.post("/board/{project_uid}/settings/apps/{app_key}/disable", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def disable_board_app(
+    project_uid: str, app_key: str, form: DisableBoardAppForm,
+    user: User = Auth.scope("user"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        binding = service.workflow_stage.disable_app_binding(
+            user, project_uid, app_key, form.binding_uid, form.expected_revision,
+        )
+    except WorkflowStageEditConflict:
+        raise ApiException.Conflict_409(ApiErrorCode.EX3004) from None
+    if binding is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content={"state": binding.state, "revision": binding.edit_revision()})
+
+
+def _app_workflow_response(snapshot: dict) -> dict:
+    binding = snapshot["binding"]
+    result = snapshot["mapping"]
+    return {
+        "binding": None if binding is None else {
+            "uid": binding.get_uid(), "app_key": binding.app_key,
+            "workflow_mapping": binding.workflow_mapping,
+            "stage_transitions_enabled": binding.stage_transitions_enabled,
+            "revision": binding.edit_revision(),
+        },
+        "choices": [asdict(choice) for choice in result.choices],
+        "mapping_valid": result.transitions_enabled,
+        "column_names": snapshot["column_names"],
+        "available_columns": snapshot["available_columns"],
+    }
+
+
+@AppRouter.api.get("/board/{project_uid}/settings/apps/{app_key}/workflow", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def get_app_workflow_mapping(
+    project_uid: str, app_key: str, user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    snapshot = service.workflow_stage.get_app_mapping(user, project_uid, app_key)
+    if snapshot is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=_app_workflow_response(snapshot))
+
+
+@AppRouter.api.put("/board/{project_uid}/settings/apps/{app_key}/workflow", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def update_app_workflow_mapping(
+    project_uid: str, app_key: str, form: AppWorkflowMappingForm,
+    user: User = Auth.scope("user"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    snapshot = service.workflow_stage.get_app_mapping(user, project_uid, app_key)
+    if snapshot is None or snapshot["binding"] is None or snapshot["binding"].get_uid() != form.binding_uid:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    try:
+        saved = service.workflow_stage.save_app_mapping(
+            user, form.binding_uid, form.workflow_mapping, project_uid=project_uid, app_key=app_key,
+            expected_revision=form.expected_revision, enable_transitions=form.enable_transitions,
+        )
+    except WorkflowStageEditConflict:
+        raise ApiException.Conflict_409(ApiErrorCode.EX3004) from None
+    except ValueError:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from None
+    if saved is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    snapshot = service.workflow_stage.get_app_mapping(user, project_uid, app_key)
+    if snapshot is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=_app_workflow_response(snapshot))
+
+
+@AppRouter.api.post("/board/{project_uid}/settings/apps/{app_key}/workflow", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def prepare_app_workflow_mapping(
+    project_uid: str, app_key: str, user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    binding = service.workflow_stage.prepare_app_mapping(user, project_uid, app_key)
+    if binding is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    snapshot = service.workflow_stage.get_app_mapping(user, project_uid, app_key)
+    if snapshot is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=_app_workflow_response(snapshot))

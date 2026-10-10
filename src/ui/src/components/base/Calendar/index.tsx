@@ -3,6 +3,15 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
+import { enUS, ko, ja, zhCN } from "date-fns/locale";
+import { normalizeLocale } from "@/core/utils/LocalePolicy";
+
+const CALENDAR_LOCALES = { "en-US": enUS, "ko-KR": ko, "ja-JP": ja, "zh-CN": zhCN };
+function useCalendarLocale() {
+    const [, i18n] = useTranslation();
+    return CALENDAR_LOCALES[normalizeLocale(i18n.language)];
+}
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     endOfHour,
@@ -102,6 +111,8 @@ export interface ICalendarProps extends Omit<React.ComponentProps<typeof DayPick
 }
 const Calendar = React.forwardRef<HTMLDivElement, ICalendarProps>(
     ({ value, onChange, min, max, timezone, hideTime, use12HourFormat, disabled, clearable, classNames, timePicker, ...props }, ref) => {
+        const [t] = useTranslation();
+        const locale = useCalendarLocale();
         const [monthYearPicker, setMonthYearPicker] = useState<"month" | "year" | false>(false);
         const initDate = useMemo(() => new TZDate(value || new Date(), timezone), [value, timezone]);
 
@@ -160,7 +171,7 @@ const Calendar = React.forwardRef<HTMLDivElement, ICalendarProps>(
                 <div className="flex items-center justify-between">
                     <div className="text-md ms-2 flex cursor-pointer items-center font-bold">
                         <Button variant="ghost" className="px-3" onClick={() => setMonthYearPicker(monthYearPicker === "month" ? false : "month")}>
-                            {format(month, "MMMM")}
+                            {format(month, "MMMM", { locale })}
                         </Button>
                         <Button variant="ghost" className="me-1 px-3" onClick={() => setMonthYearPicker(monthYearPicker === "year" ? false : "year")}>
                             {format(month, "yyyy")}
@@ -177,6 +188,7 @@ const Calendar = React.forwardRef<HTMLDivElement, ICalendarProps>(
                 </div>
                 <div className="relative overflow-hidden">
                     <DayPicker
+                        locale={locale}
                         timeZone={timezone}
                         mode="single"
                         selected={date}
@@ -234,11 +246,11 @@ const Calendar = React.forwardRef<HTMLDivElement, ICalendarProps>(
                     )}
                     <div className="flex flex-row-reverse items-center justify-between">
                         <Button className="ms-2 h-7 px-2" onClick={onSumbit}>
-                            Done
+                            {t("editor.Done")}
                         </Button>
                         {timezone && (
                             <div className="text-sm">
-                                <span>Timezone:</span>
+                                <span>{t("settings.Timezone")}:</span>
                                 <span className="ms-1 font-semibold">{timezone}</span>
                             </div>
                         )}
@@ -264,6 +276,7 @@ function MonthYearPicker({
     onChange: (value: Date, mode: "month" | "year") => void;
     className?: string;
 }) {
+    const locale = useCalendarLocale();
     const yearRef = useRef<HTMLDivElement>(null);
     const years = useMemo(() => {
         const years: TimeOption[] = [];
@@ -285,10 +298,10 @@ function MonthYearPicker({
             const endM = endOfMonth(setMonthFns(value, i));
             if (minDate && endM < minDate) disabled = true;
             if (maxDate && startM > maxDate) disabled = true;
-            months.push({ value: i, label: format(new Date(0, i), "MMM"), disabled });
+            months.push({ value: i, label: format(new Date(0, i), "MMM", { locale }), disabled });
         }
         return months;
-    }, [value]);
+    }, [value, minDate, maxDate, locale]);
 
     const onYearChange = useCallback(
         (v: TimeOption) => {
@@ -370,6 +383,7 @@ function TimePicker({
     max?: Date;
     timePicker?: ICalendarProps["timePicker"];
 }) {
+    const locale = useCalendarLocale();
     // hours24h = HH
     // hours12h = hh
     const formatStr = useMemo(() => (use12HourFormat ? "yyyy-MM-dd hh:mm:ss.SSS a xxxx" : "yyyy-MM-dd HH:mm:ss.SSS xxxx"), [use12HourFormat]);
@@ -443,8 +457,8 @@ function TimePicker({
         const startD = startOfDay(value);
         const endD = endOfDay(value);
         return [
-            { value: AM_VALUE, label: "AM" },
-            { value: PM_VALUE, label: "PM" },
+            { value: AM_VALUE, label: format(setHours(value, 1), "a", { locale }) },
+            { value: PM_VALUE, label: format(setHours(value, 13), "a", { locale }) },
         ].map((v) => {
             let disabled = false;
             const start = addHours(startD, v.value * 12);
@@ -453,7 +467,7 @@ function TimePicker({
             if (max && start > max) disabled = true;
             return { ...v, disabled };
         });
-    }, [value, min, max]);
+    }, [value, min, max, locale]);
 
     const [open, setOpen] = useState(false);
 
@@ -553,8 +567,8 @@ function TimePicker({
             return "";
         }
 
-        return format(value, formatStr);
-    }, [value, use12HourFormat, timePicker]);
+        return format(value, formatStr, { locale });
+    }, [value, use12HourFormat, timePicker, locale]);
 
     let widthClassName = "w-72";
     if (timePicker) {

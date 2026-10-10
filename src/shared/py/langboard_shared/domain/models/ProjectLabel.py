@@ -1,10 +1,14 @@
 from typing import Any, ClassVar
+from sqlalchemy import JSON, UniqueConstraint
 from ...core.db import ApiField, BaseDbModel, Field, SnowflakeIDField
 from ...core.types import SnowflakeID
+from .GlobalLabel import GlobalLabel
 from .Project import Project
 
 
 class ProjectLabel(BaseDbModel, table=True):
+    __table_args__ = (UniqueConstraint("project_id", "global_label_id", name="uq_project_label_global_source"),)
+
     # TODO: Label, should change default labels
     DEFAULT_LABELS: ClassVar[list[dict[str, str]]] = [
         {"name": "To Do", "color": "#4A90E2", "description": "Tasks that need to be done."},
@@ -21,6 +25,10 @@ class ProjectLabel(BaseDbModel, table=True):
     project_id: SnowflakeID = SnowflakeIDField(
         foreign_key=Project, nullable=False, index=True, api_field=ApiField(name="project_uid")
     )
+    global_label_id: SnowflakeID | None = SnowflakeIDField(
+        foreign_key=GlobalLabel.expr("id"), nullable=True, api_field=ApiField(name="global_label_uid")
+    )
+    global_display: dict[str, Any] | None = Field(default=None, nullable=True, sa_type=JSON, api_field=ApiField())
     name: str = Field(nullable=False, api_field=ApiField())
     color: str = Field(nullable=False, api_field=ApiField())
     description: str = Field(nullable=False, api_field=ApiField())

@@ -10,6 +10,10 @@ export interface IHeaderNavItem {
 export interface IHeaderProps {
     navs: IHeaderNavItem[];
     title?: React.ReactNode;
+    compact?: boolean;
+    navigationReady?: boolean;
+    mobileNavigationTriggerRef?: React.Ref<HTMLButtonElement>;
+    mobileContextRef?: React.RefObject<HTMLElement | null>;
 }
 
 interface IBaseHeaderNavItemsProps {

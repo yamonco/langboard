@@ -1,3 +1,4 @@
+import { OPENAI_COMPATIBLE_PROVIDERS } from "@/ai/constants";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { TAgentModelName } from "@/ai/constants";
 import { TAgentFormInput } from "@/ai/form.types";
@@ -8,7 +9,6 @@ import { GROQ_MODELS } from "@/ai/models/Groq";
 import { IBM_MODELS, IBM_WATSONX_URLS } from "@/ai/models/IBM";
 import { getLMStudioModels } from "@/ai/models/LMStudio";
 import { getOllamaModels, OLLAMA_DEFAULT_VALUE } from "@/ai/models/Ollama";
-import { OPEN_AI_MODELS } from "@/ai/models/OpenAI";
 import { SAMBA_NOVA_MODELS } from "@/ai/models/SambaNova";
 
 export const getAgentModelInputForm = (model: TAgentModelName, envs: Record<string, any> = {}): TAgentFormInput[] => {
@@ -50,9 +50,16 @@ export const getAgentModelInputForm = (model: TAgentModelName, envs: Record<stri
             );
             break;
         case "OpenAI":
+        case "OpenAI Compatible":
+        case "Z.ai":
+        case "Z.ai Coding Plan":
+        case "OpenRouter":
+        case "LiteLLM":
+        case "Kimi":
             form.push(
+                { type: "text", name: "base_url", label: "Base URL", defaultValue: OPENAI_COMPATIBLE_PROVIDERS[model] },
                 { type: "password", name: "api_key", label: "API key" },
-                { type: "select", name: "model_name", label: "Provider", options: OPEN_AI_MODELS as unknown as string[] }
+                { type: "text", name: "model_name", label: "Model" }
             );
             break;
         case "SambaNova":

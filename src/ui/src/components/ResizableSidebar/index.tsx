@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Floating from "@/components/base/Floating";
@@ -20,6 +21,12 @@ export interface IResizableSidebarProps {
     floatingHidden?: bool;
     hidden?: bool;
     widthCssVariable?: string;
+    compactHeight?: bool;
+    minWidth?: number;
+    maxWidth?: number;
+    showCollapseButton?: bool;
+    autoCollapseAt?: number;
+    onCollapsedChange?: (collapsed: bool) => void;
 }
 
 function ResizableSidebar({
@@ -34,11 +41,21 @@ function ResizableSidebar({
     floatingHidden,
     hidden,
     widthCssVariable,
+    compactHeight,
+    minWidth,
+    maxWidth,
+    showCollapseButton = true,
+    autoCollapseAt,
+    onCollapsedChange,
 }: IResizableSidebarProps) {
+    const [t] = useTranslation();
     const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+    useEffect(() => {
+        onCollapsedChange?.(isCollapsed);
+    }, [isCollapsed, onCollapsedChange]);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
 
-    const collapsedWidth = 26;
+    const collapsedWidth = 52;
 
     if (collapsableWidth < 100) {
         throw new Error("collapsableWidth must be greater than 100");
@@ -84,6 +101,27 @@ function ResizableSidebar({
         sidebar.setAttribute("data-collapsed", collapsed ? "true" : "false");
     };
 
+    useEffect(() => {
+        const sidebar = document.getElementById(sidebarIdRef.current);
+        const container = sidebar?.parentElement;
+        if (!sidebar || !container || !autoCollapseAt || hidden) return;
+        let previousWidth = -1;
+        const update = () => {
+            const width = container.clientWidth;
+            if (width === previousWidth) return;
+            previousWidth = width;
+            if (width > 0 && width <= autoCollapseAt) {
+                sidebar.style.maxWidth = `${collapsedWidth}px`;
+                sidebar.setAttribute("data-collapsed", "true");
+                setIsCollapsed(true);
+            }
+        };
+        const observer = new ResizeObserver(update);
+        observer.observe(container);
+        update();
+        return () => observer.disconnect();
+    }, [autoCollapseAt, hidden]);
+
     const startResizing = (originalEvent: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
         document.documentElement.style.cursor = "e-resize";
         document.documentElement.style.userSelect = "none";
@@ -98,6 +136,10 @@ function ResizableSidebar({
 
         const handleResizing = (event: MouseEvent) => {
             const width = originalWidth + (event.pageX - originalMouseX);
+            if (minWidth) {
+                setCollapsedAttr(false, sidebar, Math.max(minWidth, Math.min(maxWidth ?? width, width)));
+                return;
+            }
             if (width > collapsableWidth) {
                 setCollapsedAttr(false, sidebar, width);
             } else if (width <= collapsableWidth && width >= (collapsableWidth + collapsedWidth) / 2) {
@@ -126,15 +168,19 @@ function ResizableSidebar({
             <Box
                 display={{ initial: "block", md: "flex" }}
                 w="full"
-                className="h-[calc(100vh_-_theme(spacing.16))] transition-all duration-200 ease-in-out"
+                className={cn(
+                    compactHeight ? "h-[calc(100dvh-2.75rem)]" : "h-[calc(100vh_-_theme(spacing.16))]",
+                    "transition-all duration-200 ease-in-out"
+                )}
             >
                 <Box
                     position="relative"
                     display={{ initial: "hidden", md: hidden ? "hidden" : "block" }}
                     size="full"
                     className="group/sidebar border-r transition-all data-[resizing=true]:transition-none"
-                    style={{ maxWidth: `${initialWidth}px` }}
+                    style={{ maxWidth: `${isCollapsed ? collapsedWidth : initialWidth}px` }}
                     data-collapsed={isCollapsed ? "true" : "false"}
+                    data-workbench-sidebar=""
                     id={sidebarIdRef.current}
                     hidden={hidden}
                 >
@@ -159,19 +205,22 @@ function ResizableSidebar({
                         onMouseDown={startResizing}
                     />
 
-                    <Button
-                        variant="secondary"
-                        onClick={() => {
-                            setCollapsedAttr(!isCollapsed, undefined, isCollapsed ? initialWidth : undefined);
-                            setIsCollapsed(!isCollapsed);
-                        }}
-                        className={cn(
-                            "absolute right-[-1.2rem] top-1/2 z-50 size-10 -translate-y-1/2 transform rounded-full p-0",
-                            "group-data-[resizing=true]/sidebar:hidden"
-                        )}
-                    >
-                        <IconComponent icon={isCollapsed ? "chevron-right" : "chevron-left"} size="8" />
-                    </Button>
+                    {showCollapseButton && (
+                        <Button
+                            variant="secondary"
+                            aria-label={t(isCollapsed ? "common.Expand" : "common.Collapse")}
+                            onClick={() => {
+                                setCollapsedAttr(!isCollapsed, undefined, isCollapsed ? initialWidth : undefined);
+                                setIsCollapsed(!isCollapsed);
+                            }}
+                            className={cn(
+                                "absolute right-1 top-1/2 z-50 size-10 -translate-y-1/2 rounded-md p-0",
+                                "group-data-[resizing=true]/sidebar:hidden"
+                            )}
+                        >
+                            <IconComponent icon={isCollapsed ? "chevron-right" : "chevron-left"} size="8" />
+                        </Button>
+                    )}
                 </Box>
                 {main}
             </Box>

@@ -6,6 +6,7 @@ import { ESocketTopic } from "@langboard/core/enums";
 export interface ICardColumnChangedRawResponse {
     to_column_uid: string;
     project_column_name: string;
+    updated_at?: string;
 }
 
 export interface IUseCardColumnChangedHandlersProps extends IBaseUseSocketHandlersProps<{}> {
@@ -24,6 +25,7 @@ const useCardColumnChangedHandlers = ({ callback, card }: IUseCardColumnChangedH
             responseConverter: (data) => {
                 card.project_column_uid = data.to_column_uid;
                 card.project_column_name = data.project_column_name;
+                if (data.updated_at) card.updated_at = data.updated_at;
                 return {};
             },
         },

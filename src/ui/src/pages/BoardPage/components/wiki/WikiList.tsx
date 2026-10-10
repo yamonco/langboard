@@ -6,6 +6,7 @@ import Skeleton from "@/components/base/Skeleton";
 import Tabs from "@/components/base/Tabs";
 import useGrabbingScrollHorizontal from "@/core/hooks/useGrabbingScrollHorizontal";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
+import { ProjectWiki } from "@/core/models";
 import { useBoardWiki } from "@/core/providers/BoardWikiProvider";
 import { ROUTES } from "@/core/routing/constants";
 import { getEditorStore } from "@/core/stores/EditorStore";
@@ -15,7 +16,7 @@ import WikiEmptyState from "@/pages/BoardPage/components/wiki/WikiEmptyState";
 import WikiTabList, { SkeletonWikiTabList } from "@/pages/BoardPage/components/wiki/WikiTabList";
 import { memo, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 export function SkeletonWikiList() {
     return (
@@ -68,7 +69,7 @@ interface IWikiListDisplayProps {
 
 function WikiListDisplay({ wikiUID }: IWikiListDisplayProps) {
     const [t] = useTranslation();
-    const { wikis, canAccessWiki, modeType, setModeType, wikiTabListId } = useBoardWiki();
+    const { project, wikis, canAccessWiki, modeType, setModeType, wikiTabListId } = useBoardWiki();
     const { updateUI } = Tabs.useTabsContext();
     const { onPointerDown } = useGrabbingScrollHorizontal(wikiTabListId);
     const handleDeleteMode = useCallback(() => {
@@ -77,6 +78,7 @@ function WikiListDisplay({ wikiUID }: IWikiListDisplayProps) {
     const handleReorderMode = useCallback(() => {
         setModeType(modeType === "reorder" ? "view" : "reorder");
     }, [modeType, setModeType]);
+    const activeWiki = wikis.find((wiki) => wiki.uid === wikiUID && canAccessWiki(false, wiki.uid));
 
     useEffect(() => {
         setTimeout(() => {
@@ -94,6 +96,19 @@ function WikiListDisplay({ wikiUID }: IWikiListDisplayProps) {
 
     return (
         <Box p="2">
+            <nav aria-label={t("common.Breadcrumb")} className="mb-2 flex min-w-0 items-center gap-2 px-1 text-xs text-muted-foreground">
+                <Link to={ROUTES.BOARD.MAIN(project.uid)} className="hover:text-foreground hover:underline">
+                    {t("board.Board")}
+                </Link>
+                <span aria-hidden="true">/</span>
+                <span>{t("board.Wiki")}</span>
+                {activeWiki && (
+                    <>
+                        <span aria-hidden="true">/</span>
+                        <WikiBreadcrumbTitle key={activeWiki.uid} wiki={activeWiki} />
+                    </>
+                )}
+            </nav>
             <Flex items="center" justify="between" gap="1">
                 <Box id={wikiTabListId} pb="0.5" w="full" className="max-w-[calc(100%_-_theme(spacing.20))] overflow-x-scroll">
                     <Tabs.List className="justify-start gap-1 border-none p-0" onPointerDown={onPointerDown}>
@@ -130,6 +145,15 @@ function WikiListDisplay({ wikiUID }: IWikiListDisplayProps) {
                 ) : null
             )}
         </Box>
+    );
+}
+
+function WikiBreadcrumbTitle({ wiki }: { wiki: ProjectWiki.TModel }) {
+    const title = wiki.useField("title");
+    return (
+        <span className="min-w-0 truncate text-foreground" aria-current="page">
+            {title}
+        </span>
     );
 }
 

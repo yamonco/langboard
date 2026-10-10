@@ -3,6 +3,7 @@
 from __future__ import annotations
 from json import dumps
 from typing import Any, Iterable, Sequence
+from langboard_shared.domain.models.bases import REACTION_TYPES
 from ..domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
     MAX_METADATA_VALUE_CHARS,
@@ -16,12 +17,17 @@ from .dtos import BoundedItemsDto, BoundedTextDto
 
 
 _ACTOR_KEYS = ("uid", "type", "firstname", "lastname", "username", "name", "bot_uname", "avatar")
-_CARD_KEYS = ("uid", "title", "created_at", "updated_at")
+_CARD_KEYS = ("uid", "title", "created_at", "updated_at", "can_delete")
 _WORKFLOW_KEYS = ("project_column_uid", "project_column_name", "order", "deadline_at", "archived_at")
-_LABEL_KEYS = ("uid", "name", "color", "description", "order")
+_LABEL_KEYS = ("uid", "name", "color", "description", "order", "global_label_uid")
 _RELATIONSHIP_KEYS = (
     "uid",
     "relationship_type_uid",
+    "parent_name",
+    "child_name",
+    "machine_semantic",
+    "affects_readiness",
+    "is_system_default",
     "parent_card_uid",
     "child_card_uid",
     "card_uid_parent",
@@ -56,7 +62,7 @@ _BOT_SCHEDULE_KEYS = (
 _MAX_FIELD_CHARS = 1_000
 
 
-def pick(source: dict[str, Any], keys: Iterable[str]) -> dict[str, Any]:
+def pick(source: dict[str, Any], keys: Iterable[str], max_field_chars: int = _MAX_FIELD_CHARS) -> dict[str, Any]:
     """Copy only explicitly approved fields from a native response."""
 
     result: dict[str, Any] = {}
@@ -64,8 +70,8 @@ def pick(source: dict[str, Any], keys: Iterable[str]) -> dict[str, Any]:
         if key not in source:
             continue
         value = source.get(key)
-        if isinstance(value, str) and len(value) > _MAX_FIELD_CHARS:
-            result[key] = value[:_MAX_FIELD_CHARS]
+        if isinstance(value, str) and len(value) > max_field_chars:
+            result[key] = value[:max_field_chars]
             result[f"{key}_total_chars"] = len(value)
             result[f"{key}_truncated"] = True
         else:
@@ -91,6 +97,18 @@ def public_comment(comment: dict[str, Any]) -> dict[str, Any]:
     for actor_type in ("user", "bot"):
         if isinstance(comment.get(actor_type), dict):
             result[actor_type] = public_actor(comment[actor_type])
+    reactions = comment.get("reactions")
+    if isinstance(reactions, dict):
+        result["reactions"] = {
+            reaction_type: [str(actor_uid) for actor_uid in actor_uids[:100]]
+            for reaction_type in REACTION_TYPES
+            if isinstance((actor_uids := reactions.get(reaction_type)), list) and actor_uids
+        }
+        result["reaction_counts"] = {
+            reaction_type: len(actor_uids)
+            for reaction_type in REACTION_TYPES
+            if isinstance((actor_uids := reactions.get(reaction_type)), list) and actor_uids
+        }
     return result
 
 
@@ -106,7 +124,10 @@ def public_attachment(attachment: dict[str, Any]) -> dict[str, Any]:
 def public_label(label: dict[str, Any]) -> dict[str, Any]:
     """Project one project-defined card label."""
 
-    return pick(label, _LABEL_KEYS)
+    result = pick(label, _LABEL_KEYS)
+    if label.get("global_label_uid") and label.get("global_display"):
+        result["emoji"] = label["global_display"].get("emoji", "")
+    return result
 
 
 def public_relationship(relationship: dict[str, Any]) -> dict[str, Any]:
@@ -118,7 +139,10 @@ def public_relationship(relationship: dict[str, Any]) -> dict[str, Any]:
 def public_checkitem(checkitem: dict[str, Any]) -> dict[str, Any]:
     """Project one bounded checklist item."""
 
-    return pick(checkitem, _CHECKITEM_KEYS)
+    result = pick(checkitem, _CHECKITEM_KEYS)
+    if isinstance(checkitem.get("cardified_card"), dict):
+        result["cardified_card"] = pick(checkitem["cardified_card"], _CARD_KEYS)
+    return result
 
 
 def public_checklist(checklist: dict[str, Any]) -> dict[str, Any]:
@@ -161,10 +185,44 @@ def public_bot_schedule(schedule: dict[str, Any]) -> dict[str, Any]:
     return pick(schedule, _BOT_SCHEDULE_KEYS)
 
 
-def public_card_summary(card: dict[str, Any]) -> dict[str, Any]:
+def public_column_context(service: Any, project_uid: str, cards: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Share native column guidance once per distinct visible column across list and search."""
+    uids = {str(card["project_column_uid"]) for card in cards if card.get("project_column_uid")}
+    if not uids:
+        return {}
+    return service.project_column.get_api_workflow_context(project_uid, uids)
+
+
+def public_card_summary(card: dict[str, Any], *, compact_workflow: bool = False) -> dict[str, Any]:
     """Project one minimal card list item."""
 
-    result = pick(card, _CARD_KEYS + _WORKFLOW_KEYS)
+    workflow_keys = tuple(key for key in _WORKFLOW_KEYS if not compact_workflow or key != "project_column_name")
+    result = pick(card, _CARD_KEYS + workflow_keys)
+    if isinstance(card.get("work_state"), dict):
+        state = card["work_state"]
+        result["work_state"] = pick(
+            state,
+            (
+                "workflow_stage",
+                "completed",
+                "verification_state",
+                "execution_state",
+                "execution_generation",
+                "blocker_state",
+                "pending_approval_count",
+                "material_kind",
+                "lifecycle",
+                "active_queue_eligible",
+                "overdue_suppressed",
+                "checklist_progress",
+            ),
+        )
+        result["work_state"]["reason_codes"] = [
+            reason["code"] for reason in state.get("reasons", []) if "code" in reason
+        ]
+        result["work_state"]["inconsistency_codes"] = [
+            reason["code"] for reason in state.get("state_inconsistency", []) if "code" in reason
+        ]
     if "member_uids" in card:
         result["member_uids"] = list(card.get("member_uids") or [])[:25]
     return result
@@ -235,6 +293,7 @@ def bounded_text(
         content=fragment,
         format=content_format,
         total_chars=len(content),
+        revision=revision,
         next_cursor=next_cursor,
     )
 
@@ -272,3 +331,25 @@ def _bounded_inline(value: Any, limit: int) -> tuple[str, str, int]:
         content = dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, default=str)
         content_format = "json"
     return content[:limit], content_format, len(content)
+
+
+def public_workflow_stages(stages: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Publish each resolved workflow policy once, without translations or storage internals."""
+    return {
+        key: pick(
+            stage,
+            (
+                "key",
+                "name",
+                "description",
+                "color",
+                "is_active",
+                "counts_as_completed",
+                "active_queue_policy",
+                "overdue_policy",
+                "entry_effects",
+            ),
+            4000,
+        )
+        for key, stage in stages.items()
+    }

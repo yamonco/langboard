@@ -80,10 +80,10 @@ class GraphApprovalRequestService(BaseDomainService):
 
         return response
 
-    def count_pending_by_project(self, project: TProjectParam) -> int:
+    def count_pending_by_project(self, project: TProjectParam, *, board_scope_only: bool = False) -> int:
         self.expire_pending()
         project_id = InfraHelper.convert_id(project)
-        return self.repo.graph_approval_request.count_pending_by_project(project_id)
+        return self.repo.graph_approval_request.count_pending_by_project(project_id, board_scope_only=board_scope_only)
 
     def create_from_interrupt(
         self,

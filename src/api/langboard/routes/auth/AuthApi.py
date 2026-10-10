@@ -186,7 +186,7 @@ def about_me(user: User = Auth.scope("user"), service: DomainService = DomainSer
     response = {
         **user.api_response(),
         **profile,
-        "preferred_lang": user.preferred_lang,
+        "preferred_lang": service.user.get_preferred_lang(user),
     }
     response["user_groups"] = service.user_group.get_api_list_by_user(user)
     response["subemails"] = service.user.get_subemails(user)
@@ -211,6 +211,8 @@ def about_me(user: User = Auth.scope("user"), service: DomainService = DomainSer
 def sign_out():
     is_secure = Env.PUBLIC_UI_URL.startswith("https://")
     response = JsonResponse(status_code=status.HTTP_202_ACCEPTED)
-    response.delete_cookie(Env.REFRESH_TOKEN_NAME, httponly=True, secure=is_secure)
+    response.delete_cookie(
+        Env.REFRESH_TOKEN_NAME, domain=Env.DOMAIN if Env.DOMAIN else None, httponly=True, secure=is_secure
+    )
 
     return response

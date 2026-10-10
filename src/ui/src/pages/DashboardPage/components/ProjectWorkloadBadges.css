@@ -1,0 +1,13 @@
+.project-workload-expanded {
+    display: none;
+}
+@container project-workload (min-width: 400px) {
+    .project-workload-expanded {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+    .project-workload-details {
+        display: none;
+    }
+}

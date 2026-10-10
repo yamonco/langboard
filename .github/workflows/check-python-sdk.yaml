@@ -1,0 +1,104 @@
+name: Check Python SDK
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/check-python-sdk.yaml
+      - src/sdk/py/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone-sdk:
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Check protocol without host dependencies
+        run: PYTHONPATH=src/sdk/py python -m unittest langboard_sdk.client_test -v
+      - name: Build standalone distribution
+        run: uv build --out-dir sdk-dist ./src/sdk/py
+      - name: Verify installed wheel has no runtime dependencies
+        run: |
+          python -m venv sdk-env
+          sdk-env/bin/pip install --no-deps sdk-dist/*.whl
+          sdk-env/bin/python - <<'PY'
+          import sys
+          from importlib.metadata import metadata
+          from langboard_sdk import LangboardClient, McpTransport
+          assert metadata("langboard-sdk").get_all("Requires-Dist") is None
+          assert not any(name.startswith(("langboard_chatgpt_plugin", "langboard_shared", "fastmcp", "httpx")) for name in sys.modules)
+          PY
+      - name: Record distribution provenance
+        run: |
+          python - <<'PYTHON'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path("sdk-dist")
+          files = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(root.iterdir()) if path.name.endswith((".whl", ".tar.gz"))}
+          (root / "provenance.json").write_text(json.dumps({"source_sha": os.environ["GITHUB_SHA"], "files": files}, indent=2) + "\n")
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        with:
+          name: langboard-python-sdk-${{ github.sha }}
+          path: sdk-dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  installed-consumer:
+    needs: standalone-sdk
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: langboard-python-sdk-${{ github.sha }}
+          path: sdk-dist/
+      - name: Verify downloaded package before installation
+        run: |
+          python - <<'PYTHON'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path("sdk-dist")
+          manifest = json.loads((root / "provenance.json").read_text())
+          assert manifest["source_sha"] == os.environ["GITHUB_SHA"]
+          assert len(list(root.glob("*.whl"))) == 1
+          for name, expected in manifest["files"].items():
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected
+          PYTHON
+          python -m venv consumer-env
+          consumer-env/bin/pip install --no-index --no-deps sdk-dist/*.whl
+      - name: Exercise installed SDK without source checkout or host dependencies
+        run: |
+          consumer-env/bin/python - <<'PYTHON'
+          import asyncio, sys
+          from importlib.metadata import metadata
+          from langboard_sdk import LangboardClient
+          class Transport:
+              async def call(self, name, arguments, *, mutation=False):
+                  assert name == "preview_card_work_plan" and not mutation
+                  assert arguments["project_uid"] == "fixture"
+                  return {"revision": "a" * 64}
+          assert asyncio.run(LangboardClient(Transport()).preview_work_plan({"project_uid": "fixture"}))["revision"] == "a" * 64
+          assert metadata("langboard-sdk").get_all("Requires-Dist") is None
+          assert not any(name.startswith(("langboard_chatgpt_plugin", "langboard_shared", "fastmcp", "httpx")) for name in sys.modules)
+          PYTHON

@@ -155,9 +155,10 @@ const InternalBot = memo(({ internalBot }: IInternalBotProps) => {
                             variant="outline"
                             size="icon-sm"
                             title={t("common.Copy")}
+                            aria-label={t("common.Copy")}
                             titleSide="bottom"
                             disabled={isValidating}
-                            onPointerDown={copyInternalBot}
+                            onClick={copyInternalBot}
                         >
                             <IconComponent icon="copy" size="4" />
                         </Button>
@@ -167,7 +168,7 @@ const InternalBot = memo(({ internalBot }: IInternalBotProps) => {
                     ) : canDeleteInternalBot ? (
                         <Popover.Root open={isOpened} onOpenChange={changeOpenState}>
                             <Popover.Trigger asChild>
-                                <Button variant="destructive" size="icon-sm" title={t("common.Delete")} titleSide="bottom" disabled={isValidating}>
+                                <Button variant="destructive" size="icon-sm" title={t("common.Delete")} aria-label={t("common.Delete")} titleSide="bottom" disabled={isValidating}>
                                     <IconComponent icon="trash-2" size="5" />
                                 </Button>
                             </Popover.Trigger>

@@ -1,0 +1,73 @@
+name: Check Workflow Stages
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/check-workflow-stages.yaml
+      - src/api/tests/workflow_stages/**
+      - src/api/langboard/routes/settings/WorkflowStageSettingsApi.py
+      - src/api/langboard/routes/settings/Form.py
+      - src/api/langboard/card_workspace/**
+      - src/api/langboard/mcp_tools/UserMcp.py
+      - src/api/langboard/migrations/versions/20261002114000-4afb6de824d3.py
+      - src/api/langboard/migrations/versions/20261002234000-7be934f2a6c1.py
+      - src/shared/py/langboard_shared/domain/models/WorkflowStageDefinition.py
+      - src/shared/py/langboard_shared/domain/services/CardWorkState.py
+      - src/shared/py/langboard_shared/domain/services/factory/WorkflowStageService.py
+      - src/shared/py/langboard_shared/domain/services/factory/WorkflowStagePolicyService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
+      - src/shared/py/langboard_shared/domain/services/factory/ProjectColumnService.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/WorkflowStageRepository.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/CardRepository.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/CheckitemTimerRecordRepository.py
+      - src/shared/py/langboard_shared/publishers/CheckitemPublisher.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy-and-transition:
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: langboard_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d langboard_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PROJECT_NAME: langboard
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - name: Registry, guidance, policy and SQLite transitions
+        run: uv run --no-sync pytest -q src/api/tests/workflow_stages
+      - name: Distinct column context for card list and search
+        run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_queries.py src/api/tests/card_workspace/test_native_adapter.py src/api/tests/mcp_integration/test_user_mcp.py src/shared/py/langboard_shared/domain/services/factory/ProjectColumnService_test.py
+      - name: PostgreSQL transitions and rollback
+        env:
+          LANGBOARD_EFFECT_TEST_DATABASE: postgresql+psycopg://postgres:postgres@localhost:5432/langboard_test
+        run: uv run --no-sync pytest -q src/api/tests/workflow_stages/test_entry_effects.py

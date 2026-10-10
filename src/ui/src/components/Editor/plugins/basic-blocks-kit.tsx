@@ -1,6 +1,7 @@
 "use client";
 
 import { BlockquotePlugin, H1Plugin, H2Plugin, H3Plugin, HorizontalRulePlugin } from "@platejs/basic-nodes/react";
+import { BlockquoteRules, HeadingRules, HorizontalRuleRules } from "@platejs/basic-nodes";
 import { ParagraphPlugin } from "platejs/react";
 import { BlockquoteElement } from "@/components/plate-ui/blockquote-node";
 import { H1Element, H2Element, H3Element } from "@/components/plate-ui/heading-node";
@@ -10,6 +11,7 @@ import { ParagraphElement } from "@/components/plate-ui/paragraph-node";
 export const BasicBlocksKit = [
     ParagraphPlugin.withComponent(ParagraphElement),
     H1Plugin.configure({
+        inputRules: [HeadingRules.markdown()],
         node: {
             component: H1Element,
         },
@@ -19,6 +21,7 @@ export const BasicBlocksKit = [
         shortcuts: { toggle: { keys: "mod+alt+1" } },
     }),
     H2Plugin.configure({
+        inputRules: [HeadingRules.markdown()],
         node: {
             component: H2Element,
         },
@@ -28,6 +31,7 @@ export const BasicBlocksKit = [
         shortcuts: { toggle: { keys: "mod+alt+2" } },
     }),
     H3Plugin.configure({
+        inputRules: [HeadingRules.markdown()],
         node: {
             component: H3Element,
         },
@@ -37,8 +41,12 @@ export const BasicBlocksKit = [
         shortcuts: { toggle: { keys: "mod+alt+3" } },
     }),
     BlockquotePlugin.configure({
+        inputRules: [BlockquoteRules.markdown()],
         node: { component: BlockquoteElement },
         shortcuts: { toggle: { keys: "mod+shift+period" } },
     }),
-    HorizontalRulePlugin.withComponent(HrElement),
+    HorizontalRulePlugin.configure({
+        node: { component: HrElement },
+        inputRules: [HorizontalRuleRules.markdown({ variant: "-" }), HorizontalRuleRules.markdown({ variant: "_" })],
+    }),
 ];
