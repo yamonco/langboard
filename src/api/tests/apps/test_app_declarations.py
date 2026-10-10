@@ -27,6 +27,9 @@ def test_independent_adapter_builtin_stage_and_many_resources(board, monkeypatch
     registry = {**manifests.APP_MANIFESTS, adapter.key: adapter}
     monkeypatch.setattr(manifests, "APP_MANIFESTS", registry)
     monkeypatch.setattr(service_module, "APP_MANIFESTS", registry)
+    # Workflow lookup now uses the current approved registry boundary as well.
+    approval_registry = importlib.import_module("langboard_shared.domain.services.AppRegistry")
+    monkeypatch.setattr(approval_registry, "APP_MANIFESTS", registry)
     with DbSession.use(readonly=False) as db:
         role.actions = ["read", "update"]
         db.update(role)

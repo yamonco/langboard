@@ -16,6 +16,7 @@ class AppSignalPolicy:
     requires_empty_commit: bool = False
     requires_commit: bool = False
     time_basis: str = "provider_occurrence"
+    evidence_kind: str = "check"
     outcome_states: tuple[tuple[str, str], ...] = (
         ("success", "passed"), ("failure", "failed"), ("timed_out", "failed"),
     )
@@ -81,7 +82,7 @@ APP_MANIFESTS = MappingProxyType(
             APP_WORKFLOW_REQUIREMENTS["glitchtip"],
             signal_policy=AppSignalPolicy(
                 ("issue.status_observed",), ("project",), ("signals.read", "resources.read"),
-                requires_empty_commit=True, time_basis="observation",
+                requires_empty_commit=True, time_basis="observation", evidence_kind="issue_observation",
                 outcome_states=(("unresolved", "failed"), ("resolved", "resolved"), ("ignored", "ignored")),
             ),
         ),
@@ -93,6 +94,7 @@ APP_MANIFESTS = MappingProxyType(
             signal_policy=AppSignalPolicy(
                 ("deployment.queued", "deployment.started", "deployment.succeeded", "deployment.failed", "deployment.cancelled"),
                 ("application", "compose"), ("signals.read", "deployments.read"), requires_empty_commit=True,
+                evidence_kind="deployment",
                 outcome_states=(
                     ("success", "passed"), ("failure", "failed"), ("timed_out", "failed"),
                     ("queued", "queued"), ("running", "running"), ("cancelled", "cancelled"),
