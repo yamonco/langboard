@@ -288,3 +288,12 @@ does not require an active credential or an external provider request, so a brok
 provider cannot prevent it. Subsequent native reads and unattended webhook reads
 use the existing current-grant gates. This does not claim cancellation of work
 already accepted by an external service or complete personal MCP consent support.
+
+The revoke control remains visible for any remaining provider read grant, even
+when the grant set is partial or no selected resource is currently eligible.
+Use **Load saved selections** to obtain the binding without provider discovery.
+Re-consent still requires an eligible selected resource. Native SQLite regression
+also proves revocation under a disabled global policy, disabled app definition
+and revoked credential, with no provider I/O and no change to another board's
+binding or the connected account. These are local authority proofs, not deployed
+PostgreSQL or external-operation cancellation evidence.
