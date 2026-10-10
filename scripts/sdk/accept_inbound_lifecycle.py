@@ -126,6 +126,8 @@ async def acceptance(base, auth):
             "workflow_requirements": {"required": ["backlog"], "optional": []},
         }
         approved = await registry.approve(declared)
+        catalog_app = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")
+        assert catalog_app["inbound_connection_management"] is True
         prepared = await source.prepare_source(transport, auth["board"], "example-erp", approved["revision"])
         inbound = prepared["connection"]
         auth["connection"] = inbound["connection_uid"]

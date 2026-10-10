@@ -64,6 +64,19 @@
     "invalid_archive_visible_days": "1일 이상 입력하세요."
   },
   "settings": {
+    "Confirm inbound change": "확인",
+    "Manage inbound connections": "서비스 연결 관리",
+    "Inbound connection help": "Langboard 인입 서비스 주체를 등록합니다. 외부 계정 로그인이나 보드 권한 부여는 수행하지 않습니다.",
+    "Connection ownership": "연결 소유권",
+    "Personal connection": "내 개인 연결",
+    "Inbound connection refresh required": "결과가 달라졌을 수 있습니다. 변경 전에 목록을 다시 조회하세요.",
+    "No inbound connections": "서비스 연결 없음",
+    "Disconnect inbound connection": "연결 해제",
+    "More inbound connections": "연결 더 보기",
+    "First inbound connections": "첫 페이지",
+    "Create inbound connection": "서비스 연결 등록",
+    "Inbound disconnect help": "연결을 해제하면 현재 자격증명 사용과 새 발급이 차단됩니다.",
+
     "Copy as template": "템플릿으로 복사",
     "Template name": "템플릿 이름",
     "Basic info": "기본 정보",

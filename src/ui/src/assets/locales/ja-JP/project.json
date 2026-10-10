@@ -64,6 +64,19 @@
     "invalid_archive_visible_days": "1日以上を入力してください。"
   },
   "settings": {
+    "Confirm inbound change": "確認",
+    "Manage inbound connections": "サービス接続の管理",
+    "Inbound connection help": "Langboard の受信サービスIDを登録します。外部ログインやボード権限の付与は行いません。",
+    "Connection ownership": "接続の所有権",
+    "Personal connection": "自分の個人接続",
+    "Inbound connection refresh required": "変更前に一覧を更新してください。",
+    "No inbound connections": "サービス接続なし",
+    "Disconnect inbound connection": "接続解除",
+    "More inbound connections": "接続をさらに表示",
+    "First inbound connections": "最初のページ",
+    "Create inbound connection": "サービス接続を登録",
+    "Inbound disconnect help": "接続解除後は現在の認証情報の使用と新規発行が拒否されます。",
+
     "Copy as template": "テンプレートとしてコピー",
     "Template name": "テンプレート名",
     "Basic info": "基本情報",

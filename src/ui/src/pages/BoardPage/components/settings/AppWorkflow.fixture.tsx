@@ -8,11 +8,33 @@ import i18n from "@/i18n";
 import "@/assets/styles/main.css";
 import { api } from "@/core/helpers/Api";
 const writes: unknown[] = [];
+let inbound = [{ connection_uid: "connection1", ownership: "personal", state: "connected", revision: "a".repeat(64) }];
+let inboundFailed = false;
+const inboundReads: string[] = [];
+Object.assign(window, { inboundReads });
 const missing = new URLSearchParams(location.search).has("missing");
 let repaired = false;
 let disabled = false;
 Object.assign(window, { workflowWrites: writes });
 api.defaults.adapter = async (config) => {
+    if (config.url?.endsWith("/inbound-connections")) {
+        if (config.method === "post") {
+            writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
+            inbound = [...inbound, { connection_uid: "connection2", ownership: "personal", state: "connected", revision: "b".repeat(64) }];
+        } else inboundReads.push(config.url);
+        return { config, status: 200, statusText: "OK", headers: {}, data: { items: inbound, next_cursor: null } };
+    }
+    if (config.url?.includes("/inbound-connections/") && config.url.endsWith("/disconnect")) {
+        writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
+        if (new URLSearchParams(location.search).has("connectionfail") && !inboundFailed) {
+            inboundFailed = true;
+            throw new Error("outcome unknown");
+        }
+        inbound = inbound.map((item) => ({ ...item, state: "disconnected", revision: "c".repeat(64) }));
+        return { config, status: 200, statusText: "OK", headers: {}, data: {} };
+    }
+    if (config.url?.endsWith("/governance/organizations"))
+        return { config, status: 200, statusText: "OK", headers: {}, data: { items: [], next_cursor: null } };
     if (config.url?.endsWith("/connections")) return { config, status: 200, statusText: "OK", headers: {}, data: { items: [], next_cursor: null } };
     if (config.method === "put" || config.method === "post") {
         writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
@@ -29,6 +51,8 @@ api.defaults.adapter = async (config) => {
                 apps: ["github", "glitchtip", "dokploy", ...(new URLSearchParams(location.search).has("external") ? ["example-erp"] : [])].map(
                     (key) => ({
                         key,
+                        app_revision: key === "example-erp" ? "a".repeat(64) : null,
+                        inbound_connection_management: key === "example-erp",
                         name: { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" }[key] ?? "Example ERP",
                         description: "Independent issue tracker",
                         capabilities: ["panels.render"],

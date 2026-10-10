@@ -64,6 +64,19 @@
     "invalid_archive_visible_days": "Enter at least 1 day."
   },
   "settings": {
+    "Confirm inbound change": "Confirm",
+    "Manage inbound connections": "Manage service connections",
+    "Inbound connection help": "Registers a Langboard inbound service identity. Does not sign in to an external account or grant board access.",
+    "Connection ownership": "Connection ownership",
+    "Personal connection": "My personal connections",
+    "Inbound connection refresh required": "Result may have changed. Refresh the list before another change.",
+    "No inbound connections": "No service connections",
+    "Disconnect inbound connection": "Disconnect",
+    "More inbound connections": "More connections",
+    "First inbound connections": "First page",
+    "Create inbound connection": "Register service connection",
+    "Inbound disconnect help": "Disconnecting blocks current credentials and new credential issuance.",
+
     "Copy as template": "Copy as template",
     "Template name": "Template name",
     "Basic info": "Basic info",

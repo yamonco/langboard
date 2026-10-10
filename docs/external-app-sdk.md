@@ -792,6 +792,15 @@ and `limit` (1–50, default 25) for bounded pages. Responses include only UID,
 ownership, state and the current disconnect revision; no credentials or upstream
 account data. Disabled apps and policies still allow this recovery for cleanup.
 
+The board App Store exposes **Manage service connections** when the host catalog
+declares `inbound_connection_management`. The shared screen loads only when opened,
+supports personal or currently managed organization scopes, paged receipt recovery,
+explicit registration and disconnect confirmation. Failed writes require a manual
+list refresh before another mutation; no automatic mutation retry is scheduled.
+These identities do not authenticate external accounts or grant board capabilities.
+Resource selection, capability consent and credential issuance remain separate
+operations; this connection screen does not yet provide those controls.
+
 After preparing a board workflow draft, select each external resource with
 `PUT /board/{project_uid}/settings/apps/{app_key}/inbound-connections/{connection_uid}/resources`.
 Send the current app revision, binding UID/revision, declared `resource_type` and
