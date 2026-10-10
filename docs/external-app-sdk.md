@@ -297,3 +297,10 @@ also proves revocation under a disabled global policy, disabled app definition
 and revoked credential, with no provider I/O and no change to another board's
 binding or the connected account. These are local authority proofs, not deployed
 PostgreSQL or external-operation cancellation evidence.
+
+Read-grant revocation publishes the existing content-free `apps:changed` event
+only after a committed binding revision change. Repeated revocation and rolled
+back transactions emit nothing. The existing board socket receiver disposes
+active panel sessions, clears the selected app and invalidates the catalog when
+that event arrives. SQLite tests prove commit/rollback notification behavior;
+actual deployed socket delivery and multi-browser acceptance remain required.

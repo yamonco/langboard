@@ -10,6 +10,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied, require_connection_access
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
+from langboard_shared.publishers import AppSettingPublisher
 from .MetadataTransport import MetadataUnavailable, approved_instance, read_json
 
 
@@ -429,6 +430,8 @@ def disable_read_access(service, actor, project_uid, connection_uid, expected_re
         if not binding.granted_capabilities:
             binding.state = "disabled"
         db.update(binding)
+        if binding.edit_revision() != expected_binding_revision:
+            db.after_commit(AppSettingPublisher.apps_changed)
         return {"uid": binding.get_uid(), "revision": binding.edit_revision(), "state": binding.state,
                 "granted_capabilities": list(binding.granted_capabilities)}
 
