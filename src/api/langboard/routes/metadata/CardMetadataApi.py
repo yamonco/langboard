@@ -18,6 +18,7 @@ from langboard_shared.core.security.CollaborationChannel import CollaborationCha
 from langboard_shared.domain.models import Bot, CardMetadata, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied
 from langboard_shared.filter import RoleFilter
 from langboard_shared.publishers import MetadataPublisher
 from langboard_shared.security import Auth, RoleFinder
@@ -131,12 +132,14 @@ def save_card_metadata(
     )
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2016)
-    _, card, _ = params
+    project, card, _ = params
     if card.is_linked_resource:
         raise ApiException.NotFound_404(ApiErrorCode.NF2016)
 
     try:
-        metadata = service.metadata.save(CardMetadata, card, form.key, form.value, form.old_key)
+        metadata = service.metadata.save_card(user_or_bot, project, card, form.key, form.value, form.old_key)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
     except ValueError:
         raise ApiException.BadRequest_400() from None
     if metadata is None:
@@ -169,11 +172,14 @@ def delete_card_metadata(
     )
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    _, card, _ = params
+    project, card, _ = params
     if card.is_linked_resource:
         raise ApiException.NotFound_404(ApiErrorCode.NF2016)
 
-    service.metadata.delete(CardMetadata, card, form.keys)
+    try:
+        service.metadata.delete_card(user_or_bot, project, card, form.keys)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
 
     MetadataPublisher.deleted_metadata(SocketTopic.BoardCard, card.get_uid(), form.keys)
     return JsonResponse()

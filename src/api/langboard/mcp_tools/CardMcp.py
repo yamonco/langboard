@@ -1637,10 +1637,10 @@ def save_public_card_metadata(
     params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
     if not params:
         raise ValueError("Project or card not found")
-    _, card, _ = params
+    project, card, _ = params
     if card.is_linked_resource:
         raise ValueError("Linked resource cards are read-only")
-    metadata = service.metadata.save(CardMetadata, card, normalized_key, value, normalized_old_key)
+    metadata = service.metadata.save_card(user_or_bot, project, card, normalized_key, value, normalized_old_key)
     if metadata is None:
         raise RuntimeError("Failed to save metadata")
     MetadataPublisher.updated_metadata(SocketTopic.BoardCard, card.get_uid(), normalized_key, metadata.value, normalized_old_key)
@@ -1666,10 +1666,10 @@ def delete_public_card_metadata(
     params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
     if not params:
         raise ValueError("Project or card not found")
-    _, card, _ = params
+    project, card, _ = params
     if card.is_linked_resource:
         raise ValueError("Linked resource cards are read-only")
-    if not service.metadata.delete(CardMetadata, card, normalized):
+    if not service.metadata.delete_card(user_or_bot, project, card, normalized):
         raise ValueError("Metadata not found")
     MetadataPublisher.deleted_metadata(SocketTopic.BoardCard, card.get_uid(), normalized)
     return {"deleted": True}

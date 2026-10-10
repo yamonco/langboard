@@ -59,10 +59,10 @@ def save_card_metadata(
     if not params:
         raise ValueError("Project or card not found")
 
-    _, card, _ = params
+    project, card, _ = params
     if card.is_linked_resource:
         raise ValueError("Linked resource cards are read-only")
-    metadata = service.metadata.save(CardMetadata, card, key, value, old_key)
+    metadata = service.metadata.save_card(user_or_bot, project, card, key, value, old_key)
     if metadata is None:
         raise ValueError("Failed to save metadata")
 
@@ -79,10 +79,10 @@ def delete_card_metadata(
     if not params:
         raise ValueError("Project or card not found")
 
-    _, card, _ = params
+    project, card, _ = params
     if card.is_linked_resource:
         raise ValueError("Linked resource cards are read-only")
-    service.metadata.delete(CardMetadata, card, keys)
+    service.metadata.delete_card(user_or_bot, project, card, keys)
     MetadataPublisher.deleted_metadata(SocketTopic.BoardCard, card.get_uid(), keys)
     return {"message": "Metadata deleted successfully"}
 

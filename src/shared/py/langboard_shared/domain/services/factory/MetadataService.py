@@ -1,15 +1,31 @@
 from typing import Any, Literal, Sequence, TypeVar, overload
 from ....core.db import BaseDbModel
 from ....core.domain import BaseDomainService
+from ....core.types.ParamTypes import TUserOrBot
 from ...constants.CardPresentation import CARD_PRESENTATION_KEY, validate_card_presentation
-from ...models import Card
+from ...models import Card, CardMetadata
 from ...models.bases import BaseMetadataModel
+from ..CardAppMutation import guard_card_app_mutation
 
 
 _TMetadata = TypeVar("_TMetadata", bound=BaseMetadataModel)
 
 
 class MetadataService(BaseDomainService):
+    @guard_card_app_mutation
+    def save_card(self, user_or_bot: TUserOrBot, project, card: Card, key: str, value: str,
+                  old_key: str | None = None, *, internal: bool = False):
+        """Authenticated card write boundary; internal keys do not bypass ownership."""
+        if card.project_id != project.id:
+            raise ValueError("Card not found in project")
+        return self.save(CardMetadata, card, key, value, old_key, internal=internal)
+
+    @guard_card_app_mutation
+    def delete_card(self, user_or_bot: TUserOrBot, project, card: Card, keys: str | list[str]) -> bool:
+        if card.project_id != project.id:
+            raise ValueError("Card not found in project")
+        return self.delete(CardMetadata, card, keys)
+
     @staticmethod
     def _is_work_plan_receipt(key: str) -> bool:
         return key.strip().lower().startswith("internal.work_plan.")

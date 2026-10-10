@@ -28,6 +28,7 @@ from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.domain.services.factory.CheckitemService import CheckitemService
 from langboard_shared.domain.services.factory.ChecklistService import ChecklistService
 from langboard_shared.domain.services.factory.GraphApprovalRequestService import GraphApprovalRequestService
+from langboard_shared.domain.services.factory.MetadataService import MetadataService
 from langboard_shared.domain.services.factory.OrchestrationTaskService import OrchestrationTaskService
 from langboard_shared.domain.services.factory.WorkflowStageService_app_test import board  # noqa: F401
 from langboard_shared.infrastructure.repositories.factory.GraphApprovalRequestRepository import (
@@ -104,6 +105,65 @@ def test_orchestration_denies_bot_before_metadata_or_child_creation(board, opera
 def test_orchestration_metadata_requires_actor(operation):
     with pytest.raises(TypeError, match="user_or_bot"):
         getattr(OrchestrationTaskService(None, None, None), operation)("project", "card", {})
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+@pytest.mark.parametrize("operation", ["save", "delete", "internal"])
+def test_card_metadata_denies_unbound_bot_before_generic_storage(board, monkeypatch, operation):
+    card = prepare(board)
+    set_card_app_ownership(board[1], board[2].id, card.id, "example-app", None)
+    actor = Bot(name="Automation", bot_uname="bot-test", app_api_token="test-only",
+                platform="default", platform_running_type="default")
+    service = MetadataService(None, None, None)
+    save, delete = Mock(), Mock()
+    monkeypatch.setattr(service, "save", save)
+    monkeypatch.setattr(service, "delete", delete)
+    with pytest.raises(AppGovernanceDenied):
+        if operation == "delete":
+            service.delete_card(actor, board[2], card, ["note"])
+        else:
+            service.save_card(actor, board[2], card, "note", "value", internal=operation == "internal")
+    save.assert_not_called()
+    delete.assert_not_called()
+    service.save_card(board[1], board[2], card, "note", "value")
+    save.assert_called_once()
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+@pytest.mark.parametrize("surface", ["rest_save", "rest_delete", "mcp_save", "mcp_delete", "legacy_save", "legacy_delete"])
+def test_metadata_surfaces_use_native_ownership_boundary(board, monkeypatch, surface):
+    from langboard.mcp_tools import CardMcp, MetadataMcp
+    from langboard.routes.metadata import CardMetadataApi
+
+    card = prepare(board)
+    set_card_app_ownership(board[1], board[2].id, card.id, "example-app", None)
+    actor = Bot(name="Automation", bot_uname="bot-test", app_api_token="test-only",
+                platform="default", platform_running_type="default")
+    metadata = MetadataService(None, None, None)
+    save, delete = Mock(), Mock()
+    monkeypatch.setattr(metadata, "save", save)
+    monkeypatch.setattr(metadata, "delete", delete)
+    service = SimpleNamespace(card=SimpleNamespace(resolve_readable_card=lambda *args: (board[2], card, object())),
+                              metadata=metadata)
+    project_uid, card_uid = board[2].get_uid(), card.get_uid()
+    expected = ApiException.Forbidden_403 if surface.startswith("rest") else AppGovernanceDenied
+    with pytest.raises(expected):
+        if surface == "rest_save":
+            CardMetadataApi.save_card_metadata(project_uid, card_uid, SimpleNamespace(key="note", value="value", old_key=None),
+                                               SimpleNamespace(scope={}), actor, service)
+        elif surface == "rest_delete":
+            CardMetadataApi.delete_card_metadata(SimpleNamespace(keys=["note"]), project_uid, card_uid,
+                                                 SimpleNamespace(scope={}), actor, service)
+        elif surface == "mcp_save":
+            CardMcp.save_public_card_metadata(project_uid, card_uid, "note", "value", actor, service)
+        elif surface == "mcp_delete":
+            CardMcp.delete_public_card_metadata(project_uid, card_uid, ["note"], actor, service)
+        elif surface == "legacy_save":
+            MetadataMcp.save_card_metadata(project_uid, card_uid, "note", "value", None, actor, service)
+        else:
+            MetadataMcp.delete_card_metadata(project_uid, card_uid, ["note"], actor, service)
+    save.assert_not_called()
+    delete.assert_not_called()
 
 
 def test_orchestration_routes_pass_authenticated_actor():
