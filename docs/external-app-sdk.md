@@ -495,3 +495,21 @@ Suspension before the query produces no external inspection; suspension during
 the query prevents result publication and leaves the job blocked with retained
 unknown access. Three cases pass locally. PostgreSQL schema, real GitHub I/O and
 deployed worker execution remain unverified by this regression.
+
+### Explicit card execution resource selection (internal implementation)
+
+`CardAppResourceSelection` stores a revisioned, bounded set of at most 20 generic
+resource UIDs for one card/app and one connection. This is separate from the
+commit/check-specific `CardAppSignalBinding`. `set_card_app_resources` requires a
+current human board administrator, current card visibility, matching app ownership,
+current unattended connection authority, declared `resources.read`, board consent
+and selected/granted resources belonging to the same board and connection.
+Replacing a selection requires its current revision. Resource identifiers confer
+no authority; execution must recheck current resources and execution gates.
+
+Empty selections explicitly unlink resources, including after consent revocation.
+Every changed selection appends an audit record atomically. Audit rows have no
+card/connection foreign keys, and downgrade refuses to discard existing history.
+The internal service is not exposed as an execution API or SDK grant. Native
+REST/MCP configuration, execution grants, PostgreSQL concurrency, HITL/outbox and
+external-app acceptance remain pending.

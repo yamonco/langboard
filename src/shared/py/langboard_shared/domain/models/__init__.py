@@ -4,6 +4,7 @@ from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
 from .AppConnection import AppConnection
 from .AppConnectionCredential import AppConnectionCredential
+from .CardAppResourceSelection import CardAppResourceSelection, CardAppResourceSelectionAudit
 from .CardAppOwnership import CardAppOwnership, CardAppOwnershipAudit
 from .AppDefinition import AppDefinition
 from .AppGovernancePolicy import AppGovernancePolicy
@@ -106,6 +107,8 @@ from .WorkflowStageDefinition import WorkflowStageDefinition
 
 
 __all__ = [
+    "CardAppResourceSelection",
+    "CardAppResourceSelectionAudit",
     "CardAppOwnership",
     "CardAppOwnershipAudit",
     "AppConnectionCredential",
