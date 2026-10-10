@@ -67,10 +67,20 @@ async def submit_secret_input(
                 raise ValueError()
             body.extend(chunk)
         form = loads(body)
-        if not isinstance(form, dict) or set(form) != {"value"} or not isinstance(form["value"], str):
+        if (
+            not isinstance(form, dict)
+            or set(form) not in ({"value"}, {"value", "reason_code"})
+            or not isinstance(form["value"], str)
+        ):
             raise ValueError()
         payload = await run_in_threadpool(
-            complete_input, service, user, input_uid, SecretStr(form["value"]), request.cookies.get(COOKIE)
+            complete_input,
+            service,
+            user,
+            input_uid,
+            SecretStr(form["value"]),
+            request.cookies.get(COOKIE),
+            form.get("reason_code", "user_input"),
         )
     except (SecretReferenceUnavailable, ValueError):
         raise ApiException.BadRequest_400() from None

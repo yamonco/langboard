@@ -47,7 +47,8 @@
     "cancel": "Cancel request",
     "cancelled": "Cancelled. No secret was stored.",
     "create": "Create secret",
-    "rotate": "Replace existing secret value"
+    "rotate": "Replace existing secret value",
+    "reason": "Reason"
   },
   "secretHistory": {
     "title": "Secret history",
@@ -75,7 +76,11 @@
       "reference_revoked": "Reference revocation",
       "value_rotated": "Secret value rotation",
       "reference_bound": "Authorized application connection binding",
-      "provider_migrated": "Secret storage provider changed"
+      "provider_migrated": "Secret storage provider changed",
+      "integration_setup": "Integration setup",
+      "routine_rotation": "Routine credential rotation",
+      "credential_expired": "Expired credential replacement",
+      "security_response": "Security response"
     },
     "openSource": "Open source card",
     "openSourceWiki": "Open source wiki"

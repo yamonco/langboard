@@ -53,6 +53,10 @@ class SecretAuditSource:
     reason_code: (
         Literal[
             "user_input",
+            "integration_setup",
+            "routine_rotation",
+            "credential_expired",
+            "security_response",
             "runtime_use",
             "reference_created",
             "reference_renamed",
@@ -79,6 +83,10 @@ class SecretAuditSource:
         if self.reason_code not in {
             None,
             "user_input",
+            "integration_setup",
+            "routine_rotation",
+            "credential_expired",
+            "security_response",
             "runtime_use",
             "reference_created",
             "reference_renamed",
