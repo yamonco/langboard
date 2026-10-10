@@ -532,3 +532,21 @@ start, stop acknowledgment or a mutation authorization token. Every future write
 must recheck current authority. Durable execution/HITL receipts, start/resume,
 active-stage mutation fences, signed event delivery and PostgreSQL concurrency
 acceptance remain pending.
+
+### Durable execution request acceptance
+
+`POST /apps/v1/boards/{board_uid}/cards/{card_uid}/execution-requests` accepts
+only `{ "generation": N }` with a strict positive integer and a dedicated app
+Bearer credential. It evaluates current authority in the same atomic transaction
+as insertion. `AppExecutionRequest` preserves the accepted authority snapshot
+without card/connection foreign keys. The unique card/generation record returns
+the same request UID for a retry only after current authority is rechecked.
+Changing owner, connection, selection, board revision or resource access revision
+conflicts with that accepted generation. Revocation denies a retry without
+removing evidence. Downgrade refuses to discard existing requests.
+
+The response is `state: requested`, `started: false`. This is request acceptance,
+not dispatch, delivery, a running lease or an external runtime acknowledgment.
+No automatic start or resume is implemented by this route. Durable signed
+outbox delivery, request discovery and start/stop/resume acknowledgment remain
+required before an external app can execute through this flow.
