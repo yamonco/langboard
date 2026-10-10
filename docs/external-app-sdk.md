@@ -763,10 +763,16 @@ commit `620e7f9`). The example imports only the public SDK and takes a
 caller-owned transport. It approves a disposable third-party app, grants board
 panel consent, reads the panel declaration, approves a revision-checked update,
 and disables the app. The default `.invalid` origin does not render a panel.
-Authenticated native HTTP integration exercises the actual example source;
-this management evidence does not substitute for webhook processing, browser
-rendering or deployment acceptance. The SDK wheel remains independently pinned
-at its reviewed package source; example-only edits do not rebuild that artifact.
+The management example has also been exercised over real loopback HTTP to a
+separate Uvicorn process, using configured primary/read-only database engines,
+native authentication and the native file broadcast dispatcher without runtime
+monkeypatches. Registration, board consent, update and disable emitted four
+`apps:changed` invalidations; registry readback retained generation 3 and disabled
+panel access was denied. The disposable database was seeded with an administrator
+and board, so this is management-path acceptance, not SSO onboarding or a full
+production instance boot. This evidence does not substitute for webhook processing,
+browser rendering or deployment acceptance. The SDK wheel remains independently
+pinned at its reviewed package source; example-only edits do not rebuild that artifact.
 
 Runtime wire timestamps (`expires_at` and start `reported_at`) always include a
 UTC offset. The database writer stores UTC; SQLite's naive reloaded values are
