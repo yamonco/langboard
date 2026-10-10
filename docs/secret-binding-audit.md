@@ -31,3 +31,21 @@ the reason before claiming the one-use input. Invalid free text and reasons for 
 operation cannot write a value or consume the input. Older clients that omit the reason
 retain `user_input`. English, Korean, Japanese, and Chinese labels share the same stored
 reason codes; no credential material is accepted in an audit reason.
+
+## Native copy producer
+
+`POST /secret-references/{uid}/copy` accepts only a new logical name and the
+current source revision. The host rechecks current source ownership/update
+authority and active state. A copy stays in the source scope; this endpoint
+cannot share it into another user, board, or organization. Each successful copy
+has an independent URI and opaque vault location. It returns metadata only and
+is deliberately not exposed as a credential-resolving MCP operation.
+
+The source receives `copied` and the destination receives `created`, correlated
+by one generated request ID and the fixed `reference_copied` reason. Copying
+does not change the source revision or retire source material. Both database
+facts commit together; a database/audit failure removes the newly stored vault
+material. A duplicate logical name or stale revision returns a conflict rather
+than replacing an existing secret. The migration preserves old audit records
+and refuses downgrade while copy facts exist. Browser copy controls, wiki
+secretization, and live canary acceptance remain separate unfinished work.

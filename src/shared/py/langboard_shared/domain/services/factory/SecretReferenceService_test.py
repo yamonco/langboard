@@ -34,6 +34,7 @@ def secrets(board, monkeypatch, tmp_path):
         "20261008114000-e87412793ab3.py",
         "20261009040000-7c98451eab03.py",
         "20261009100000-b51832cfe4a7.py",
+        "20261010212000-e15b02634f97.py",
     ):
         migration_path = Path(__file__).resolve().parents[7] / "src/api/langboard/migrations/versions" / filename
         spec = importlib.util.spec_from_file_location("secret_reference_migration", migration_path)

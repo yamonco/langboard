@@ -65,7 +65,8 @@
       "revoked": "폐기",
       "rotated": "값 교체",
       "bound": "연결됨",
-      "migrated": "저장소 이전"
+      "migrated": "저장소 이전",
+      "copied": "복사"
     },
     "reasons": {
       "user_input": "사용자의 명시 웹 입력",
@@ -80,7 +81,8 @@
       "integration_setup": "연동 설정",
       "routine_rotation": "정기 비밀값 교체",
       "credential_expired": "만료된 비밀값 교체",
-      "security_response": "보안 대응"
+      "security_response": "보안 대응",
+      "reference_copied": "동일 권한 범위의 명시적 시크릿 복사"
     },
     "openSource": "원본 카드 열기",
     "openSourceWiki": "원본 위키 열기"

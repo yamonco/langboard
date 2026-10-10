@@ -65,7 +65,8 @@
       "revoked": "Revoked",
       "rotated": "Value replaced",
       "bound": "Bound",
-      "migrated": "Storage migrated"
+      "migrated": "Storage migrated",
+      "copied": "Copied"
     },
     "reasons": {
       "user_input": "Explicit browser input",
@@ -80,7 +81,8 @@
       "integration_setup": "Integration setup",
       "routine_rotation": "Routine credential rotation",
       "credential_expired": "Expired credential replacement",
-      "security_response": "Security response"
+      "security_response": "Security response",
+      "reference_copied": "Explicit same-scope secret copy"
     },
     "openSource": "Open source card",
     "openSourceWiki": "Open source wiki"

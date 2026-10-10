@@ -65,7 +65,8 @@
       "revoked": "失効",
       "rotated": "値を置換",
       "bound": "紐付け済み",
-      "migrated": "保存先の移行"
+      "migrated": "保存先の移行",
+      "copied": "コピー"
     },
     "reasons": {
       "user_input": "ユーザーの明示的なWeb入力",
@@ -80,7 +81,8 @@
       "integration_setup": "連携設定",
       "routine_rotation": "定期的な認証情報の更新",
       "credential_expired": "期限切れ認証情報の交換",
-      "security_response": "セキュリティ対応"
+      "security_response": "セキュリティ対応",
+      "reference_copied": "同じ権限範囲内での明示的なシークレットのコピー"
     },
     "openSource": "元のカードを開く",
     "openSourceWiki": "元のWikiを開く"
