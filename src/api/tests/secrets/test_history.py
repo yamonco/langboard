@@ -157,6 +157,21 @@ def test_request_correlation_and_fixed_reason_codes_never_include_material(secre
         SecretAuditSource(request_id="invalid request with spaces")
 
 
+def test_legacy_input_nonce_is_redacted_without_rewriting_audit(secrets):
+    import hashlib
+    from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
+
+    service, board, _ = secrets
+    nonce = "x" * 43
+    meta = service.create(
+        board[1], "personal", "me", "history/legacy-input", SecretStr("never-expose"),
+        source=SecretAuditSource("api", "secret_input", request_id=nonce, reason_code="user_input"),
+    )
+    events = service.list_audit(board[1], meta["uri"])["items"]
+    assert events[0]["request_id"] == hashlib.sha256(nonce.encode()).hexdigest()
+    assert nonce not in json.dumps(events)
+
+
 def test_audit_correlation_migration_preserves_legacy_rows_and_guards_downgrade(secrets, monkeypatch):
     import importlib.util
     from pathlib import Path

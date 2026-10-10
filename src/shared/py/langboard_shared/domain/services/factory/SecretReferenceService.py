@@ -1,5 +1,6 @@
 """Trusted host secret resolution; intentionally absent from MCP/value-read routes."""
 
+import hashlib
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -371,7 +372,12 @@ class SecretReferenceService(BaseDomainService):
                             if row.source_uid in source_links.get(row.source_kind, {})
                             else {}
                         ),
-                        "request_id": row.request_id,
+                        "request_id": hashlib.sha256(row.request_id.encode()).hexdigest()
+                        if row.source_kind == "api"
+                        and row.source_uid == "secret_input"
+                        and isinstance(row.request_id, str)
+                        and re.fullmatch(r"[A-Za-z0-9_-]{43}", row.request_id)
+                        else row.request_id,
                         "reason_code": row.reason_code,
                     }
                     for row in rows[:limit]
