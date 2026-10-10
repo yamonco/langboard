@@ -106,7 +106,7 @@ const setupApiErrorHandler = (configs: IApiErrorHandlerMap, messageRef?: { messa
             return convertHandlerWithConfig(error, config);
         }
 
-        if (error.code === AxiosError.ERR_NETWORK) {
+        if (!error.response && [AxiosError.ERR_NETWORK, AxiosError.ECONNABORTED, AxiosError.ETIMEDOUT].includes(error.code ?? "")) {
             return convertHandler(error, "network");
         }
 

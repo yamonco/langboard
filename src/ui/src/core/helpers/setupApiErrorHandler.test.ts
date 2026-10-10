@@ -42,5 +42,15 @@ for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
             assert.equal(ref.message, expected);
             assert.ok(!ref.message.includes("errors.requests."));
         }
+        for (const code of [AxiosError.ERR_NETWORK, AxiosError.ECONNABORTED, AxiosError.ETIMEDOUT]) {
+            const ref = { message: "" };
+            module.exports.default({}, ref).handle(new AxiosError("Private transport detail", code));
+            assert.equal(ref.message, errors["Network error"]);
+
+            const serverError = new AxiosError("Private server detail", code);
+            serverError.response = { status: 500, data: {} } as AxiosError["response"];
+            module.exports.default({}, ref).handle(serverError);
+            assert.equal(ref.message, errors["Internal server error"]);
+        }
     });
 }
