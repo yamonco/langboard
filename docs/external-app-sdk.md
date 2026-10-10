@@ -761,3 +761,8 @@ Authenticated native HTTP integration exercises the actual example source;
 this management evidence does not substitute for webhook processing, browser
 rendering or deployment acceptance. The SDK wheel remains independently pinned
 at its reviewed package source; example-only edits do not rebuild that artifact.
+
+Runtime wire timestamps (`expires_at` and start `reported_at`) always include a
+UTC offset. The database writer stores UTC; SQLite's naive reloaded values are
+normalized to UTC at the shared runtime response boundary. Receivers should
+continue rejecting offset-free timestamps rather than guessing local time.

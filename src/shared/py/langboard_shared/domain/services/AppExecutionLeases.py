@@ -1,7 +1,7 @@
 """Explicit, current-authority start permits and stop-only recovery credentials."""
 
 import re
-from datetime import timedelta
+from datetime import timedelta, timezone
 from hashlib import sha256
 from hmac import compare_digest
 from ...core.db import DbSession, SqlBuilder
@@ -22,6 +22,11 @@ from .AppGovernance import AppGovernanceDenied
 
 
 LEASE_SECONDS = 120
+
+
+def runtime_timestamp(value):
+    """Writers store UTC; SQLite reloads naive values. Wire timestamps stay aware."""
+    return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value).isoformat()
 
 
 def _hash(token):
@@ -51,7 +56,7 @@ def _result(db, row):
         "state": row.state,
         "permit_execution": row.state == "authorized",
         "started": False,
-        "expires_at": row.expires_at.isoformat(),
+        "expires_at": runtime_timestamp(row.expires_at),
     }
 
 

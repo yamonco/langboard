@@ -7,7 +7,7 @@ from ..models import AppConnectionCredential, AppExecutionLease, AppExecutionSta
 from .AppConnectionAuthentication import authenticate_connection_credential
 from .AppEventDelivery import _expired
 from .AppExecutionAcknowledgments import _request
-from .AppExecutionLeases import _hash, _result
+from .AppExecutionLeases import _hash, _result, runtime_timestamp
 from .AppExecutionRequests import AppExecutionRequestConflict
 from .AppGovernance import AppGovernanceDenied
 
@@ -73,7 +73,7 @@ def report_app_execution_start(token, project_id, card_id, request_id, lease_id,
             "state": "start_reported",
             "evidence_kind": "app_attestation",
             "execution_reference": receipt.execution_reference,
-            "reported_at": receipt.created_at.isoformat(),
+            "reported_at": runtime_timestamp(receipt.created_at),
             "changed": changed,
         }
 
@@ -93,7 +93,7 @@ def read_app_runtime_report(lease_id, runtime_token):
             "start_report": {
                 "start_uid": start.get_uid(),
                 "execution_reference": start.execution_reference,
-                "reported_at": start.created_at.isoformat(),
+                    "reported_at": runtime_timestamp(start.created_at),
             }
             if start is not None
             else None,
