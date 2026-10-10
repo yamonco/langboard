@@ -524,6 +524,7 @@ def test_global_app_policy_hides_existing_evidence_without_deleting_it(scoped):
     state, card, _, _ = scoped
     send(state)
     assert card_signal_projections([card])[card.id]
+
     with DbSession.use(readonly=False) as db:
         policy = AppGovernancePolicy(scope_key="global", mode="disabled")
         db.insert(policy)
@@ -532,6 +533,44 @@ def test_global_app_policy_hides_existing_evidence_without_deleting_it(scoped):
         policy.mode = "approved_only"
         db.update(policy)
     assert card_signal_projections([card])[card.id]
+
+
+def test_disabled_app_policy_allows_unlink_but_not_rebind(scoped):
+    from langboard.apps.CardSignal import bind_check, read_checks, unlink_check
+    from langboard.apps.GitHubManifest import GitHubManifestUnavailable
+    from langboard_shared.domain.models import AppGovernancePolicy
+    from langboard_shared.domain.services import DomainService
+
+    state, card, binding, _ = scoped
+    domain = DomainService()
+    state[0].card = domain.card
+    with DbSession.use(readonly=False) as db:
+        state[1][4].actions = ["read", "update", "card_update"]
+        db.update(state[1][4])
+    signal_uid = send(state)["signal_uid"]
+    with DbSession.use(readonly=False) as db:
+        db.insert(AppGovernancePolicy(scope_key="global", mode="disabled"))
+    try:
+        before = read_checks(state[0], state[1][1], state[1][2].get_uid(), card.get_uid())
+        assert before["items"] == []
+        assert before["bindings"] == [{"binding_uid": binding.get_uid(), "revision": 0}]
+        with DbSession.use(readonly=False) as db:
+            state[1][4].actions = ["read"]
+            db.update(state[1][4])
+        with pytest.raises(GitHubManifestUnavailable):
+            unlink_check(state[0], state[1][1], state[1][2].get_uid(), card.get_uid(), binding.get_uid(), 0)
+        with DbSession.use(readonly=False) as db:
+            state[1][4].actions = ["read", "update", "card_update"]
+            db.update(state[1][4])
+        result = unlink_check(state[0], state[1][1], state[1][2].get_uid(), card.get_uid(), binding.get_uid(), 0)
+        assert result["is_enabled"] is False and result["revision"] == 1
+        with pytest.raises(GitHubManifestUnavailable):
+            bind_check(
+                state[0], state[1][1], state[1][2].get_uid(), card.get_uid(), state[2].get_uid(),
+                state[4].get_uid(), signal_uid, card.last_change_seq, 1,
+            )
+    finally:
+        domain.close()
 
 
 @pytest.mark.parametrize("change", ["disabled", "capability"])

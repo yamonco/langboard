@@ -31,9 +31,11 @@ class CardSignalConflict(Exception):
     pass
 
 
-def authorized_card(service, actor, project_uid, card_uid, *, channel=CollaborationChannel.Api):
+def authorized_card(service, actor, project_uid, card_uid, *, channel=CollaborationChannel.Api, revocation=False):
     if (
-        service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.CardUpdate, lock=True)
+        service.workflow_stage._authorized_app_board(
+            actor, project_uid, ProjectRoleAction.CardUpdate, lock=True, revocation=revocation
+        )
         is None
     ):
         raise GitHubManifestUnavailable()
@@ -183,7 +185,7 @@ def unlink_check(
     service, actor, project_uid, card_uid, binding_uid, expected_revision, *, channel=CollaborationChannel.Api
 ):
     with DbSession.atomic() as db:
-        card = authorized_card(service, actor, project_uid, card_uid, channel=channel)
+        card = authorized_card(service, actor, project_uid, card_uid, channel=channel, revocation=True)
         binding = db.exec(
             SqlBuilder.select.table(CardAppSignalBinding)
             .where(
@@ -204,7 +206,7 @@ def unlink_check(
 
 
 def read_checks(service, actor, project_uid, card_uid, *, channel=CollaborationChannel.Api):
-    if service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.Read) is None:
+    if service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.Read, revocation=True) is None:
         raise GitHubManifestUnavailable()
     resolved = service.card.resolve_readable_card(project_uid, card_uid, actor, channel)
     if resolved is None:
