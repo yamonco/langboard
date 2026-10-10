@@ -18,6 +18,7 @@ from langboard_shared.domain.models import (
     AppSignal,
     BoardAppBinding,
     GitHubSignalDelivery,
+    Organization,
     Project,
 )
 from test_github_installation import board, installation, secrets  # noqa: F401
@@ -28,6 +29,14 @@ from test_github_signal import signal_storage  # noqa: F401
 @pytest.fixture
 def delivery_storage(signal_storage, monkeypatch):
     state = signal_storage
+    with DbSession.atomic() as db:
+        organization = Organization(name="Delivery fixture", slug="delivery-fixture", owner_user_id=state[1][1].id)
+        db.insert(organization)
+        state[1][2].organization_id = organization.id
+        state[2].ownership = "organization"
+        state[2].organization_id = organization.id
+        db.update(state[1][2])
+        db.update(state[2])
     path = Path(__file__).resolve().parents[2] / "langboard/migrations/versions/20261008123000-0a96349b5cd5.py"
     spec = importlib.util.spec_from_file_location("signal_delivery_migration", path)
     migration = importlib.util.module_from_spec(spec)
@@ -61,7 +70,7 @@ def evidence():
 
 def add_board(state, project_id, *, grant=True, repository="99"):
     with DbSession.use(readonly=False) as db:
-        project = Project(owner_id=state[1][1].id, title=f"Fanout fixture {project_id}")
+        project = Project(owner_id=state[1][1].id, organization_id=state[1][2].organization_id, title=f"Fanout fixture {project_id}")
         db.insert(project)
         binding = BoardAppBinding(project_id=project.id, app_key="github", state="needs_attention", granted_capabilities=["signals.read"] if grant else [])
         db.insert(binding)
@@ -88,6 +97,41 @@ def test_multi_board_delivery_durable_paging_and_no_mapping_requirement(delivery
     assert worker.drain_one(state[0], uid)
     assert job(uid).state == "completed" and len(evidence()) == 6
     assert not worker.drain_one(state[0], uid)
+
+
+@pytest.mark.parametrize("scope", ["shared-personal", "private-personal", "inactive-organization", "suspended-organization"])
+def test_delivery_rechecks_unattended_connection_scope(delivery_storage, scope):
+    state = delivery_storage[0]
+    uid = receive(delivery_storage)["delivery_uid"]
+    with DbSession.atomic() as db:
+        if scope.endswith("personal"):
+            state[2].ownership = "personal"
+            state[2].organization_id = None
+        if scope == "private-personal":
+            state[1][2].organization_id = None
+            state[1][2].owner_id = state[1][1].id
+            db.update(state[1][2])
+        elif scope.endswith("organization"):
+            organization = db.exec(SqlBuilder.select.table(Organization).where(Organization.id == state[2].organization_id)).first()
+            if scope == "inactive-organization":
+                organization.is_active = False
+            else:
+                organization.suspended_at = SafeDateTime.now()
+            db.update(organization)
+        db.update(state[2])
+        # Store the current revision so this exercises ownership, not the revision fence.
+        from langboard.apps.GitHubInstallation import connection_revision
+        delivery = job(uid)
+        delivery.connection_revision = connection_revision(state[2])
+        db.update(delivery)
+    assert worker.drain_one(state[0], uid)
+    if scope == "private-personal":
+        assert len(evidence()) == 1
+        assert job(uid).skipped_resources == 0
+    else:
+        assert evidence() == []
+        assert job(uid).skipped_resources == 1
+        assert job(uid).last_error == "authority_unavailable"
     assert all(row.outcome == "success" and row.commit_sha == "a" * 40 for row in evidence())
     assert "private output" not in repr(job(uid).evidence)
 

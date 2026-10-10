@@ -157,7 +157,7 @@ def drain_one(service, uid):
     try:
         with DbSession.atomic() as db:
             owner, connection, resource = _scope(service, db, InfraHelper.convert_uid(project_id), connection_uid,
-                                                 InfraHelper.convert_uid(resource_id), lock=True)
+                                                 InfraHelper.convert_uid(resource_id), lock=True, unattended=True)
             if connection_revision(connection) != revision:
                 raise GitHubManifestUnavailable()
             secret = service.secret_reference._find(owner, connection.credential_reference, lock=True)

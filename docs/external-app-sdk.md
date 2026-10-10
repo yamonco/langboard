@@ -196,5 +196,10 @@ has no organization, and an organization account must match the board's active,
 unsuspended organization. This check applies to card evidence and paged signal
 and linked-resource discovery; a valid credential alone cannot substitute for
 the current organization boundary.
+The GitHub queued signal worker rechecks `unattended` connection authority for
+each leased resource before writing evidence. Personal connections are blocked
+on organization or shared boards; an owner-only personal board may retain its
+explicit personal automation. Organization connections require a current matching
+active organization. Existing evidence and failed delivery history are retained.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.
