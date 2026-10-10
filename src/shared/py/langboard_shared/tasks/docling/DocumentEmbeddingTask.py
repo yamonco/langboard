@@ -80,7 +80,7 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
     if not document or document.get("generation") != generation or document.get("status") != "indexed":
         return
     project = service.project.get_by_id_like(card.project_id)
-    if not project:
+    if not project or project.deleted_at is not None:
         return
     snapshot = document.get("embedding_config")
     if not isinstance(snapshot, dict):

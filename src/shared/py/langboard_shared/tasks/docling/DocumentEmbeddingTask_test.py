@@ -32,7 +32,7 @@ def fixture(monkeypatch, tmp_path):
     service = SimpleNamespace(
         card_attachment=SimpleNamespace(get_by_id_like=Mock(return_value=attachment)),
         card=SimpleNamespace(get_by_id_like=Mock(return_value=card)),
-        project=SimpleNamespace(get_by_id_like=Mock(return_value=SimpleNamespace(get_uid=lambda: "board-uid"))),
+        project=SimpleNamespace(get_by_id_like=Mock(return_value=SimpleNamespace(deleted_at=None, get_uid=lambda: "board-uid"))),
         internal_bot=SimpleNamespace(get_current_by_id_like=Mock(return_value=binding)),
         docling_metadata=metadata,
     )
@@ -61,7 +61,7 @@ def fixture(monkeypatch, tmp_path):
     return service, document, attachment
 
 
-@pytest.mark.parametrize("invalid", ["deleted", "stale", "missing-board"])
+@pytest.mark.parametrize("invalid", ["deleted", "stale", "missing-board", "deleted-board"])
 def test_invalid_sources_never_send_document(monkeypatch, tmp_path, invalid):
     service, document, attachment = fixture(monkeypatch, tmp_path)
     if invalid == "deleted":
@@ -70,6 +70,8 @@ def test_invalid_sources_never_send_document(monkeypatch, tmp_path, invalid):
         document["generation"] = "newer"
     if invalid == "missing-board":
         service.project.get_by_id_like.return_value = None
+    if invalid == "deleted-board":
+        service.project.get_by_id_like.return_value.deleted_at = "deleted"
     task.embed_transcription(service, "attachment", "current")
     task.create_document_embeddings.assert_not_called()
     task.stage_vector_generation.assert_not_called()
