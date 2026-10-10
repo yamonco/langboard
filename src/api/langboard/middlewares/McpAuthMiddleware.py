@@ -130,6 +130,7 @@ class McpAuthMiddleware(BaseMiddleware):
             "user_or_bot": validation_result,
             "api_key": api_key,
             "tool_group": tool_group,
+            "oidc_claims": scope.get("oidc_claims"),
             "collaboration_channel": CollaborationChannel.Mcp,
         }
         context_token = mcp_auth_context.set(auth_data)
