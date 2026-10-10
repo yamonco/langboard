@@ -1,5 +1,5 @@
 import { globalLabelDisplay } from "@/core/utils/LabelDisplay";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import Input from "@/components/base/Input";
@@ -34,6 +34,7 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
     const [language, setLanguage] = useState("en");
     const [newLanguage, setNewLanguage] = useState("");
     const [dirty, setDirty] = useState(false);
+    const savingRef = useRef(false);
     const { mutateAsync: load, isPending: loading } = useGetGlobalLabels({ interceptToast: true });
     const { mutateAsync: save, isPending: saving } = useSaveGlobalLabel({ interceptToast: true });
     const canSave = hasRoleAction(draft.uid ? SettingRole.EAction.GlobalLabelUpdate : SettingRole.EAction.GlobalLabelCreate);
@@ -85,7 +86,8 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
         setDirty(true);
     };
     const submit = async () => {
-        if (!canSave || saving) return;
+        if (!canSave || savingRef.current) return;
+        savingRef.current = true;
         try {
             const updated = await save({ ...draft, aliases: [...new Set((draft.aliases ?? []).map((alias) => alias.trim()).filter(Boolean))] });
             setLabels((items) => [...items.filter((item) => item.uid !== updated.uid), updated].sort((a, b) => a.name.localeCompare(b.name)));
@@ -94,6 +96,8 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
             Toast.Add.success(t("settings.Label saved"));
         } catch {
             Toast.Add.error(t("errors.Internal server error"));
+        } finally {
+            savingRef.current = false;
         }
     };
     return (
