@@ -136,6 +136,8 @@ class SecretReferenceService(BaseDomainService):
                         current,
                         scope_id,
                         ProjectRoleAction.Update,
+                        lock=True,
+                        revocation=True,
                     )
                     is not None
                 )

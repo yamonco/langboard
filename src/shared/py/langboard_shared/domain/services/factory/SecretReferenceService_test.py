@@ -90,6 +90,12 @@ def test_project_reference_requires_current_update_permission(secrets):
     )
     renamed = service.rename(actor, meta["uri"], "github/new-key", 0)
     assert renamed["uri"] == meta["uri"] and renamed["revision"] == 1
+    from ...models import AppGovernancePolicy
+    with DbSession.use(readonly=False) as db:
+        db.insert(AppGovernancePolicy(scope_key="global", mode="disabled"))
+    assert service.get_metadata(actor, meta["uri"])["revision"] == 1
+    renamed = service.rename(actor, meta["uri"], "github/independent-key", 1)
+    assert renamed["revision"] == 2
     with pytest.raises(SecretReferenceConflict):
         service.revoke(actor, meta["uri"], 0)
     with DbSession.use(readonly=False) as db:
