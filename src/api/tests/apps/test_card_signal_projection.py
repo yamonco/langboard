@@ -144,6 +144,34 @@ def test_current_revocation_suppresses_evidence(scoped, failure):
     assert card_signal_projections([card]) == {}
 
 
+@pytest.mark.parametrize("ownership", ["valid", "foreign", "inactive", "suspended"])
+def test_signal_evidence_requires_current_connection_organization(scoped, ownership):
+    from langboard_shared.core.types import SafeDateTime
+
+    state, card, _, _ = scoped
+    send(state)
+    with DbSession.atomic() as db:
+        organization = Organization(name="Signal scope", slug="signal-scope", owner_user_id=state[1][1].id)
+        db.insert(organization)
+        project, connection = state[1][2], state[2]
+        project.organization_id = organization.id
+        connection.ownership = "organization"
+        connection.organization_id = organization.id
+        if ownership == "foreign":
+            project.organization_id = None
+        elif ownership == "inactive":
+            organization.is_active = False
+        elif ownership == "suspended":
+            organization.suspended_at = SafeDateTime.now()
+        for row in (organization, project, connection):
+            db.update(row)
+    projected = card_signal_projections([card])
+    if ownership == "valid":
+        assert projected[card.id][0]["state"] == "passed"
+    else:
+        assert projected == {}
+
+
 @pytest.mark.parametrize("scope", ["project", "workspace"])
 def test_native_nonpersonal_secret_scope_and_revocation(scoped, scope):
     from pydantic import SecretStr

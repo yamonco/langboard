@@ -190,5 +190,11 @@ board signal inboxes and linked-resource discovery also apply the current app
 capability ceiling inside their existing SQL queries. Revoked evidence is hidden
 without deleting it, and cursors into revoked resources become invalid. A revoked queued
 GitHub delivery retains its normalized evidence and blocked delivery history.
+
+Connection ownership is also checked in the shared SQL scope: a personal account
+has no organization, and an organization account must match the board's active,
+unsuspended organization. This check applies to card evidence and paged signal
+and linked-resource discovery; a valid credential alone cannot substitute for
+the current organization boundary.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.

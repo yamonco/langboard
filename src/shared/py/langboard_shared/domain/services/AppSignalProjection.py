@@ -20,6 +20,7 @@ from ..models import (
     SecretReference,
     User,
 )
+from .AppGovernance import connection_discovery_scope
 
 
 def registered_capability_condition(app_key, capability):
@@ -71,6 +72,7 @@ def signal_resource_conditions(*, app_key="github", resource_type="repository", 
         cast(BoardAppBinding.granted_capabilities, Text).contains(f'"{capability}"'),
         AppConnection.app_key == BoardAppBinding.app_key,
         AppConnection.state == "connected",
+        connection_discovery_scope(AppConnection.owner_id),
         User.deleted_at.is_(None),
         User.activated_at.is_not(None),
         or_(User.is_admin == True, Project.owner_id == User.id, and_(membership, update_grant)),  # noqa: E712
