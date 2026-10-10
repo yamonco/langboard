@@ -353,6 +353,35 @@ existing path. Local lifecycle tests cover the private-board success, shared-boa
 rejection, mid-query sharing race, resource paging and authenticated diagnostics.
 Deployed organization connection onboarding and worker acceptance remain required.
 
+### Inbound connection identity (local implementation)
+
+An authenticated connection owner can issue a dedicated inbound credential with
+`POST /settings/apps/connections/{connection_uid}/credentials`. The JSON body
+accepts `expires_in_seconds` (integer, 60–86400; default 3600). The response
+contains `credential_uid`, `connection_uid`, `token` and `expires_at`. The token
+is returned once; the database retains only its SHA-256 hash. Responses use
+`Cache-Control: no-store`. Personal credentials can be managed only by their
+owner; organization credentials require the existing organization management
+authorization.
+
+An external app sends `Authorization: Bearer <token>` to
+`GET /apps/v1/identity`. The response contains `schema_version: 1`, `app_key`,
+`connection_uid`, `credential_uid` and optional `organization_uid`. App identity
+comes from persisted connection state, never a caller-supplied app key.
+Authentication checks current connection, account, app registration, organization
+and effective policy. Expiry, revocation, connection revision or trust-target
+changes invalidate the credential. Same-trust app version updates preserve it
+when the connection itself is unchanged.
+
+Owners can revoke with
+`POST /settings/apps/connections/{connection_uid}/credentials/{credential_uid}/revoke`.
+Revocation is idempotent and remains available after app or policy disablement;
+credential history is retained. These credentials cannot authenticate as users
+or bots. Identity alone grants no card mutation or execution capability. The
+app-owned card fence, app execution grants, HITL delivery contract and independent
+app end-to-end acceptance remain subsequent work. These endpoints have local
+implementation evidence; deployment and PostgreSQL acceptance are pending.
+
 The native GitHub health worker now has an organization-owned connection
 acceptance regression using actual SQLite lifecycle receipts and leased jobs.
 An active matching organization completes the job and restores resource health.
