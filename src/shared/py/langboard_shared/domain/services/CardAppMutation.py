@@ -8,6 +8,30 @@ from ..models import Bot, Card, CardAppOwnership, Project, User
 from .AppGovernance import AppGovernanceDenied
 
 
+def require_card_app_mutation(db: DbSession, actor: User | Bot, card, project=None) -> None:
+    """Fence direct writers in their existing transaction before side effects."""
+    if isinstance(actor, User):
+        return
+    if not isinstance(actor, Bot):
+        raise AppGovernanceDenied()
+    if project is not None:
+        db.exec(
+            SqlBuilder.select.table(Project)
+            .where(Project.id == InfraHelper.convert_id(project))
+            .with_for_update()
+        ).first()
+    current = db.exec(
+        SqlBuilder.select.table(Card).where(Card.id == InfraHelper.convert_id(card)).with_for_update()
+    ).first()
+    if current is not None:
+        owner = db.exec(
+            SqlBuilder.select.table(CardAppOwnership).where(CardAppOwnership.card_id == current.id)
+        ).first()
+        if owner is not None and owner.app_key is not None:
+            # Bot attributes and payloads are not authenticated app authority.
+            raise AppGovernanceDenied()
+
+
 def guard_card_app_mutation(operation):
     """Retain human service authorization; bots have no authenticated owner-app grant."""
     parameters = signature(operation)
@@ -25,24 +49,7 @@ def guard_card_app_mutation(operation):
             raise AppGovernanceDenied()
         with DbSession.atomic() as db:
             project = bound.arguments.get("project")
-            if project is not None:
-                db.exec(
-                    SqlBuilder.select.table(Project)
-                    .where(Project.id == InfraHelper.convert_id(project))
-                    .with_for_update()
-                ).first()
-            current = db.exec(
-                SqlBuilder.select.table(Card).where(Card.id == InfraHelper.convert_id(card)).with_for_update()
-            ).first()
-            if current is not None:
-                owner = db.exec(
-                    SqlBuilder.select.table(CardAppOwnership).where(
-                        CardAppOwnership.card_id == current.id,
-                    )
-                ).first()
-                if owner is not None and owner.app_key is not None:
-                    # A bot's attributes, payload or readable card are not an app credential.
-                    raise AppGovernanceDenied()
+            require_card_app_mutation(db, actor, card, project)
             return operation(*args, **kwargs)
 
     return guarded

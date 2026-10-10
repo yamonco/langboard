@@ -132,7 +132,10 @@ def test_attachment_delete_dispatches_recorded_vector_cleanup_only_after_commit(
     monkeypatch.setattr(service, "_mark_card_changed_for_unread", Mock())
     monkeypatch.setattr(module.CardAttachmentActivityTask, "card_attachment_deleted", Mock())
     monkeypatch.setattr(module.CardAttachmentBotTask, "card_attachment_deleted", Mock())
-    assert service.delete("user", project, card, attachment)
+    from ...models import User
+
+    user = User(firstname="Test", lastname="Reader", email="reader@example.invalid", password="test-only")
+    assert service.delete(user, project, card, attachment)
     send.assert_not_called()
     repository.card_attachment.delete.assert_called_once_with(attachment)
     assert len(callbacks) == 1
