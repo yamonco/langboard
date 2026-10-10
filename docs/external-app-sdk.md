@@ -121,6 +121,10 @@ of app approval.
 Board catalog resource counts and health summaries include personal connections
 only for their owner, including when the viewer is an instance administrator.
 Organization connections are aggregated only for the board's own organization.
+GitHub repository settings apply the same boundary to resource paths and IDs,
+including retained selections after revocation. Client revisions cover only the
+visible resources, so another user's private selections do not leak through a
+revision or prevent the owner's independent selection updates.
 
 The native policy API, connection ownership model and standalone SDK helpers
 implement these boundaries. Personal app registration, connection scope consent,
