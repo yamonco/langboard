@@ -21,6 +21,7 @@ from langboard_shared.domain.services.AppGovernance import (
     AppGovernanceDenied,
     current_policy,
     get_policy,
+    list_managed_organizations,
     require_app_allowed,
     require_connection_access,
     save_policy,
@@ -115,6 +116,33 @@ def test_current_authority_and_active_organization(governance):
         db.update(org)
     with pytest.raises(AppGovernanceDenied):
         get_policy(owner, org.id)
+
+
+def test_managed_organization_discovery_is_bounded_current_and_private(governance):
+    _, (admin, owner, outsider), org, *_ = governance
+    assert list_managed_organizations(owner) == {"items": [{"uid": org.get_uid(), "name": "Org"}], "next_cursor": None}
+    first = list_managed_organizations(admin, limit=1)
+    assert first["items"] == [{"uid": org.get_uid(), "name": "Org"}]
+    assert first["next_cursor"] == org.get_uid()
+    second = list_managed_organizations(admin, limit=1, after_uid=first["next_cursor"])
+    assert [row["name"] for row in second["items"]] == ["Other"]
+    assert second["next_cursor"] is None
+    assert [row["name"] for row in list_managed_organizations(outsider)["items"]] == ["Other"]
+    with DbSession.atomic() as db:
+        org.suspended_at = SafeDateTime.now()
+        admin.is_admin = False
+        db.update(org)
+        db.update(admin)
+    assert list_managed_organizations(owner)["items"] == []
+    assert list_managed_organizations(admin)["items"] == []
+    with DbSession.atomic() as db:
+        outsider.activated_at = None
+        db.update(outsider)
+    with pytest.raises(AppGovernanceDenied):
+        list_managed_organizations(outsider)
+    for limit in (0, 51, True):
+        with pytest.raises(ValueError):
+            list_managed_organizations(owner, limit=limit)
 
 
 def test_connection_policy_privacy_and_unattended_ownership(governance):
@@ -222,6 +250,16 @@ def test_http_policy_routes_current_admin_owner_and_stale_revision(governance):
             return client.request(method, path, headers={"Authorization": f"Bearer {access}"}, **kwargs)
 
         path = "/settings/apps/governance"
+        organizations_path = f"{path}/organizations"
+        managed = request(owner, "GET", organizations_path)
+        assert managed.status_code == 200
+        assert managed.json() == {"items": [{"uid": org.get_uid(), "name": "Org"}], "next_cursor": None}
+        first = request(admin, "GET", organizations_path, params={"limit": 1})
+        assert first.status_code == 200 and first.json()["next_cursor"] == org.get_uid()
+        next_page = request(admin, "GET", organizations_path, params={"limit": 1, "cursor": org.get_uid()})
+        assert next_page.status_code == 200 and next_page.json()["items"][0]["name"] == "Other"
+        assert request(owner, "GET", organizations_path, params={"limit": 51}).status_code in (400, 422)
+        assert request(owner, "GET", organizations_path, params={"cursor": "bad cursor"}).status_code == 400
         response = request(admin, "GET", path)
         assert response.status_code == 200
         initial = response.json()
