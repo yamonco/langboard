@@ -76,3 +76,26 @@ def report_app_execution_start(token, project_id, card_id, request_id, lease_id,
             "reported_at": receipt.created_at.isoformat(),
             "changed": changed,
         }
+
+
+def read_app_runtime_report(lease_id, runtime_token):
+    """Inspect current authorization and app evidence without renewing the lease."""
+    from .AppExecutionLeases import _check_app_runtime
+
+    with DbSession.atomic() as db:
+        permit = _check_app_runtime(lease_id, runtime_token, renew=False)
+        start = db.exec(
+            SqlBuilder.select.table(AppExecutionStart).where(AppExecutionStart.lease_id == lease_id)
+        ).first()
+        return {
+            **permit,
+            "evidence_kind": "app_attestation" if start is not None else "none",
+            "start_report": {
+                "start_uid": start.get_uid(),
+                "execution_reference": start.execution_reference,
+                "reported_at": start.created_at.isoformat(),
+            }
+            if start is not None
+            else None,
+            "active_report": start is not None and permit["permit_execution"],
+        }

@@ -256,3 +256,14 @@ def execution_runtime_check(lease_uid: str, body: RuntimeCheckBody) -> JsonRespo
     except AppGovernanceDenied as exc:
         raise ApiException.Forbidden_403() from exc
     return JsonResponse(content=result, headers={"Cache-Control": "no-store"})
+
+
+@AppRouter.api.post("/apps/v1/runtime-permits/{lease_uid}/report", tags=["App.Execution"])
+def execution_runtime_report(lease_uid: str, body: RuntimeRecoveryBody) -> JsonResponse:
+    from langboard_shared.domain.services.AppExecutionStarts import read_app_runtime_report
+
+    try:
+        result = read_app_runtime_report(SnowflakeID.from_short_code(lease_uid), body.runtime_token)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
+    return JsonResponse(content=result, headers={"Cache-Control": "no-store"})
