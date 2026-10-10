@@ -652,15 +652,28 @@ def test_signed_ping_is_receipt_only_without_installation(receipt_storage, failu
             assert "zen" not in receipts[0].model_dump()
 
 
-@pytest.mark.parametrize("failure", [None, "permission", "ping", "owner_inactive", "connection_changed"])
-def test_receipt_refresh_revalidates_authority_and_scopes_installation(receipt_storage, monkeypatch, failure):
+@pytest.fixture
+def private_receipt_storage(receipt_storage):
+    # Automatic refresh is authorized only for this connected owner's private board.
+    lifecycle, *_ = receipt_storage
+    _, board, connection, _ = lifecycle
+    with DbSession.atomic() as db:
+        connection.state = "connected"
+        board[2].owner_id = board[1].id
+        db.update(connection)
+        db.update(board[2])
+    return receipt_storage
+
+
+@pytest.mark.parametrize("failure", [None, "permission", "ping", "owner_inactive", "connection_changed", "shared", "shared_during_query"])
+def test_receipt_refresh_revalidates_authority_and_scopes_installation(private_receipt_storage, monkeypatch, failure):
     from langboard.apps import GitHubResources as resources
     from langboard.apps.GitHubHealth import refresh_receipt_resources
     from langboard.apps.GitHubLifecycle import receive_lifecycle
     from langboard_shared.core.db import SqlBuilder
     from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
 
-    lifecycle, migration, engine = receipt_storage
+    lifecycle, migration, engine = private_receipt_storage
     service, board, connection, payload = lifecycle
     with DbSession.use(readonly=False) as db:
         binding = BoardAppBinding(project_id=board[2].id, app_key="github")
@@ -688,25 +701,37 @@ def test_receipt_refresh_revalidates_authority_and_scopes_installation(receipt_s
     with DbSession.use(readonly=False) as db:
         if failure == "permission":
             board[4].actions = ["read"]
+            board[2].owner_id = 2
             db.update(board[4])
+            db.update(board[2])
         elif failure == "connection_changed":
             connection.external_account_id = "43"
             db.update(connection)
         elif failure == "owner_inactive":
             board[1].activated_at = None
             db.update(board[1])
+        elif failure == "shared":
+            from langboard_shared.domain.models import ProjectAssignedUser
+            db.insert(ProjectAssignedUser(project_id=board[2].id, user_id=2))
     calls = []
 
     def inspect(*args, **kwargs):
         calls.append((args, kwargs))
         assert args[4] == 17 and kwargs["repository_ids"] == (17,)
+        if failure == "shared_during_query":
+            from langboard_shared.domain.models import ProjectAssignedUser
+            with DbSession.atomic() as db:
+                db.insert(ProjectAssignedUser(project_id=board[2].id, user_id=2))
         return {"repositories": [{"id": 17, "archived": False}]}
 
     monkeypatch.setattr(resources, "inspect_installation", inspect)
     if failure:
         with pytest.raises(GitHubManifestUnavailable):
             refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
-        assert not calls
+        assert len(calls) == (1 if failure == "shared_during_query" else 0)
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == rows[0].id)).first()
+            assert current.access_state == "unknown" and current.health == "unavailable"
     else:
         result = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
         assert result["refreshed_count"] == 1 and len(calls) == 1
@@ -720,7 +745,7 @@ def test_receipt_refresh_revalidates_authority_and_scopes_installation(receipt_s
             assert own.health == "healthy" and other.health == "unavailable"
 
 
-def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkeypatch):
+def test_receipt_refresh_is_limited_to_25_resource_pages(private_receipt_storage, monkeypatch):
     from langboard_shared.publishers import CardPublisher
 
     notices = []
@@ -731,7 +756,7 @@ def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkey
     from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
     from sqlalchemy import insert
 
-    lifecycle, migration, engine = receipt_storage
+    lifecycle, migration, engine = private_receipt_storage
     service, board, connection, payload = lifecycle
     with DbSession.use(readonly=False) as db:
         binding = BoardAppBinding(project_id=board[2].id, app_key="github")
@@ -798,7 +823,7 @@ def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkey
 
 
 @pytest.mark.parametrize("change", ["selection", "access_revision", "unrelated"])
-def test_receipt_page_rechecks_scoped_changes_after_api(receipt_storage, monkeypatch, change):
+def test_receipt_page_rechecks_scoped_changes_after_api(private_receipt_storage, monkeypatch, change):
     from langboard.apps import GitHubResources as resources
     from langboard.apps.GitHubHealth import refresh_receipt_resources
     from langboard.apps.GitHubLifecycle import receive_lifecycle
@@ -806,7 +831,7 @@ def test_receipt_page_rechecks_scoped_changes_after_api(receipt_storage, monkeyp
     from langboard_shared.core.db import SqlBuilder
     from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
 
-    lifecycle, _migration, _engine = receipt_storage
+    lifecycle, _migration, _engine = private_receipt_storage
     service, board, connection, payload = lifecycle
     with DbSession.use(readonly=False) as db:
         binding = BoardAppBinding(project_id=board[2].id, app_key="github")
@@ -874,13 +899,13 @@ def test_receipt_refresh_fences_connection_changed_between_receipt_and_query(rec
 
 
 @pytest.fixture
-def health_job(receipt_storage, monkeypatch):
+def health_job(private_receipt_storage, monkeypatch):
     from langboard.apps import GitHubHealthWorker as worker
     from langboard.apps.GitHubLifecycle import receive_lifecycle
     from langboard_shared.core.db import SqlBuilder
     from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding, GitHubHealthJob
 
-    lifecycle, migration, engine = receipt_storage
+    lifecycle, migration, engine = private_receipt_storage
     service, board, connection, payload = lifecycle
     dispatched = []
     monkeypatch.setattr(worker, "enqueue", dispatched.append)
@@ -1154,7 +1179,9 @@ def test_health_job_diagnostics_current_authority_paging_and_redaction(health_jo
             db.insert(GitHubHealthJob(receipt_id=receipt.id, available_at=SafeDateTime.now(), state="failed"))
         if failure == "permission":
             board[4].actions = ["read"]
+            board[2].owner_id = 2
             db.update(board[4])
+            db.update(board[2])
         elif failure == "owner":
             connection.owner_id = 2
             db.update(connection)
@@ -1212,5 +1239,7 @@ def test_health_jobs_http_requires_browser_auth_and_current_board_authority(heal
         assert client.get(url + "?after=!invalid", headers=headers).status_code == 400
         with DbSession.use(readonly=False) as db:
             board[4].actions = ["read"]
+            board[2].owner_id = 2
             db.update(board[4])
+            db.update(board[2])
         assert client.get(url, headers=headers).status_code == 404

@@ -320,3 +320,14 @@ revision or emitting another event. Stale revisions and rolled-back transactions
 do not notify; sibling selections remain intact. Native SQLite tests exercise
 these boundaries. This reuses the existing live panel disposal handler, while
 deployed multi-client event delivery remains an acceptance requirement.
+
+GitHub lifecycle health workers use the same unattended connection ownership
+policy as check-event delivery. Before external installation inspection and
+again before publishing refreshed resource access, they require a connected
+account authorized for the current board. A personal account cannot service a
+shared board automatically; the owner's private board remains eligible. Adding
+a collaborator during the external query prevents the health result from
+restoring resource access. Synchronous user-requested health refresh keeps its
+existing path. Local lifecycle tests cover the private-board success, shared-board
+rejection, mid-query sharing race, resource paging and authenticated diagnostics.
+Deployed organization connection onboarding and worker acceptance remain required.
