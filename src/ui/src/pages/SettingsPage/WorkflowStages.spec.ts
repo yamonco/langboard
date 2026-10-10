@@ -22,6 +22,76 @@ const existing = (): IWorkflowStage => ({
         zh: { name: "已完成", description: "已完成工作" },
     },
 });
+
+test("workflow stage submission owns one write before pending render and releases after conflict", async ({ page }) => {
+    let writes = 0;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.route("**/settings/workflow-stages**", async (route) => {
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204 });
+        if (route.request().method() === "GET") return route.fulfill({ json: { stages: [existing()] } });
+        writes++;
+        await pending;
+        return route.fulfill({ status: 409, json: {} });
+    });
+    await page.goto("/src/pages/SettingsPage/WorkflowStages.fixture.html");
+    await page.getByRole("button", { name: /^Closed/ }).click();
+    await page.getByLabel("Stage name", { exact: true }).fill("Accepted");
+    await page.locator("form").evaluate((form) => {
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    try {
+        await expect(page.locator("form button[type=submit]")).toBeDisabled();
+        await expect.poll(() => writes).toBeGreaterThan(0);
+        await page.waitForTimeout(100);
+        expect(writes).toBe(1);
+    } finally {
+        release();
+    }
+    await expect(page.getByRole("alert")).toContainText("This stage changed elsewhere");
+    await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("Accepted");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => writes).toBe(2);
+});
+
+test("deactivation excludes a simultaneous stage save", async ({ page }) => {
+    const writes: string[] = [];
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.route("**/settings/workflow-stages**", async (route) => {
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204 });
+        if (route.request().method() === "GET") return route.fulfill({ json: { stages: [existing()] } });
+        writes.push(route.request().url());
+        await pending;
+        return route.fulfill({ status: 409, json: {} });
+    });
+    await page.goto("/src/pages/SettingsPage/WorkflowStages.fixture.html");
+    await page.getByRole("button", { name: /^Closed/ }).click();
+    await page.getByRole("button", { name: "Deactivate", exact: true }).click();
+    await page
+        .getByRole("dialog", { name: "Deactivate", exact: true })
+        .getByRole("button", { name: "Deactivate", exact: true })
+        .evaluate((button) => {
+            (button as HTMLButtonElement).click();
+            document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        });
+    try {
+        await expect.poll(() => writes.length).toBeGreaterThan(0);
+        await page.waitForTimeout(100);
+        expect(writes).toHaveLength(1);
+        expect(writes[0]).toMatch(/\/deactivate$/);
+    } finally {
+        release();
+    }
+    await expect(page.getByRole("alert")).toContainText("This stage changed elsewhere");
+    await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeEnabled();
+});
+
 for (const width of [1280, 390])
     test(`registry edit roundtrip and failure preserve draft at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 844 });

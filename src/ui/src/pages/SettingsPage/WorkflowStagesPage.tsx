@@ -1,6 +1,6 @@
 import { formatNumber } from "@/core/utils/LocaleFormat";
 import { metadataDisplay } from "@/core/utils/MetadataDisplay";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isAxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import Dialog from "@/components/base/Dialog";
@@ -45,6 +45,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
     const [error, setError] = useState(false);
     const [language, setLanguage] = useState("en");
     const [newLanguage, setNewLanguage] = useState("");
+    const writingRef = useRef(false);
     const busy = save.isPending || deactivate.isPending;
     const canSave = hasRoleAction(draft.uid ? SettingRole.EAction.WorkflowStageUpdate : SettingRole.EAction.WorkflowStageCreate);
     const reload = async () => {
@@ -103,7 +104,8 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
             [...items.filter((item) => item.uid !== stage.uid), stage].sort((a, b) => a.order - b.order || a.key.localeCompare(b.key))
         );
     const submit = async () => {
-        if (!canSave || busy) return;
+        if (!canSave || writingRef.current) return;
+        writingRef.current = true;
         try {
             const stage = await save.mutateAsync(draft);
             replace(stage);
@@ -115,10 +117,13 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
         } catch (error) {
             if (isAxiosError(error) && error.response?.status === 409) setConflict(true);
             else Toast.Add.error(t("errors.Internal server error"));
+        } finally {
+            writingRef.current = false;
         }
     };
     const disable = async () => {
-        if (!draft.uid || busy || !hasRoleAction(SettingRole.EAction.WorkflowStageDeactivate)) return;
+        if (!draft.uid || writingRef.current || !hasRoleAction(SettingRole.EAction.WorkflowStageDeactivate)) return;
+        writingRef.current = true;
         try {
             replace(await deactivate.mutateAsync({ uid: draft.uid, expected_revision: draft.expected_revision }));
             setDirty(false);
@@ -126,6 +131,8 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
         } catch (error) {
             if (isAxiosError(error) && error.response?.status === 409) setConflict(true);
             else Toast.Add.error(t("errors.Internal server error"));
+        } finally {
+            writingRef.current = false;
         }
     };
     const text = language === "en" ? draft : draft.translations[language];
