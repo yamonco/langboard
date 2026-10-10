@@ -168,6 +168,18 @@ def test_multi_repository_delta_preserves_foreign_binding_and_other_selection(in
             external_resource_id="99",
         )
         db.insert(other)
+        private_connection = AppConnection(app_key="github", owner_id=board[2].owner_id, state="connected")
+        db.insert(private_connection)
+        own_binding = db.exec(select(BoardAppBinding).where(BoardAppBinding.project_id == board[2].id)).first()[0]
+        private_resource = AppResourceBinding(
+            board_binding_id=own_binding.id, connection_id=private_connection.id,
+            resource_type="repository", external_resource_id="101",
+            resource_path=[{"type": "repository", "id": "101", "name": "private/repository"}],
+        )
+        db.insert(private_resource)
+        # Instance administration does not reveal another person's account.
+        board[1].is_admin = True
+        db.update(board[1])
         if revocation in {"revoked", "disconnected"}:
             connection.state = revocation
             db.update(connection)
@@ -186,8 +198,10 @@ def test_multi_repository_delta_preserves_foreign_binding_and_other_selection(in
         )
     with DbSession.use(readonly=False) as db:
         persisted = db.exec(select(AppResourceBinding).where(AppResourceBinding.id == other.id)).first()[0]
+        private_persisted = db.exec(select(AppResourceBinding).where(AppResourceBinding.id == private_resource.id)).first()[0]
         own = db.exec(select(BoardAppBinding).where(BoardAppBinding.project_id == board[2].id)).first()[0]
         assert persisted.is_selected and own.state == "disabled" and not own.granted_capabilities
+        assert private_persisted.is_selected
     if revocation:
         with pytest.raises(github.GitHubManifestUnavailable):
             update_resources(
@@ -200,6 +214,8 @@ def test_multi_repository_delta_preserves_foreign_binding_and_other_selection(in
         )
         assert len(restored["items"]) == 2 and all(item["selected"] for item in restored["items"])
     with DbSession.use(readonly=False) as db:
+        board[1].is_admin = False
+        db.update(board[1])
         board[4].actions = ["read"]
         db.update(board[4])
     with pytest.raises(github.GitHubManifestUnavailable):
