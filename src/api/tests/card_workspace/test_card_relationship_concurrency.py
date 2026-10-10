@@ -18,7 +18,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 from langboard_shared.core.db import DbSession  # noqa: E402
 from langboard_shared.core.db.DbEngine import DbEngine  # noqa: E402
 from langboard_shared.core.types import SnowflakeID  # noqa: E402
-from langboard_shared.domain.models import Card, CardRelationship, Project, ProjectColumn  # noqa: E402
+from langboard_shared.domain.models import Card, CardRelationship, Project, ProjectColumn, User  # noqa: E402
 from langboard_shared.helpers import InfraHelper  # noqa: E402
 
 
@@ -227,7 +227,7 @@ def test_concurrent_graph_patches_reject_cycle_or_duplicate(graph_service, reque
     def apply(edge):
         start.wait()
         return service.apply_graph_patch(
-            object(),
+            User.model_construct(id=1),
             "project",
             "anchor",
             [],
@@ -259,7 +259,7 @@ def test_concurrent_additive_patches_preserve_both_edges(graph_service) -> None:
     def apply(child_id):
         start.wait()
         return service.apply_graph_patch(
-            object(),
+            User.model_construct(id=1),
             "project",
             "anchor",
             [],
@@ -291,7 +291,7 @@ def test_nonblocking_path_does_not_reject_blocking_back_edge(graph_service, sema
             {"type": semantic_type},
         )
     assert service.apply_graph_patch(
-        object(),
+        User.model_construct(id=1),
         "project",
         "anchor",
         [],
@@ -308,9 +308,9 @@ def test_reciprocal_nonblocking_edges_survive_both_write_paths(graph_service, ty
     service, cards, engine = graph_service
     uid = SnowflakeID(type_id).to_short_code()
     service.apply_graph_patch(
-        object(), "project", "anchor", [], [(cards[10].get_uid(), cards[20].get_uid(), uid)], [], dispatch_effects=False
+        User.model_construct(id=1), "project", "anchor", [], [(cards[10].get_uid(), cards[20].get_uid(), uid)], [], dispatch_effects=False
     )
-    service.update(object(), "project", cards[20].get_uid(), False, [(cards[10].get_uid(), uid)])
+    service.update(User.model_construct(id=1), "project", cards[20].get_uid(), False, [(cards[10].get_uid(), uid)])
     with engine.connect() as connection:
         assert connection.execute(text("SELECT COUNT(*) FROM card_relationship")).scalar_one() == 2
 
@@ -326,7 +326,7 @@ def test_direct_replacement_rejects_three_hop_cycle_without_deleting_old_edge(gr
         )
     with pytest.raises(ValueError, match="blocks cycle"):
         service.update(
-            object(), "project", cards[30].get_uid(), False, [(cards[10].get_uid(), SnowflakeID(1).to_short_code())]
+            User.model_construct(id=1), "project", cards[30].get_uid(), False, [(cards[10].get_uid(), SnowflakeID(1).to_short_code())]
         )
     with engine.connect() as connection:
         assert (
@@ -345,7 +345,7 @@ def test_direct_and_graph_writers_serialize_block_cycle_validation(graph_service
     def graph():
         start.wait()
         return service.apply_graph_patch(
-            object(),
+            User.model_construct(id=1),
             "project",
             "anchor",
             [],
@@ -356,7 +356,7 @@ def test_direct_and_graph_writers_serialize_block_cycle_validation(graph_service
 
     def direct():
         start.wait()
-        return service.update(object(), "project", cards[20].get_uid(), False, [(cards[10].get_uid(), uid)])
+        return service.update(User.model_construct(id=1), "project", cards[20].get_uid(), False, [(cards[10].get_uid(), uid)])
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(graph), executor.submit(direct)]
@@ -381,7 +381,7 @@ def test_graph_removal_is_applied_before_block_cycle_validation(graph_service):
             )
         )
     assert service.apply_graph_patch(
-        object(),
+        User.model_construct(id=1),
         "project",
         "anchor",
         [],
@@ -400,7 +400,7 @@ def test_direct_edit_preserves_unchanged_relationship_identity(graph_service):
             "INSERT INTO card_relationship (card_id_parent, card_id_child, relationship_type_id) "
             "VALUES (10, 20, 2) RETURNING id"
         )).scalar_one()
-    service.update(object(), "project", cards[10].get_uid(), False, [
+    service.update(User.model_construct(id=1), "project", cards[10].get_uid(), False, [
         (cards[20].get_uid(), SnowflakeID(2).to_short_code()),
         (cards[30].get_uid(), SnowflakeID(3).to_short_code()),
     ])
@@ -409,7 +409,7 @@ def test_direct_edit_preserves_unchanged_relationship_identity(graph_service):
             "SELECT id FROM card_relationship WHERE card_id_parent=10 AND card_id_child=20"
         )).scalar_one() == original_id
         assert connection.execute(text("SELECT count(*) FROM card_relationship")).scalar_one() == 2
-    service.update(object(), "project", cards[10].get_uid(), False, [
+    service.update(User.model_construct(id=1), "project", cards[10].get_uid(), False, [
         (cards[20].get_uid(), SnowflakeID(2).to_short_code()),
     ])
     with engine.connect() as connection:

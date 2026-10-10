@@ -464,7 +464,12 @@ and child creation also use the ownership fence before writing or dispatching.
 Metadata/run/suggestion methods require an explicit actor; route callers forward
 current authentication. Child creation checks the parent card before creating a
 new card or updating parent metadata. This does not authorize an external app to
-execute these operations. The generic HITL contract and remaining direct repository
+execute these operations. Native relationship replacement and graph patch/preview
+check the anchor, existing/new endpoints and endpoints of removed edges under the
+project transaction before readiness watches or persistence. An unowned anchor
+cannot be used to add or remove another app's card relationships. These fences
+retain human permission paths and do not issue an owning-app execution grant.
+The generic HITL contract and remaining direct repository
 writes also require separate fence coverage before
 ownership configuration is exposed. Service tests prove the exercised denial
 paths; they do not prove deployed REST/MCP or PostgreSQL concurrency acceptance.

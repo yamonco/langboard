@@ -23,6 +23,7 @@ from langboard_shared.domain.services.CardAppGovernance import set_card_app_owne
 from langboard_shared.domain.services.CardAppMutation import guard_card_app_mutation
 from langboard_shared.domain.services.factory.CardAttachmentService import CardAttachmentService
 from langboard_shared.domain.services.factory.CardCommentService import CardCommentService
+from langboard_shared.domain.services.factory.CardRelationshipService import CardRelationshipService
 from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.domain.services.factory.CheckitemService import CheckitemService
 from langboard_shared.domain.services.factory.ChecklistService import ChecklistService
@@ -138,6 +139,47 @@ def test_owned_card_human_orchestration_metadata_retains_native_write(board, mon
     assert service.record_suggestions(board[2], card, [{"title": "Next"}], user_or_bot=board[1])
     assert metadata.save.call_count == 3
     assert published.call_count == 3
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+@pytest.mark.parametrize("mode", ["anchor", "add", "remove", "patch_add", "patch_remove", "preview_remove"])
+def test_relationship_fence_covers_owned_endpoints_before_graph_writes(board, monkeypatch, mode):
+    from langboard_shared.domain.models import Card
+
+    owned = prepare(board)
+    set_card_app_ownership(board[1], board[2].id, owned.id, "example-app", None)
+    with DbSession.atomic() as db:
+        anchor = Card(project_id=board[2].id, project_column_id=board[5][0].id, title="Unowned anchor")
+        db.insert(anchor)
+    actor = Bot(name="Automation", bot_uname="bot-test", app_api_token="test-only",
+                platform="default", platform_running_type="default")
+    actor.__dict__["app_key"] = "example-app"
+    service = CardRelationshipService(None, None, None)
+    relationship_id = owned.id + 1
+    type_id = owned.id + 2
+    old = SimpleNamespace(id=relationship_id, relationship_type_id=type_id)
+    repo = Mock()
+    repo.get_all_by_card_and_relation.return_value = [(old, object(), owned)] if mode == "remove" else []
+    repo.get_all_related_card_ids.return_value = [owned.id] if mode == "add" else []
+    repo.get_graph_snapshot.return_value = [(relationship_id, anchor.id, owned.id, type_id)]
+    monkeypatch.setattr(service, "repo", SimpleNamespace(card_relationship=repo), raising=False)
+    def call():
+        if mode == "anchor":
+            return service.update(actor, board[2], owned, False, [])
+        if mode in {"add", "remove"}:
+            pairs = [(owned.get_uid(), type(owned.id)(type_id).to_short_code())] if mode == "add" else []
+            return service.update(actor, board[2], anchor, False, pairs)
+        edges = [(anchor.get_uid(), owned.get_uid(), type(owned.id)(type_id).to_short_code())] if mode == "patch_add" else []
+        remove = [] if edges else [type(owned.id)(relationship_id).to_short_code()]
+        command = service.preview_graph_patch if mode == "preview_remove" else service.apply_graph_patch
+        return command(actor, board[2], anchor, [], edges, remove)
+    with pytest.raises(AppGovernanceDenied):
+        call()
+    repo.insert.assert_not_called()
+    repo.delete.assert_not_called()
+    repo.apply_graph_patch.assert_not_called()
+    with DbSession.atomic() as db:
+        assert len(db.exec(SqlBuilder.select.table(Card)).all()) == 2
 
 
 @pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
