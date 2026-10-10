@@ -1,17 +1,17 @@
 """Authorized REST adapters for the shared native execution receipt commands."""
 
-from fastapi import Header
+from fastapi import Header, Request
 from langboard_shared.core.filter import AuthFilter
-from langboard_shared.core.routing import ApiErrorCode, ApiException, ApiPermission, AppRouter, JsonResponse
+from langboard_shared.core.routing import ApiPermission, AppRouter, JsonResponse
 from langboard_shared.core.schema import OpenApiSchema
-from langboard_shared.domain.models import Bot, Card, Project, ProjectRole, User
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
+from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.filter import RoleFilter
-from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
 from ...card_workspace.application.execution_receipts import (
     PutExecutionReceiptForm,
-    receipt_history,
+    read_execution_receipts,
     store_execution_receipt,
 )
 
@@ -32,9 +32,14 @@ def put_execution_receipt(
     form: PutExecutionReceiptForm,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
     user_or_bot: User | Bot = Auth.scope("all"),  # noqa: B008 - FastAPI authentication dependency
+    *,
+    request: Request,
 ) -> JsonResponse:
     return JsonResponse(
-        content=store_execution_receipt(project_uid, card_uid, generation, form, idempotency_key, user_or_bot)
+        content=store_execution_receipt(
+            project_uid, card_uid, generation, form, idempotency_key, user_or_bot,
+            channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+        )
     )
 
 
@@ -47,9 +52,11 @@ def put_execution_receipt(
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_execution_receipts(project_uid: str, card_uid: str) -> JsonResponse:
-    records = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not records:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    _, card = records
-    return JsonResponse(content={"receipts": receipt_history(card.id)})
+def get_execution_receipts(
+    project_uid: str, card_uid: str, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"),
+) -> JsonResponse:
+    return JsonResponse(content=read_execution_receipts(
+        project_uid, card_uid, user_or_bot,
+        request.scope.get("collaboration_channel", CollaborationChannel.Api),
+    ))
