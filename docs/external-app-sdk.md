@@ -118,6 +118,10 @@ only on the account owner's private board. Deleted boards cannot authorize apps.
 account credentials and private data are not administrator-readable by virtue
 of app approval.
 
+Board catalog resource counts and health summaries include personal connections
+only for their owner, including when the viewer is an instance administrator.
+Organization connections are aggregated only for the board's own organization.
+
 The native policy API, connection ownership model and standalone SDK helpers
 implement these boundaries. Personal app registration, connection scope consent,
 optional MCP execution and all existing automation paths still require complete
