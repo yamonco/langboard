@@ -234,3 +234,25 @@ async def test_exhausted_attempts_mark_failed_without_delivery(monkeypatch: pyte
     assert await worker.drain_one()
     assert posted == []
     assert marks == [("failed", "delivery_attempts_exhausted")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed_field", ["id", "updated_at", "webhook_uid"])
+async def test_destination_drift_blocks_without_post(monkeypatch: pytest.MonkeyPatch, changed_field: str) -> None:
+    """An old event cannot be redirected by replacing any frozen destination identity."""
+    occurred_at = datetime(2026, 9, 24, tzinfo=timezone.utc)
+    current = CurrentExecution(occurred_at, True, 5, "Task", [], [])
+    snapshot = _frozen_snapshot(occurred_at)
+    _, _, posted, marks = _claim_harness(monkeypatch, snapshot, current)
+    values = {"id": 8, "updated_at": occurred_at, "webhook_uid": "hook-40"}
+    values[changed_field] = {
+        "id": 9,
+        "updated_at": datetime(2026, 9, 24, 1, tzinfo=timezone.utc),
+        "webhook_uid": "hook-41",
+    }[changed_field]
+    monkeypatch.setattr(worker, "binding_for_project", lambda uid: SimpleNamespace(**values))
+
+    assert await worker.drain_one()
+    assert posted == []
+    assert marks == [("blocked", "stale_binding")]
+    assert snapshot == _frozen_snapshot(occurred_at)
