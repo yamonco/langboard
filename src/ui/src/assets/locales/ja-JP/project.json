@@ -302,6 +302,8 @@
     "GlitchTip read confirm help": "選択されたGlitchTipプロジェクトへのボード全体の読み取り権限を確認してください。",
     "Enable GlitchTip read access": "読み取り権限を有効化",
     "Confirm GlitchTip read access": "読み取り権限を確認",
+    "Revoke app read access": "ボードの読み取り同意を撤回",
+    "App read revocation help": "このボードのアプリ読み取り権限を撤回します。接続、選択リソース、既存の観測記録、別途承認したパネルとワークフローの権限は保持されます。",
     "GlitchTip read enabled": "ボードの読み取り権限が有効です。",
     "Refresh GlitchTip issues": "課題の観測を更新",
     "GlitchTip issue observations help": "1ページ最大25件の課題状態を観測します。観測時刻は状態を読み取った時刻であり、解決または再開された時刻ではありません。",

@@ -277,3 +277,14 @@ idempotent. Registry trust changes, policy restrictions and explicit revocation
 remain separate authorization boundaries. Native SQLite regressions cover both
 providers and Dokploy application/compose resources; PostgreSQL acceptance still
 requires a disposable configured database.
+
+Board connection settings expose **Revoke board read access** for GlitchTip and
+Dokploy. The authenticated `POST .../connections/{connection_uid}/disable-read`
+requires the current connection and board-binding revisions. It removes only
+that provider's board-wide read grants; connections, selected resources, existing
+observations and independently approved panel/workflow grants remain intact.
+Current board update authority and connection ownership are rechecked. Revocation
+does not require an active credential or an external provider request, so a broken
+provider cannot prevent it. Subsequent native reads and unattended webhook reads
+use the existing current-grant gates. This does not claim cancellation of work
+already accepted by an external service or complete personal MCP consent support.

@@ -94,6 +94,20 @@ async function openSelected(page: import("@playwright/test").Page, query = "sele
 async function issueCalls(page: import("@playwright/test").Page) {
     return page.evaluate(() => (window as unknown as { glitchtipCalls: { method: string; url: string; data: unknown }[] }).glitchtipCalls);
 }
+test("read consent can be revoked without disconnecting or provider refresh", async ({ page }) => {
+    await openSelected(page, "selected&enabled");
+    const refresh = page.getByRole("button", { name: "Refresh issue observations", exact: true });
+    await expect(refresh).toBeEnabled();
+    await page.getByRole("button", { name: "Revoke board read access", exact: true }).click();
+    await expect(refresh).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Enable read access", exact: true })).toBeVisible();
+    const calls = await issueCalls(page);
+    expect(calls.find((row) => row.url.endsWith("/disable-read"))?.data).toEqual({
+        expected_connection_revision: "a".repeat(64),
+        expected_binding_revision: "b".repeat(64),
+    });
+    expect(calls.some((row) => row.url.endsWith("/disconnect") || row.url.endsWith("/issues/refresh"))).toBe(false);
+});
 for (const width of [1920, 390])
     test(`explicit consent and safe status observations ${width}`, async ({ page }) => {
         await page.setViewportSize({ width, height: 1080 });

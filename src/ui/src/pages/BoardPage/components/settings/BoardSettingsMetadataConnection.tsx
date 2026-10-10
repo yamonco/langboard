@@ -550,6 +550,22 @@ export default function BoardSettingsMetadataConnection({
                 throw new Error("Invalid notification verification");
             setVerification(result);
         }, true);
+    const disableRead = () =>
+        run(async (valid) => {
+            if (!connection || !readAccess) return;
+            const result = (
+                await api.post<ReadAccess>(`${connectionRoot}/disable-read`, {
+                    ...(dokploy ? { expected_revision: connection.revision } : { expected_connection_revision: connection.revision }),
+                    expected_binding_revision: readAccess.revision,
+                })
+            ).data;
+            if (!valid()) return;
+            if (dokploy) clearWebhook();
+            setReadAccess(result);
+            clearReadResults();
+            setSaved(true);
+            onStatusChange?.();
+        });
     const enableRead = () =>
         run(async (valid) => {
             if (!connection || !readAccess || !consenting || !selectedReadResources.length || bindings.next_cursor) return;
@@ -1041,7 +1057,13 @@ export default function BoardSettingsMetadataConnection({
                         <div className="flex min-w-0 flex-col gap-2 rounded-md border p-2">
                             <p className="text-sm">{text("GlitchTip read scope help")}</p>
                             {readEnabled ? (
-                                <p>{text("GlitchTip read enabled")}</p>
+                                <>
+                                    <p>{text("GlitchTip read enabled")}</p>
+                                    <p className="text-xs text-muted-foreground">{t("project.settings.App read revocation help")}</p>
+                                    <Button size="sm" variant="outline" onClick={() => void disableRead()}>
+                                        {t("project.settings.Revoke app read access")}
+                                    </Button>
+                                </>
                             ) : consenting ? (
                                 <>
                                     <p>{text("GlitchTip read confirm help")}</p>

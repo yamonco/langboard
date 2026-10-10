@@ -21,6 +21,31 @@ from langboard_shared.publishers import CardPublisher
 from test_glitchtip_connection import connect, setup  # noqa: F401
 
 
+def test_read_revocation_preserves_other_grants_without_provider_io(selected):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    calls = setup[3]
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        binding.granted_capabilities = [*binding.granted_capabilities, "panels.render", "workflow.transition"]
+        binding.stage_transitions_enabled = True
+        db.update(binding)
+        revision = binding.edit_revision()
+    count = len(calls)
+    with pytest.raises(gt.GlitchTipConflict):
+        gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], "0" * 64)
+    result = gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
+    assert result["granted_capabilities"] == ["panels.render", "workflow.transition"] and result["state"] == "enabled"
+    assert len(calls) == count
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert current.stage_transitions_enabled
+    # Current read gates reject the removed grant before making any provider request.
+    with pytest.raises(gt.GlitchTipUnavailable):
+        refresh(selected)
+    assert len(calls) == count
+
+
 def test_read_consent_preserves_independent_existing_grants(selected):
     setup, connection, *_ = selected
     service, board, *_ = setup
@@ -305,7 +330,7 @@ def test_authenticated_http(selected, monkeypatch):
     app = FastAPI()
     app.include_router(AppRouter.api)
     for route in app.routes:
-        if getattr(route, "endpoint", None) in {api.enable_glitchtip_read_access, api.refresh_glitchtip_issues}:
+        if getattr(route, "endpoint", None) in {api.enable_glitchtip_read_access, api.disable_glitchtip_read_access, api.refresh_glitchtip_issues}:
             for dep in route.dependant.dependencies:
                 if dep.name == "service":
                     app.dependency_overrides[dep.call] = lambda: service
@@ -335,8 +360,14 @@ def test_authenticated_http(selected, monkeypatch):
             db.update(binding)
             revision = binding.edit_revision()
         consent = {"expected_connection_revision": conn["revision"], "expected_binding_revision": revision}
-        assert client.post(base + "/read-access", headers=headers, json=consent).status_code == 200
+        enabled = client.post(base + "/read-access", headers=headers, json=consent)
+        assert enabled.status_code == 200
         assert client.post(base + "/read-access", headers=headers, json=consent).status_code == 409
+        revoke = {**consent, "expected_binding_revision": enabled.json()["revision"]}
+        assert client.post(base + "/disable-read", json=revoke).status_code == 401
+        assert client.post(base + "/disable-read", headers=headers, json={**revoke, "approval": True}).status_code == 400
+        assert client.post(base + "/disable-read", headers=headers, json=revoke).status_code == 200
+        assert client.post(url, headers=headers, json=form).status_code == 404
         mutate(selected, "role")
         assert client.post(url, headers=headers, json=form).status_code == 404
 

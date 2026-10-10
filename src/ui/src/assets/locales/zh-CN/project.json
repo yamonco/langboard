@@ -302,6 +302,8 @@
     "GlitchTip read confirm help": "确认对已选择的GlitchTip项目授予看板范围的读取权限。",
     "Enable GlitchTip read access": "启用读取权限",
     "Confirm GlitchTip read access": "确认读取权限",
+    "Revoke app read access": "撤销看板读取授权",
+    "App read revocation help": "撤销此应用在整个看板的读取权限。保留连接、所选资源、已有观测记录以及单独批准的面板和工作流权限。",
     "GlitchTip read enabled": "看板读取权限已启用。",
     "Refresh GlitchTip issues": "刷新问题观测",
     "GlitchTip issue observations help": "每页最多观测25个问题的状态。观测时间是读取状态的时间，并非问题解决或重新打开的时间。",
