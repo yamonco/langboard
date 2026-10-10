@@ -122,6 +122,108 @@ def call(creation, **kwargs):
     )
 
 
+def test_inbound_connection_and_resource_onboarding(creation):
+    from langboard_shared.core.types import SnowflakeID
+    from langboard_shared.domain.services import DomainService
+    from langboard_shared.domain.services.AppConnectionManagement import (
+        create_inbound_connection,
+        disconnect_inbound_connection,
+        select_inbound_resource,
+    )
+    from langboard_shared.domain.services.AppRegistry import AppRegistryConflict
+
+    actor, project = creation[0][1:3]
+    binding, definition = creation[3], creation[5]
+    result = create_inbound_connection(actor, "example-erp", definition.edit_revision())
+    connection_id = SnowflakeID.from_short_code(result["connection_uid"])
+    service = DomainService().workflow_stage
+    args = (service, actor, project.get_uid(), "example-erp", definition.edit_revision(),
+            binding.get_uid(), binding.edit_revision(), connection_id, "project", "new-project")
+    first = select_inbound_resource(*args)
+    again = select_inbound_resource(*args, expected_access_revision=first["access_revision"])
+    assert first == again and first["access_revision"] == 1
+    with pytest.raises(AppRegistryConflict):
+        select_inbound_resource(*args)
+    removed = select_inbound_resource(*args, selected=False, expected_access_revision=1)
+    assert removed["access_state"] == "revoked" and removed["access_revision"] == 2
+    with pytest.raises(AppRegistryConflict):
+        select_inbound_resource(*args, expected_access_revision=1)
+    restored = select_inbound_resource(*args, expected_access_revision=2)
+    assert restored["resource_uid"] == first["resource_uid"] and restored["access_revision"] == 3
+    with DbSession.use(readonly=False) as db:
+        connection = db.exec(SqlBuilder.select.table(AppConnection).where(AppConnection.id == connection_id)).first()
+        assert connection.owner_id == actor.id and connection.credential_reference is None and connection.instance_url == ""
+        assert len(db.exec(SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.connection_id == connection_id)).all()) == 1
+    with pytest.raises(AppRegistryConflict):
+        disconnect_inbound_connection(actor, connection_id, "0" * 64)
+    disconnected = disconnect_inbound_connection(actor, connection_id, result["revision"])
+    assert disconnected["state"] == "disconnected"
+    with pytest.raises(AppGovernanceDenied):
+        issue_connection_credential(actor, connection_id)
+
+
+def test_inbound_onboarding_current_authority(creation):
+    from langboard_shared.core.types import SnowflakeID
+    from langboard_shared.domain.services import DomainService
+    from langboard_shared.domain.services.AppConnectionManagement import (
+        create_inbound_connection,
+        select_inbound_resource,
+    )
+    from langboard_shared.domain.services.AppRegistry import AppRegistryConflict
+
+    actor, project = creation[0][1:3]
+    binding, definition = creation[3], creation[5]
+    with pytest.raises(AppRegistryConflict):
+        create_inbound_connection(actor, "example-erp", "0" * 64)
+    with pytest.raises(AppGovernanceDenied):
+        create_inbound_connection(actor, "github", definition.edit_revision())
+    result = create_inbound_connection(actor, "example-erp", definition.edit_revision())
+    connection_id = SnowflakeID.from_short_code(result["connection_uid"])
+    service = DomainService().workflow_stage
+    args = (service, actor, project.get_uid(), "example-erp", definition.edit_revision(),
+            binding.get_uid(), binding.edit_revision(), connection_id)
+    with pytest.raises(ValueError):
+        select_inbound_resource(*args, "undeclared", "new-project")
+    with DbSession.atomic() as db:
+        connection = db.exec(SqlBuilder.select.table(AppConnection).where(AppConnection.id == connection_id)).first()
+        connection.owner_id = 2  # Another native user owns this personal connection.
+        db.update(connection)
+    with pytest.raises(AppGovernanceDenied):
+        select_inbound_resource(*args, "project", "new-project")
+
+
+def test_inbound_organization_authority_and_revocation_cleanup(creation):
+    from langboard_shared.core.types import SnowflakeID
+    from langboard_shared.domain.models import AppGovernancePolicy, Organization
+    from langboard_shared.domain.services import DomainService
+    from langboard_shared.domain.services.AppConnectionManagement import (
+        create_inbound_connection,
+        select_inbound_resource,
+    )
+
+    actor, project = creation[0][1:3]
+    binding, definition = creation[3], creation[5]
+    with DbSession.atomic() as db:
+        organization = Organization(name="External organization", slug="external", owner_user_id=2)
+        db.insert(organization)
+    with pytest.raises(AppGovernanceDenied):
+        create_inbound_connection(actor, "example-erp", definition.edit_revision(), organization.id)
+    result = create_inbound_connection(actor, "example-erp", definition.edit_revision())
+    service = DomainService().workflow_stage
+    args = (service, actor, project.get_uid(), "example-erp", definition.edit_revision(),
+            binding.get_uid(), binding.edit_revision(), SnowflakeID.from_short_code(result["connection_uid"]), "project", "cleanup")
+    selected = select_inbound_resource(*args)
+    with DbSession.atomic() as db:
+        db.insert(AppGovernancePolicy(scope_key="global", mode="disabled"))
+        definition.is_enabled = False
+        db.update(definition)
+    with pytest.raises(AppGovernanceDenied):
+        create_inbound_connection(actor, "example-erp", definition.edit_revision())
+    revoked_args = (*args[:4], definition.edit_revision(), *args[5:])
+    removed = select_inbound_resource(*revoked_args, selected=False, expected_access_revision=selected["access_revision"])
+    assert not removed["selected"] and removed["access_state"] == "revoked"
+
+
 def test_native_backlog_presentation_and_replay(creation):
     first = call(creation)
     again = call(creation)
