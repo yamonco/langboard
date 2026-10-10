@@ -1,5 +1,6 @@
 from json import loads
 from typing import Any, Literal
+from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.storage import FileModel
@@ -21,6 +22,15 @@ class InternalBotService(BaseDomainService):
     def get_by_id_like(self, internal_bot: TInternalBotParam | None) -> InternalBot | None:
         internal_bot = InfraHelper.get_by_id_like(InternalBot, internal_bot)
         return internal_bot
+
+    def get_current_by_id_like(self, internal_bot: TInternalBotParam | None) -> InternalBot | None:
+        """Read the primary before using or returning provider-backed content."""
+        if not internal_bot:
+            return None
+        with DbSession.use(readonly=False) as db:
+            return db.exec(
+                SqlBuilder.select.table(InternalBot).where(InternalBot.id == InfraHelper.convert_id(internal_bot))
+            ).first()
 
     def get_document_vision_binding(self) -> InternalBot | None:
         """Resolve the global document-vision alias independently of project bots."""
