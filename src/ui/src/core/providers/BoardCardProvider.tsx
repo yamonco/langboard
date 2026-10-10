@@ -1,13 +1,23 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AuthUser, ProjectCard } from "@/core/models";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { ISocketContext, useSocket } from "@/core/providers/SocketProvider";
 import { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
-import { Utils } from "@langboard/core/utils";
 
-// Must stay aligned with Tailwind `md` breakpoint in `tailwind.config.js` (768px).
+// Must stay aligned with Tailwind `sm` breakpoint in `tailwind.config.js` (768px).
 const DESKTOP_COMMENT_BREAKPOINT = 768;
+const desktopCommentMediaQuery = `(min-width: ${DESKTOP_COMMENT_BREAKPOINT}px)`;
+
+function subscribeCommentLayout(callback: () => void): () => void {
+    const mediaQuery = window.matchMedia(desktopCommentMediaQuery);
+    mediaQuery.addEventListener("change", callback);
+    return () => mediaQuery.removeEventListener("change", callback);
+}
+
+function isDesktopCommentLayout(): bool {
+    return window.matchMedia(desktopCommentMediaQuery).matches;
+}
 
 export interface IBoardCardContext {
     projectUID: string;
@@ -85,7 +95,13 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
     const commentCount = card.useField("count_comment");
     const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(() => commentCount > 0);
     const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
-    const [commentLayoutMode, setCommentLayoutMode] = useState<"mobile" | "panel">("mobile");
+    const commentLayoutMode: IBoardCardPanelContext["commentLayoutMode"] = useSyncExternalStore(
+        subscribeCommentLayout,
+        isDesktopCommentLayout,
+        () => false
+    )
+        ? "panel"
+        : "mobile";
     const [cardEditMode, setCardEditMode] = useState<"view" | "edit">("view");
     const currentUserRoleActions = card.useField("current_auth_role_actions");
     const { hasRoleAction } = useRoleActionFilter(currentUserRoleActions);
@@ -96,24 +112,6 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
         }),
         []
     );
-
-    useEffect(() => {
-        if (Utils.Type.isNullOrUndefined(window)) {
-            return;
-        }
-
-        const mediaQuery = window.matchMedia(`(min-width: ${DESKTOP_COMMENT_BREAKPOINT}px)`);
-        const updateLayoutMode = () => {
-            setCommentLayoutMode(mediaQuery.matches ? "panel" : "mobile");
-        };
-
-        updateLayoutMode();
-        mediaQuery.addEventListener("change", updateLayoutMode);
-
-        return () => {
-            mediaQuery.removeEventListener("change", updateLayoutMode);
-        };
-    }, []);
 
     const toggleCommentPanel = useCallback(() => setIsCommentPanelOpen((prev) => !prev), []);
     const toggleActionPanel = useCallback(() => setIsActionPanelOpen((prev) => !prev), []);

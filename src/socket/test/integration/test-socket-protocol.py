@@ -125,6 +125,7 @@ async def _assert_bootstrap(websocket, contract: dict, user_uid: str) -> None:
 
 
 async def _run_valid_frame_suite(
+    runtime_name: str,
     base_url: str,
     access_token: str,
     user_uid: str,
@@ -138,6 +139,10 @@ async def _run_valid_frame_suite(
 
     websocket = await _connect(base_url, access_token, max_payload_bytes)
     try:
+        if runtime_name == "phoenix":
+            headers = websocket.response.headers
+            if headers.get("x-langboard-socket-runtime") != "phoenix" or not headers.get("x-langboard-socket-version"):
+                raise AssertionError("Phoenix WebSocket upgrade is missing runtime identity headers")
         await _assert_bootstrap(websocket, contract, user_uid)
 
         await websocket.send("")
@@ -336,7 +341,7 @@ async def _run_target(
     contract: dict,
     max_payload_bytes: int,
 ) -> None:
-    await _run_valid_frame_suite(base_url, access_token, user_uid, contract, max_payload_bytes)
+    await _run_valid_frame_suite(name, base_url, access_token, user_uid, contract, max_payload_bytes)
     await _run_invalid_subscription_suite(base_url, access_token, user_uid, contract, max_payload_bytes)
     await _run_connection_failure_suite(base_url, contract, max_payload_bytes)
     await _run_oversized_frame_suite(base_url, access_token, user_uid, contract, max_payload_bytes)

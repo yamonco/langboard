@@ -140,7 +140,7 @@ defmodule LangboardSocket.BoardChat.RunWorkerTest do
         request
       })
 
-      :ok = on_event.({:token, "Langflow answer"})
+      :ok = on_event.({:delta, "Langflow answer"})
       :ok = on_event.(:end)
       :ok
     end
@@ -341,6 +341,57 @@ defmodule LangboardSocket.BoardChat.RunWorkerTest do
     assert_receive {:DOWN, ^monitor, :process, ^worker, reason}
     assert reason in [:normal, :noproc]
     refute_receive {:graph_started, _pid}
+  end
+
+  test "Langflow token chunks accumulate until the final message replaces them" do
+    url =
+      start_langflow_server(fn conn, _opts ->
+        conn = Plug.Conn.send_chunked(conn, 200)
+
+        conn =
+          Enum.reduce(["hello", " world"], conn, fn chunk, conn ->
+            {:ok, conn} =
+              Plug.Conn.chunk(conn, langflow_frame("token", %{"token" => true, "chunk" => chunk}))
+
+            conn
+          end)
+
+        {:ok, conn} =
+          Plug.Conn.chunk(
+            conn,
+            langflow_frame("add_message", %{"sender" => "AI", "text" => "final"})
+          )
+
+        {:ok, conn} = Plug.Conn.chunk(conn, langflow_frame("end", %{}))
+        conn
+      end)
+
+    Application.put_env(
+      :langboard_socket,
+      :board_chat_worker_test_start,
+      {:ok,
+       %{
+         attempt: 1,
+         langflow_request: %{
+           "session_id" => "session-uid",
+           "url" => url <> "/api/v1/run/flow?stream=true",
+           "api_key" => "server-key",
+           "request_body" => %{"session_id" => "session-uid"}
+         },
+         ai_message: %{"uid" => "ai-message-uid"}
+       }}
+    )
+
+    worker = start_worker(langflow_client: LangflowClient)
+    monitor = Process.monitor(worker)
+
+    assert_receive {:progress, "project-uid", "run-uid", 1, "hello"}
+    assert_receive {:progress, "project-uid", "run-uid", 1, "hello world"}
+    assert_receive {:progress, "project-uid", "run-uid", 1, "final"}
+    assert_receive {:finished, "project-uid", "run-uid", 1, "completed", "final", nil}
+    assert_receive {:board_chat_run_event, "run-uid", :end, %{status: :success}}
+    assert_receive {:DOWN, ^monitor, :process, ^worker, reason}
+    assert reason in [:normal, :noproc]
   end
 
   test "a Langflow HTTP error frame cannot finish a partial answer as success" do

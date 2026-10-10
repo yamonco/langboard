@@ -4,6 +4,14 @@
 **/_build
 **/deps
 **/erl_crash.dump
+**/.git
+**/.env
+**/*.env
+**/.vault-credentials
+**/*.db*
+**/*.log
+**/local
+**/uploads
 
 **/.venv
 .ruff_cache

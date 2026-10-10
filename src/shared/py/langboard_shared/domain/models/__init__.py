@@ -41,6 +41,7 @@ from .OllamaModelPull import OllamaModelPull
 from .NotificationScheduleRule import NotificationScheduleRule
 from .Project import Project
 from .ProjectActivity import ProjectActivity
+from .ProjectActivityEmailDelivery import ProjectActivityEmailDelivery
 from .ProjectAssignedInternalBot import ProjectAssignedInternalBot
 from .ProjectAssignedUser import ProjectAssignedUser
 from .ProjectBotDefaultScope import ProjectBotDefaultScope
@@ -128,6 +129,7 @@ __all__ = [
     "NotificationScheduleRule",
     "Project",
     "ProjectActivity",
+    "ProjectActivityEmailDelivery",
     "ProjectEmailNotificationPolicy",
     "ProjectEmailNotificationRecipient",
     "ProjectAssignedInternalBot",

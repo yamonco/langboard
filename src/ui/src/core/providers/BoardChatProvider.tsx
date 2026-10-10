@@ -257,7 +257,7 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
     const errorCallback = useCallback(
         (_: Event, fromServer: bool = true) => {
             const recovering = fromServer && chatTaskIdRef.current !== null;
-            const shouldShowError = (isSendingRef.current || isUploadingRef.current) && fromServer && !recovering;
+            const shouldShowError = (isSendingRef.current || isUploadingRef.current) && fromServer;
 
             ChatMessageModel.Model.getModels((model) => model.isPending ?? false).forEach((message) => {
                 if (message.isPending) {
@@ -266,7 +266,9 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
             });
             setIsSending(recovering);
             if (shouldShowError) {
-                Toast.Add.error(t("errors.Server has been temporarily disabled. Please try again later."));
+                Toast.Add.error(t("errors.Server has been temporarily disabled. Please try again later."), {
+                    id: "board-chat-connection-error",
+                });
             }
 
             if (fromServer && chatTaskIdRef.current) {

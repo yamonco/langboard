@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any
-from ...core.db import ApiField, EnumLikeType, Field, SnowflakeIDField
-from ...core.types import SnowflakeID
+from ...core.db import ApiField, DateTimeField, EnumLikeType, Field, SnowflakeIDField
+from ...core.types import SafeDateTime, SnowflakeID
 from .bases import BaseActivityModel
 from .Card import Card
 from .Project import Project
@@ -71,6 +71,8 @@ class ProjectActivityType(Enum):
 
 class ProjectActivity(BaseActivityModel, table=True):
     project_id: SnowflakeID = SnowflakeIDField(foreign_key=Project, index=True)
+    email_fanout_pending: bool | None = Field(default=True, nullable=True, index=True)
+    email_fanout_retry_at: SafeDateTime | None = DateTimeField(default=None, nullable=True)
     project_column_id: SnowflakeID | None = SnowflakeIDField(foreign_key=ProjectColumn, nullable=True)
     card_id: SnowflakeID | None = SnowflakeIDField(foreign_key=Card, nullable=True)
     activity_type: ProjectActivityType = Field(

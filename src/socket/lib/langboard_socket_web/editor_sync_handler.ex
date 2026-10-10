@@ -395,7 +395,17 @@ defmodule LangboardSocketWeb.EditorSyncHandler do
     end
   end
 
-  defp push_frame(frame, state), do: push_frame(frame, state, message_queue_length())
+  defp push_frame(frame, state) do
+    queue_size = message_queue_length()
+
+    if queue_size >=
+         Application.fetch_env!(:langboard_socket, :socket_max_outbound_queue_messages) do
+      Telemetry.emit_slow_client(queue_size)
+      {:stop, :normal, @try_again_later, state}
+    else
+      push_frame(frame, state, queue_size)
+    end
+  end
 
   defp push_frame({_opcode, payload} = frame, state, queue_size) do
     Telemetry.emit_outbound(byte_size(payload), queue_size)

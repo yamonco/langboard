@@ -61,8 +61,6 @@ config :langboard_socket,
     source_topic: System.get_env("SOCKET_PHOENIX_KAFKA_SOURCE_TOPIC"),
     group_id: System.get_env("BROADCAST_PHOENIX_FANOUT_CONSUMER_GROUP", ""),
     max_bytes: String.to_integer(System.get_env("BROADCAST_MAX_MESSAGE_BYTES", "10485760")),
-    processor_concurrency:
-      String.to_integer(System.get_env("SOCKET_KAFKA_PROCESSOR_CONCURRENCY", "1")),
     max_demand: String.to_integer(System.get_env("SOCKET_KAFKA_MAX_DEMAND", "10")),
     processing_max_attempts:
       String.to_integer(System.get_env("SOCKET_KAFKA_PROCESSING_MAX_ATTEMPTS", "3")),

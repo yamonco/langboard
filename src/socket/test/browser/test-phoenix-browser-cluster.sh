@@ -85,8 +85,8 @@ if [ "$failover_stage" = socket-reconnect ] && [ "$probe_kind" != editor-ai ]; t
     exit 1
 fi
 case "$failover_stage" in
-    connected|canary|cancel|socket-reconnect|repeated|resume|worker|accepted-api-outage) ;;
-    *) echo "PHOENIX_BROWSER_FAILOVER_STAGE must be connected, canary, cancel, socket-reconnect, repeated, resume, worker, or accepted-api-outage." >&2; exit 1 ;;
+    connected|canary|card-context|cancel|mobile-comments|concurrent-ui|socket-reconnect|repeated|resume|worker|accepted-api-outage) ;;
+    *) echo "PHOENIX_BROWSER_FAILOVER_STAGE must be connected, canary, card-context, cancel, mobile-comments, concurrent-ui, socket-reconnect, repeated, resume, worker, or accepted-api-outage." >&2; exit 1 ;;
 esac
 case "$reconnect_rounds" in
     ''|*[!0-9]*) echo "PHOENIX_BROWSER_RECONNECT_ROUNDS must be an integer from 1 to 20." >&2; exit 1 ;;
@@ -172,6 +172,7 @@ status=0
 
 secret_key_base=$(uv run python -c 'import secrets; print(secrets.token_hex(64))')
 cluster_cookie=$(uv run python -c 'import secrets; print(secrets.token_hex(32))')
+phoenix_internal_secret=$(uv run python -c 'import secrets; print(secrets.token_hex(32))')
 
 cleanup() {
     cleanup_status=$?
@@ -306,11 +307,19 @@ fixture_create_args=()
 if [ "$probe_kind" = socket-ui ] || [ "$probe_kind" = ollama ] || [ "$probe_kind" = ollama-worker-loss ]; then
     fixture_create_args+=(--admin-owner)
 fi
+if [ "$probe_kind" = board-chat ] && [ "$failover_stage" = concurrent-ui ]; then
+    fixture_create_args+=(--peer-card-write)
+    fixture_create_args+=(--relationship-type)
+fi
 docker exec -i "${project_name}_api" uv run --no-sync python \
     "$fixture_container_path" create "$run_id" "${fixture_create_args[@]}" >/dev/null || exit 1
-if [ "$probe_kind" = socket-ui ]; then
+if [ "$probe_kind" = socket-ui ] || { [ "$probe_kind" = board-chat ] && [ "$failover_stage" = concurrent-ui ]; }; then
+    wiki_create_args=()
+    if [ "$probe_kind" = board-chat ] && [ "$failover_stage" = concurrent-ui ]; then
+        wiki_create_args+=(--peer-card-write)
+    fi
     docker exec -i "${project_name}_api" uv run --no-sync python \
-        "$fixture_container_path" create-wiki "$run_id" >/dev/null || exit 1
+        "$fixture_container_path" create-wiki "$run_id" "${wiki_create_args[@]}" >/dev/null || exit 1
 fi
 langflow_api_key=""
 if [ "$probe_kind" = board-chat-attachment ]; then
@@ -396,7 +405,6 @@ start_graph_probe() {
     docker "${graph_args[@]}" >/dev/null
 }
 
-phoenix_internal_secret=$(uv run python -c 'import secrets; print(secrets.token_hex(32))')
 if [ "$probe_kind" = ollama ] || [ "$probe_kind" = ollama-worker-loss ]; then
     docker run --detach --pull never --name "$ollama_broker" --network "$network_name" \
         redis:7.2-alpine redis-server --save '' --appendonly no >/dev/null || exit 1
@@ -574,6 +582,7 @@ PHOENIX_BROWSER_API_ORIGIN=http://127.0.0.1:15694 \
 PHOENIX_BROWSER_UI_ORIGIN=http://127.0.0.1:1100 \
 PHOENIX_BROWSER_FAILOVER_SIGNAL="$signal_file" \
 PHOENIX_BROWSER_FAILOVER_STAGE="$failover_stage" \
+PHOENIX_CONCURRENT_UI_ONLY="${PHOENIX_CONCURRENT_UI_ONLY:-}" \
 PHOENIX_BROWSER_RECONNECT_ROUNDS="$reconnect_rounds" \
 PHOENIX_BROWSER_PROXY_PORT="$proxy_port" \
 PHOENIX_BROWSER_GRAPH_CONTAINER="$graph_probe" \
@@ -635,6 +644,42 @@ if [ "$probe_kind" = board-chat ] && [ "$failover_stage" = canary ]; then
     fi
 
     echo "Phoenix Board chat canary browser probe passed."
+    exit 0
+fi
+
+if [ "$probe_kind" = board-chat ] && [ "$failover_stage" = card-context ]; then
+    wait "$probe_pid" || status=$?
+    probe_pid=""
+    if [ "$status" -ne 0 ]; then
+        cat "$probe_log" >&2 || true
+        exit "$status"
+    fi
+
+    echo "Phoenix Board chat Card context browser probe passed."
+    exit 0
+fi
+
+if [ "$probe_kind" = board-chat ] && [ "$failover_stage" = mobile-comments ]; then
+    wait "$probe_pid" || status=$?
+    probe_pid=""
+    if [ "$status" -ne 0 ]; then
+        cat "$probe_log" >&2 || true
+        exit "$status"
+    fi
+
+    echo "Phoenix Board chat mobile comments browser probe passed."
+    exit 0
+fi
+
+if [ "$probe_kind" = board-chat ] && [ "$failover_stage" = concurrent-ui ]; then
+    wait "$probe_pid" || status=$?
+    probe_pid=""
+    if [ "$status" -ne 0 ]; then
+        cat "$probe_log" >&2 || true
+        exit "$status"
+    fi
+
+    echo "Phoenix two-user concurrent Board UI browser probe passed."
     exit 0
 fi
 

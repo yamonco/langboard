@@ -46,8 +46,8 @@ defmodule LangboardSocket.Graph.LangflowClientTest do
     assert_received {:request, "POST", "/api/v1/run/flow", "stream=true", ["server-only-key"],
                      %{"session_id" => "session-1", "input_value" => "question"}}
 
-    assert_received {:event, {:token, "partial"}}
-    assert_received {:event, {:token, "complete"}}
+    assert_received {:event, {:delta, "partial"}}
+    assert_received {:event, {:snapshot, "complete"}}
     assert_received {:event, :end}
   end
 

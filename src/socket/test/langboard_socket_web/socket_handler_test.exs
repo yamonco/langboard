@@ -4,6 +4,7 @@ defmodule LangboardSocketWeb.SocketHandlerTest do
   alias LangboardSocket.BoardChat.RunWorker
   alias LangboardSocket.RealtimeContract, as: Contract
   alias LangboardSocketWeb.SocketHandler
+  alias LangboardSocketWeb.SocketHandler.Outbound
 
   @send_task_id "123e4567-e89b-42d3-a456-426614174000"
 
@@ -1715,8 +1716,9 @@ defmodule LangboardSocketWeb.SocketHandlerTest do
 
     spawn_link(fn ->
       {:push, _messages, state} =
-        SocketHandler.init({{:ok, "user-uid"}, "access-token", 1024, 30_000, 1})
+        SocketHandler.init({{:ok, "user-uid"}, "access-token", 1024, 30_000, 2})
 
+      send(self(), :queued_message)
       send(self(), :queued_message)
       payload = %{"topic" => "user_private", "topic_id" => "user-uid", "event" => "changed"}
 
@@ -1727,6 +1729,38 @@ defmodule LangboardSocketWeb.SocketHandlerTest do
     end)
 
     assert_receive {:slow_client_result, {:stop, :normal, 1013, %SocketHandler.State{}}}
+  end
+
+  test "slow clients also close on subscription and heartbeat frames" do
+    parent = self()
+
+    spawn_link(fn ->
+      {:push, _messages, state} =
+        SocketHandler.init({{:ok, "user-uid"}, "access-token", 1024, 30_000, 2})
+
+      send(self(), :queued_message)
+      send(self(), :queued_message)
+      request = Jason.encode!(%{event: "subscribe", topic: "unknown", topic_id: "value"})
+
+      send(parent, {:slow_subscription, SocketHandler.handle_in({request, opcode: :text}, state)})
+      send(parent, {:slow_heartbeat, SocketHandler.handle_info(:ping, state)})
+    end)
+
+    assert_receive {:slow_subscription, {:stop, :normal, 1013, %SocketHandler.State{}}}
+    assert_receive {:slow_heartbeat, {:stop, :normal, 1013, %SocketHandler.State{}}}
+  end
+
+  test "multiple outbound frames respect the mailbox bound" do
+    parent = self()
+
+    spawn_link(fn ->
+      send(self(), :queued_message)
+      state = %{max_outbound_queue: 2}
+      frames = [{:text, "first"}, {:text, "second"}]
+      send(parent, {:slow_initial_frames, Outbound.push_frames(frames, state)})
+    end)
+
+    assert_receive {:slow_initial_frames, {:stop, :normal, 1013, %{max_outbound_queue: 2}}}
   end
 
   defp subscribed_board_state(topic_id) do

@@ -75,7 +75,7 @@ defmodule LangboardSocket.Broker.Kafka.Ingress do
       ],
       processors: [
         default: [
-          concurrency: Keyword.fetch!(config, :processor_concurrency),
+          concurrency: 1,
           max_demand: Keyword.fetch!(config, :max_demand)
         ]
       ]

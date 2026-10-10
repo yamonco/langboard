@@ -12,6 +12,7 @@ from langboard_shared.core.types import SafeDateTime, SnowflakeID
 from langboard_shared.domain.models import (
     Bot,
     Card,
+    GlobalCardRelationshipType,
     InternalBot,
     OllamaModelPull,
     Project,
@@ -24,8 +25,10 @@ from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.OllamaModelPull import OllamaModelPullStatus
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.models.UserNotification import NotificationType
+from langboard_shared.domain.models.UserNotificationUnsubscription import NotificationChannel
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
+from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import UserPublisher
 
 
@@ -43,6 +46,8 @@ parser.add_argument(
         "credentials",
         "update-peer-name",
         "notify",
+        "replay-notify",
+        "replay-deleted-notify",
         "status",
         "revoke",
         "restore",
@@ -57,8 +62,11 @@ parser.add_argument("--access-ttl", type=int)
 parser.add_argument("--api-url")
 parser.add_argument("--api-key")
 parser.add_argument("--admin-owner", action="store_true")
+parser.add_argument("--peer-card-write", action="store_true")
+parser.add_argument("--relationship-type", action="store_true")
 parser.add_argument("--pull-uid")
 parser.add_argument("--model-name")
+parser.add_argument("--notification-uid")
 args = parser.parse_args()
 run_id = str(args.run_id)
 manifest_path = Path("/app/local/socket-migration") / f"editor-access-{run_id}.json"
@@ -67,11 +75,13 @@ isolation_title = f"Migration isolation probe {run_id}"
 service = DomainService()
 
 
-def prepare_peer(project: Project, peer: User, *, include_wiki: bool = False) -> None:
+def prepare_peer(project: Project, peer: User, *, include_wiki: bool = False, card_write: bool = False) -> None:
     service.project.repo.project_assigned_user.ensure_assigned(project, peer)
     actions = [ProjectRoleAction.Read.value, ProjectRoleAction.CardUpdate.value]
     if include_wiki:
         actions.append(ProjectRoleAction.Update.value)
+    if card_write:
+        actions.append(ProjectRoleAction.CardWrite.value)
     service.project.repo.role.project.grant(actions=actions, project_id=project.id, user_id=peer.id)
     deadline = monotonic() + 10
     while monotonic() < deadline:
@@ -126,19 +136,28 @@ try:
             )
             users.append(user)
         owner, peer, outsider = users
+        for user in users:
+            service.user_notification_setting.toggle_all(user, NotificationChannel.Email, True)
         if args.admin_owner:
             service.user.grant_all_setting_roles(owner)
             service.api_key.grant_all_roles(owner)
             service.mcp_tool_group.grant_all_roles(owner)
         project = service.project.create(owner, title)
         isolation_project = service.project.create(owner, isolation_title)
-        prepare_peer(project, peer)
+        prepare_peer(project, peer, card_write=args.peer_card_write)
         column = service.project_column.create(owner, project, "Editor verification")
         card_title = f"Migration card {run_id}"
         result = service.card.create(owner, project, column, card_title)
         if not result:
             raise RuntimeError("Could not create the synthetic Card")
         card, _response = result
+        relationship_type = (
+            service.app_setting.create_global_relationship(
+                f"Migration parent {run_id}", f"Migration child {run_id}"
+            )
+            if args.relationship_type
+            else None
+        )
         manifest = {
             "project_uid": project.get_uid(),
             "isolation_project_uid": isolation_project.get_uid(),
@@ -147,6 +166,7 @@ try:
             "owner_uid": owner.get_uid(),
             "peer_uid": peer.get_uid(),
             "outsider_uid": outsider.get_uid(),
+            "relationship_type_uid": relationship_type.get_uid() if relationship_type else None,
         }
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         print(json.dumps(manifest))
@@ -173,7 +193,10 @@ try:
         ):
             raise ValueError("Not this run's isolation project")
         if not already_deleted:
-            require_synthetic_card(card, manifest["project_uid"], manifest.get("card_title", title))
+            expected_card_title = manifest.get("card_title", title)
+            if args.action == "cleanup" and isinstance(card, Card) and card.title == f"Concurrent card title {run_id}":
+                expected_card_title = card.title
+            require_synthetic_card(card, manifest["project_uid"], expected_card_title)
         if args.action == "configure-langflow":
             active_project = require_synthetic_project(project, title)
             if "langflow_bot_uid" in manifest:
@@ -268,7 +291,7 @@ try:
             if not result:
                 raise RuntimeError("Could not create synthetic wiki")
             wiki, _response = result
-            prepare_peer(active_project, peer, include_wiki=True)
+            prepare_peer(active_project, peer, include_wiki=True, card_write=args.peer_card_write)
             manifest["wiki_uid"] = wiki.get_uid()
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             print(json.dumps(manifest))
@@ -367,6 +390,7 @@ try:
                 raise ValueError("Synthetic notifications already exist")
 
             notification_uids: dict[str, str] = {}
+            deleted_replay_payload: dict[str, object] | None = None
             for key, notifier, recipient in (
                 ("owner_read", peer, owner),
                 ("owner_bulk", peer, owner),
@@ -390,10 +414,45 @@ try:
                 UserPublisher.notified(recipient, api_notification)
                 service.notification.repo.user_notification.complete_web_fanout(notification)
                 notification_uids[key] = notification.get_uid()
+                if key == "owner_read":
+                    deleted_replay_payload = json.loads(json.dumps(api_notification, default=str))
 
             manifest["notification_uids"] = notification_uids
+            manifest["deleted_replay_payload"] = deleted_replay_payload
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             print(json.dumps({"notification_uids": notification_uids}))
+        elif args.action == "replay-deleted-notify":
+            payload = manifest.get("deleted_replay_payload")
+            notification_uids = manifest.get("notification_uids")
+            if not isinstance(payload, dict) or not isinstance(notification_uids, dict):
+                raise ValueError("Synthetic deleted notification payload is unavailable")
+            if payload.get("uid") != notification_uids.get("owner_read"):
+                raise ValueError("Synthetic deleted notification payload does not match owner")
+            UserPublisher.notified(owner, payload)
+            print(json.dumps({"notification_uid": payload["uid"]}))
+        elif args.action == "replay-notify":
+            notification_uids = manifest.get("notification_uids")
+            if not isinstance(notification_uids, dict) or set(notification_uids) != {
+                "owner_read",
+                "owner_bulk",
+                "peer",
+            }:
+                raise ValueError("Synthetic notifications are unavailable")
+            uid = args.notification_uid or notification_uids["owner_read"]
+            if uid not in {notification_uids["owner_read"], notification_uids["owner_bulk"]}:
+                raise ValueError("Notification is outside the synthetic owner scope")
+            with DbSession.use(readonly=True) as db:
+                notification = db.exec(
+                    SqlBuilder.select.table(UserNotification).where(
+                        UserNotification.column("id") == SnowflakeID.from_short_code(uid)
+                    )
+                ).first()
+            if not isinstance(notification, UserNotification) or notification.receiver_id != owner.id:
+                raise ValueError("Synthetic notification does not belong to owner")
+            api_notification = service.notification.convert_to_api_response(notification)
+            api_notification["read_at"] = None
+            UserPublisher.notified(owner, api_notification)
+            print(json.dumps({"notification_uid": uid}))
         elif args.action == "status":
             active_project = require_synthetic_project(project, title)
             active_card = require_synthetic_card(card, manifest["project_uid"], manifest.get("card_title", title))
@@ -482,8 +541,11 @@ try:
                         )
                     )
             if isinstance(project, Project) and isinstance(card, Card):
+                expected_card_title = manifest.get("card_title", title)
+                if card.title == f"Concurrent card title {run_id}":
+                    expected_card_title = card.title
                 synthetic_card = require_synthetic_card(
-                    card, manifest["project_uid"], manifest.get("card_title", title)
+                    card, manifest["project_uid"], expected_card_title
                 )
                 for attachment, _ in service.card_attachment.repo.card_attachment.get_list_by_card(synthetic_card):
                     if not Storage.delete(attachment.file):
@@ -514,6 +576,14 @@ try:
                 raise RuntimeError("Could not remove synthetic project")
             if isinstance(isolation_project, Project) and not service.project.delete(owner, isolation_project):
                 raise RuntimeError("Could not remove synthetic isolation project")
+            if manifest.get("relationship_type_uid"):
+                relationship_type = InfraHelper.get_by_id_like(
+                    GlobalCardRelationshipType, manifest["relationship_type_uid"]
+                )
+                if not isinstance(relationship_type, GlobalCardRelationshipType) or (
+                    relationship_type.parent_name != f"Migration parent {run_id}"
+                ) or not service.app_setting.delete_global_relationship(relationship_type):
+                    raise RuntimeError("Could not remove synthetic relationship type")
             service.user.delete(peer)
             service.user.delete(owner)
             service.user.delete(outsider)

@@ -77,7 +77,8 @@ defmodule LangboardSocket.Editor.SyncManifest do
     unmapped_destination = unmapped_files(destination, audited)
 
     verified =
-      unmapped_source == [] and unmapped_destination == [] and
+      (documents != [] or opaque_documents != []) and unmapped_source == [] and
+        unmapped_destination == [] and
         Enum.all?(documents, &(&1["restore_status"] == "verified")) and
         Enum.all?(opaque_documents, &(&1["restore_status"] == "verified"))
 

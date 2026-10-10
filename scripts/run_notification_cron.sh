@@ -1,6 +1,4 @@
 #!/bin/bash -l
 
-cd /app
-/app/.venv/bin/langboard run:notification:cron "$@"
-
-exit 0
+cd /app || exit 1
+flock -n -E 0 /tmp/langboard-notification-cron.lock /app/.venv/bin/langboard run:notification:cron "$@"

@@ -1,3 +1,13 @@
 **/.venv
 .ruff_cache
 **/__pycache__
+.git
+**/.env
+**/*.env
+**/.vault-credentials
+**/*.db*
+**/*.log
+.abathur
+local
+uploads
+docker/volumes

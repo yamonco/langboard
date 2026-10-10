@@ -1426,6 +1426,54 @@ async function assertMalformedEditorFrameRejected(page) {
   assert.equal(closeCode, 1007);
 }
 
+async function runConcurrentEditorWrites(owner, peer) {
+  stage = "editor-concurrent-write";
+  const initial = `Editor concurrent ${runId}`;
+  await appendEditorText(owner, initial);
+  await Promise.all([owner, peer].map((page) => waitForEditorText(page, initial)));
+
+  const additions = [" owner-write", " peer-write"];
+  await Promise.all(
+    [owner, peer].map((page, index) => appendEditorText(page, additions[index])),
+  );
+  await Promise.all(
+    [owner, peer].map((page) =>
+      page.waitForFunction(
+        (texts) => {
+          const content = document.querySelector(
+            '[data-card-description] [contenteditable="true"]',
+          )?.innerText;
+          return content && texts.every((text) => content.includes(text.trim()));
+        },
+        additions,
+        { timeout: 30000 },
+      ),
+    ),
+  );
+  const expected = (
+    await owner
+      .locator('[data-card-description] [contenteditable="true"]')
+      .innerText()
+  ).trim();
+  await waitForEditorText(peer, expected);
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await owner.getByRole("button", { name: "Edit", exact: true }).waitFor();
+  const persisted = await snapshot();
+  assert.equal(persisted.description.content.trim(), expected);
+  for (const page of [owner, peer]) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      (text) => document.querySelector("[data-card-description]")?.innerText.trim() === text,
+      expected,
+      { timeout: 30000 },
+    );
+  }
+  await fs.writeFile(
+    path.join(output, "result.json"),
+    JSON.stringify({ success: true, steps: ["two-user-concurrent-editor-writes-converged-and-persisted"] }, null, 2),
+  );
+}
+
 async function runEditorSyncReconnect(owner, peer, credentials) {
   let expected = `Editor sync ${runId}`;
   const ownerEditor = owner.locator(
@@ -1760,7 +1808,11 @@ async function main() {
   const ownerEditor = await openEditor(owner, url, credentials.project_uid);
   const peerEditor = await openEditor(peer, url, credentials.project_uid);
   if (scenario === "sync") {
-    await runEditorSyncReconnect(owner, peer, credentials);
+    if (failoverStage === "connected") {
+      await runConcurrentEditorWrites(owner, peer);
+    } else {
+      await runEditorSyncReconnect(owner, peer, credentials);
+    }
     return;
   }
   await ownerEditor.click();

@@ -85,7 +85,7 @@ defmodule LangboardSocket.Graph.StreamDecoderTest do
         frame("add_message", %{"sender" => "AI", "text" => "complete"}) <>
         frame("end", %{})
 
-    assert {:ok, [{:token, "partial"}, {:token, "complete"}, :end], decoder} =
+    assert {:ok, [{:delta, "partial"}, {:snapshot, "complete"}, :end], decoder} =
              StreamDecoder.feed(StreamDecoder.new(1024, :langflow), payload)
 
     assert :ok = StreamDecoder.finish(decoder)
@@ -99,7 +99,7 @@ defmodule LangboardSocket.Graph.StreamDecoderTest do
                  frame("interrupt", %{"thread_id" => "ignored"})
              )
 
-    assert {:ok, [{:token, "partial"}], decoder} =
+    assert {:ok, [{:delta, "partial"}], decoder} =
              StreamDecoder.feed(
                StreamDecoder.new(1024, :langflow),
                frame("token", %{"token" => true, "chunk" => "partial"})

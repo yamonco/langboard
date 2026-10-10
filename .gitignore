@@ -223,6 +223,7 @@ test-results
 
 # AI tools
 .agents
+.abathur
 .claude
 .codex
 .specify

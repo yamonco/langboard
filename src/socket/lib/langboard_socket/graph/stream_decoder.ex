@@ -73,19 +73,19 @@ defmodule LangboardSocket.Graph.StreamDecoder do
          :langflow
        )
        when is_binary(sender) and is_binary(text) do
-    if String.downcase(sender) == "user", do: {:ok, nil}, else: {:ok, {:token, text}}
+    if String.downcase(sender) == "user", do: {:ok, nil}, else: {:ok, {:snapshot, text}}
   end
 
   defp decode_event(%{"event" => "add_message", "data" => %{"text" => text}}, :langflow)
        when is_binary(text),
-       do: {:ok, {:token, text}}
+       do: {:ok, {:snapshot, text}}
 
   defp decode_event(
          %{"event" => "token", "data" => %{"token" => token, "chunk" => chunk}},
          :langflow
        )
        when token not in [false, nil] and is_binary(chunk),
-       do: {:ok, {:token, chunk}}
+       do: {:ok, {:delta, chunk}}
 
   defp decode_event(%{"event" => event}, :langflow) when event in ["token", "interrupt"],
     do: {:ok, nil}

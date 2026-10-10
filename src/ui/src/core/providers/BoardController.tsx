@@ -170,7 +170,12 @@ export const BoardController = memo(({ children }: IBoardControllerProps): React
     const [relationshipSelectionActors, setRelationshipSelectionActors] = useState<Record<string, IRelationshipSelectionActor>>({});
     const relationshipSelectionActorsRef = useRef<Record<string, IRelationshipSelectionActor>>({});
     const [relationshipSelectionSyncState, setRelationshipSelectionSyncState] = useState<IRelationshipSelectionSyncState>();
-    const [chatResizableSidebar, setChatResizableSidebar] = useState<TDashboardStyledLayoutProps["resizableSidebar"]>();
+    const [chatResizableSidebar, setChatResizableSidebar] = useState<TDashboardStyledLayoutProps["resizableSidebar"]>({
+        children: null,
+        initialWidth: 280,
+        collapsableWidth: 210,
+        hidden: true,
+    });
     const [boardChat, setBoardChat] = useState<IBoardChatState>();
     const currentCardUIDRef = useRef<string>(null);
     const saveCardSelectionCallbackRef = useRef<(relationships: [string, string][]) => void>(null);

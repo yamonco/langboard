@@ -8,6 +8,7 @@ from langboard_shared.core.broadcast import DispatcherModel
 from langboard_shared.core.broadcast.BaseDispatcherQueue import BaseDispatcherQueue
 from langboard_shared.core.broadcast.kafka.KafkaDispatcherQueue import KafkaDispatcherQueue
 from langboard_shared.core.broadcast.memory.MemoryDispatcherQueue import MemoryDispatcherQueue
+from langboard_shared.core.routing.SocketTopic import SocketTopic
 from langboard_shared.core.types import SnowflakeID
 from pytest import MonkeyPatch
 
@@ -16,10 +17,12 @@ class FakeKafkaProducer:
     def __init__(self, **config: object) -> None:
         self.config = config
         self.messages: list[tuple[str, dict[str, object]]] = []
+        self.keys: list[bytes | None] = []
         self.delivery = Mock()
 
-    def send(self, topic: str, value: dict[str, object]) -> Mock:
+    def send(self, topic: str, value: dict[str, object], key: bytes | None = None) -> Mock:
         self.messages.append((topic, value))
+        self.keys.append(key)
         return self.delivery
 
 
@@ -71,6 +74,59 @@ def test_kafka_dispatcher_accepts_event_and_data_arguments(monkeypatch: MonkeyPa
 
     assert isinstance(queue.producer, FakeKafkaProducer)
     assert queue.producer.messages[0][1]["data"] == {"value": "ok"}
+
+
+def test_kafka_dispatcher_keys_single_scope_events_for_ordered_delivery(monkeypatch: MonkeyPatch) -> None:
+    environment = SimpleNamespace(
+        BROADCAST_URLS=["kafka:9092"],
+        BROADCAST_MAX_MESSAGE_BYTES=10 * 1024 * 1024,
+        BROADCAST_PUBLISH_TIMEOUT_SECONDS=30,
+    )
+    monkeypatch.setitem(KafkaDispatcherQueue.__init__.__globals__, "Env", environment)
+    monkeypatch.setitem(KafkaDispatcherQueue.__init__.__globals__, "KafkaProducer", FakeKafkaProducer)
+
+    queue = KafkaDispatcherQueue()
+    for event in ("user:notified", "user:notification:mutated"):
+        queue.put(
+            "socket_publish",
+            {
+                "data": {},
+                "publish_models": {
+                    "topic": SocketTopic.UserPrivate,
+                    "topic_id": "owner-uid",
+                    "event": event,
+                },
+            },
+        )
+    queue.put(
+        "socket_publish",
+        {"data": {}, "publish_models": {"topic": "user_private", "topic_id": "peer-uid", "event": "user:notified"}},
+    )
+    queue.put(
+        "socket_publish",
+        {"data": {}, "publish_models": [{"topic": "user_private", "topic_id": "owner-uid", "event": "user:notified"}]},
+    )
+    queue.put("socket_publish", {"data": {}, "publish_models": []})
+    queue.put(
+        "socket_publish",
+        {
+            "data": {},
+            "publish_models": [
+                {"topic": "user_private", "topic_id": "owner-uid", "event": "user:notified"},
+                {"topic": "user_private", "topic_id": "peer-uid", "event": "user:notified"},
+            ],
+        },
+    )
+
+    assert isinstance(queue.producer, FakeKafkaProducer)
+    assert queue.producer.keys == [
+        b"user_private:owner-uid",
+        b"user_private:owner-uid",
+        b"user_private:peer-uid",
+        b"user_private:owner-uid",
+        None,
+        None,
+    ]
 
 
 def test_kafka_dispatcher_rejects_oversized_inline_payload(monkeypatch: MonkeyPatch) -> None:

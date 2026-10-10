@@ -700,6 +700,34 @@ def test_email_review_resolution_requires_current_state_and_records_decision(mon
     engine.dispose()
 
 
+def test_email_review_uses_primary_database_when_replica_lags(monkeypatch: MonkeyPatch) -> None:
+    main = create_engine("sqlite+pysqlite:///:memory:")
+    replica = create_engine("sqlite+pysqlite:///:memory:")
+    for engine in (main, replica):
+        User.__table__.create(engine)
+        NotificationEmailDelivery.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: main)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: replica)
+    repository = NotificationEmailDeliveryRepository(lambda repository_type: None, lambda name: None)
+    delivery = NotificationEmailDelivery(
+        notification_id=SnowflakeID(13),
+        receiver_id=SnowflakeID(12),
+        notification_type=NotificationType.ProjectInvited,
+        recipient_email="recipient@example.test",
+        preferred_lang="en-US",
+        template_name="assigned_to_card",
+        status=NotificationEmailDeliveryStatus.Failed,
+    )
+    repository.insert(delivery)
+
+    assert [item.id for item in repository.get_review_items(1)] == [delivery.id]
+    assert repository.get_review_item(delivery.id).id == delivery.id
+    with replica.connect() as connection:
+        assert connection.execute(select(NotificationEmailDelivery.__table__)).first() is None
+    main.dispose()
+    replica.dispose()
+
+
 def test_failed_reaction_email_retry_requires_approved_current_card_title(monkeypatch: MonkeyPatch) -> None:
     delivery = NotificationEmailDelivery.model_construct(
         id=SnowflakeID(4),

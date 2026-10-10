@@ -4,7 +4,14 @@ defmodule LangboardSocketWeb.HealthControllerTest do
   alias LangboardSocket.RuntimeStatus
 
   test "health endpoints report a live process", %{conn: conn} do
-    assert conn |> get("/health") |> response(204) == ""
+    health = get(conn, "/health")
+    assert response(health, 204) == ""
+    assert get_resp_header(health, "x-langboard-socket-runtime") == ["phoenix"]
+
+    assert get_resp_header(health, "x-langboard-socket-version") == [
+             :langboard_socket |> Application.spec(:vsn) |> to_string()
+           ]
+
     assert conn |> get("/health/live") |> response(204) == ""
   end
 

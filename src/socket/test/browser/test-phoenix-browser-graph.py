@@ -109,9 +109,8 @@ async def run_langflow(
             return
         input_value = str(body.get("input_value", ""))
         if input_value.startswith("partial-hold:"):
-            yield (
-                json.dumps({"event": "add_message", "data": {"sender": "AI", "text": "Draft Langflow answer"}}) + "\n\n"
-            )
+            yield (json.dumps({"event": "token", "data": {"token": True, "chunk": "Draft "}}) + "\n\n")
+            yield (json.dumps({"event": "token", "data": {"token": True, "chunk": "Langflow answer"}}) + "\n\n")
             yield (
                 json.dumps({"event": "add_message", "data": {"sender": "AI", "text": "Partial Langflow answer"}})
                 + "\n\n"

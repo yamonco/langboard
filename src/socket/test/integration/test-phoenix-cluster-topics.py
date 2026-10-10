@@ -57,7 +57,7 @@ def main() -> None:
             if action == "create_probe":
                 admin.create_topics(
                     [
-                        NewTopic(name=source, num_partitions=1, replication_factor=1),
+                        NewTopic(name=source, num_partitions=3, replication_factor=1),
                         NewTopic(name=dead_letter, num_partitions=1, replication_factor=1),
                     ]
                 )

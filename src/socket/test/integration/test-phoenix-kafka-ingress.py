@@ -9,7 +9,8 @@ from urllib.parse import quote
 from uuid import uuid4
 import websockets
 from kafka import KafkaConsumer, KafkaProducer
-from langboard_shared.core.broadcast.kafka.KafkaDispatcherQueue import KafkaDispatcherQueue
+from langboard_shared.core.broadcast.DispatcherModel import DispatcherEnvelope
+from langboard_shared.core.broadcast.kafka.KafkaDispatcherQueue import KafkaDispatcherQueue, _partition_key
 from langboard_shared.core.security import AuthSecurity
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
@@ -81,6 +82,24 @@ async def _receive_event(websocket, event: str, probe_id: str, timeout_seconds: 
     raise RuntimeError(f"Phoenix did not fan out {event}")
 
 
+async def _receive_ordered_events(websocket, event_prefix: str, probe_id: str, count: int) -> None:
+    deadline = monotonic() + 15
+    for sequence in range(count):
+        while True:
+            payload = await asyncio.wait_for(websocket.recv(), timeout=deadline - monotonic())
+            if not isinstance(payload, str):
+                continue
+            frame = json.loads(payload)
+            event = frame.get("event")
+            if (
+                isinstance(event, str)
+                and event.startswith(event_prefix)
+                and frame.get("data", {}).get("probe_id") == probe_id
+            ):
+                assert event == f"{event_prefix}{sequence}", f"Out-of-order fanout: expected {sequence}, got {event}"
+                break
+
+
 async def _run() -> None:
     socket_url = os.environ["PHOENIX_SOCKET_URL"].rstrip("/")
     dead_letter_topic = os.environ["PHOENIX_SOCKET_DLQ_TOPIC"]
@@ -120,6 +139,20 @@ async def _run() -> None:
                 _socket_data(user_uid, probe_id, inline_event),
             )
             await _receive_event(websocket, inline_event, probe_id)
+
+            ordered_prefix = f"probe:ordered:{probe_id}:"
+            partitions = set()
+            for sequence in range(12):
+                data = _socket_data(user_uid, probe_id, f"{ordered_prefix}{sequence}")
+                envelope = DispatcherEnvelope(event=SOCKET_TOPIC, data=data).model_dump(mode="json")
+                record = producer.send(
+                    SOCKET_TOPIC,
+                    envelope,
+                    key=_partition_key("socket_publish", data),
+                ).get(timeout=10)
+                partitions.add(record.partition)
+            assert len(partitions) == 1, "Events for one user must share a Kafka partition"
+            await _receive_ordered_events(websocket, ordered_prefix, probe_id, 12)
 
             legacy_event = f"probe:legacy:{probe_id}"
             cache_key = f"broadcast-phoenix-probe-{probe_id}"

@@ -5,7 +5,7 @@ import useChangeEditMode from "@/core/hooks/useChangeEditMode";
 import { ProjectColumn } from "@/core/models";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoard } from "@/core/providers/BoardProvider";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export interface IBoardAddCardContext {
@@ -53,18 +53,6 @@ export const BoardAddCardProvider = ({ column, viewportRef, toLastPage, children
         disableNewLine: true,
         editorName,
         customStartEditing: () => {
-            const pointerDownEvent = (e: PointerEvent) => {
-                const target = e.target;
-                if (!target || !(target instanceof HTMLElement) || target.closest(`[${disableChangeModeAttr}]`)) {
-                    return;
-                }
-
-                changeMode("view");
-                window.removeEventListener("pointerdown", pointerDownEvent);
-            };
-
-            window.addEventListener("pointerdown", pointerDownEvent);
-
             toLastPage();
 
             setTimeout(() => {
@@ -114,6 +102,22 @@ export const BoardAddCardProvider = ({ column, viewportRef, toLastPage, children
             });
         },
     });
+
+    useEffect(() => {
+        if (!isEditing) {
+            return;
+        }
+
+        const pointerDownEvent = (e: PointerEvent) => {
+            const target = e.target;
+            if (target instanceof HTMLElement && !target.closest(`[${disableChangeModeAttr}]`)) {
+                changeMode("view");
+            }
+        };
+
+        window.addEventListener("pointerdown", pointerDownEvent);
+        return () => window.removeEventListener("pointerdown", pointerDownEvent);
+    }, [isEditing, changeMode, disableChangeModeAttr]);
 
     const scrollToBottom = () => {
         const viewport = viewportRef.current;

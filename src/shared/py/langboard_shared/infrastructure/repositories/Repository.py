@@ -36,6 +36,10 @@ class Repository(Factory):
         return self._create_or_get_product(factory.ProjectEmailNotificationRepository)
 
     @property
+    def project_activity_email_delivery(self):
+        return self._create_or_get_product(factory.ProjectActivityEmailDeliveryRepository)
+
+    @property
     def card(self):
         return self._create_or_get_product(factory.CardRepository)
 

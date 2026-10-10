@@ -125,6 +125,7 @@ export const useCollaborativeText = ({
     const [remoteMeta, setRemoteMeta] = useState<ICollaborativeTextMeta[]>([]);
     const providerRef = useRef<HocuspocusProvider | null>(null);
     const ytextRef = useRef<Y.Text | null>(null);
+    const editedFieldsRef = useRef<Y.Map<boolean> | null>(null);
     const isApplyingRemoteChangeRef = useRef(false);
     const hasLocalDirtyValueRef = useRef(false);
     const activeBindingKeyRef = useRef("");
@@ -154,13 +155,14 @@ export const useCollaborativeText = ({
     }, [fallbackValue]);
 
     useEffect(() => {
-        if (ytextRef.current) {
+        const text = ytextRef.current;
+        if (text && (text.length || editedFieldsRef.current?.get(field) || preserveSyncedValue || hasLocalDirtyValueRef.current)) {
             return;
         }
 
         valueRef.current = fallbackValue;
         setValue(fallbackValue);
-    }, [fallbackValue]);
+    }, [fallbackValue, field, preserveSyncedValue]);
 
     useEffect(() => {
         onValueChangeRef.current = onValueChange;
@@ -280,7 +282,9 @@ export const useCollaborativeText = ({
         const document = sharedEntry.document;
         const provider = sharedEntry.provider;
         const text = document.getText(field);
+        const editedFields = document.getMap<boolean>("collaborativeTextEdited");
         ytextRef.current = text;
+        editedFieldsRef.current = editedFields;
         providerRef.current = provider;
 
         const applySyncedText = () => {
@@ -305,11 +309,7 @@ export const useCollaborativeText = ({
                 return;
             }
 
-            if (!currentValue && fallbackValue && !preserveSyncedValue && !hasLocalDirtyValueRef.current && !hasActiveRemoteFieldEditor()) {
-                text.doc?.transact(() => {
-                    text.delete(0, text.length);
-                    text.insert(0, fallbackValue);
-                });
+            if (!currentValue && fallbackValue && !preserveSyncedValue && !editedFields.get(field) && !hasLocalDirtyValueRef.current) {
                 hasLocalDirtyValueRef.current = false;
                 valueRef.current = fallbackValue;
                 setValue(fallbackValue);
@@ -398,8 +398,9 @@ export const useCollaborativeText = ({
                 return;
             }
 
-            const nextValue = text.toString();
+            const currentValue = text.toString();
             const fallbackValue = fallbackValueRef.current;
+            const nextValue = !currentValue && !editedFields.get(field) && !preserveSyncedValue ? fallbackValue : currentValue;
             if (resetSyncedValueToDefault && nextValue !== fallbackValue && !hasLocalDirtyValueRef.current && !hasActiveRemoteFieldEditor()) {
                 text.doc?.transact(() => {
                     text.delete(0, text.length);
@@ -424,11 +425,13 @@ export const useCollaborativeText = ({
         };
 
         text.observe(handleTextChange);
+        editedFields.observe(handleTextChange);
         provider.awareness?.on("change", updateRemoteCursors);
 
         return () => {
             disposed = true;
             text.unobserve(handleTextChange);
+            editedFields.unobserve(handleTextChange);
             provider.awareness?.off("change", updateRemoteCursors);
             const localAwarenessState = provider.awareness?.getLocalState();
             const currentSelection = localAwarenessState?.collaborativeTextSelection as IAwarenessTextSelection | undefined;
@@ -455,29 +458,37 @@ export const useCollaborativeText = ({
             }
             providerRef.current = null;
             ytextRef.current = null;
+            editedFieldsRef.current = null;
         };
     }, [currentUserUID, disabled, field, hasActiveRemoteFieldEditor, preserveSyncedValue, resetSyncedValueToDefault, resolvedDocumentID, socket]);
 
-    const updateValue = useCallback((nextValue: string) => {
-        hasLocalDirtyValueRef.current = nextValue !== fallbackValueRef.current;
-        valueRef.current = nextValue;
-        setValue(nextValue);
-        onValueChangeRef.current?.(nextValue);
+    const updateValue = useCallback(
+        (nextValue: string) => {
+            hasLocalDirtyValueRef.current = nextValue !== fallbackValueRef.current;
+            valueRef.current = nextValue;
+            setValue(nextValue);
+            onValueChangeRef.current?.(nextValue);
 
-        const text = ytextRef.current;
-        if (!text || isApplyingRemoteChangeRef.current) {
-            return;
-        }
+            const text = ytextRef.current;
+            if (!text || isApplyingRemoteChangeRef.current) {
+                return;
+            }
 
-        if (text.toString() === nextValue) {
-            return;
-        }
+            const editedFields = editedFieldsRef.current;
+            if (text.toString() === nextValue && editedFields?.get(field)) {
+                return;
+            }
 
-        text.doc?.transact(() => {
-            text.delete(0, text.length);
-            text.insert(0, nextValue);
-        });
-    }, []);
+            text.doc?.transact(() => {
+                editedFields?.set(field, true);
+                text.delete(0, text.length);
+                if (nextValue) {
+                    text.insert(0, nextValue);
+                }
+            });
+        },
+        [field]
+    );
 
     const resetValue = useCallback(
         (nextValue: string) => {
@@ -491,18 +502,23 @@ export const useCollaborativeText = ({
                 return;
             }
 
-            if (text.toString() === nextValue) {
+            const editedFields = editedFieldsRef.current;
+            if (!text.length && !editedFields?.get(field) && nextValue === fallbackValueRef.current) {
+                return;
+            }
+            if (text.toString() === nextValue && editedFields?.get(field)) {
                 return;
             }
 
             text.doc?.transact(() => {
+                editedFields?.set(field, true);
                 text.delete(0, text.length);
                 if (nextValue) {
                     text.insert(0, nextValue);
                 }
             });
         },
-        [hasActiveRemoteFieldEditor]
+        [field, hasActiveRemoteFieldEditor]
     );
 
     const updateSelection = useCallback(

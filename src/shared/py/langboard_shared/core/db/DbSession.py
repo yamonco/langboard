@@ -168,8 +168,13 @@ class DbSession:
         if obj.is_new() or not obj.has_changes():
             return
 
+        changed_columns = set(obj.changes) - {"id", "created_at"}
         obj.updated_at = SafeDateTime.now()
-        values = self.__get_model_column_values(obj, exclude={"id", "created_at"})
+        values = {
+            column.name: self.__get_column_value(getattr(obj, column.name))
+            for column in obj.__table__.columns  # type: ignore[attr-defined]
+            if column.name in changed_columns or column.name == "updated_at"
+        }
         self.__session.execute(
             update(obj.__table__).where(obj.__table__.c.id == obj.id).values(values)  # type: ignore[attr-defined]
         )

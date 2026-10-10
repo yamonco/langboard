@@ -40,7 +40,7 @@ Other paths are relative to the repository root. Phoenix module names resolve un
 
 | Responsibility | Execution owner | Durable/domain owner |
 | --- | --- | --- |
-| JSON connection, subscriptions, command dispatch | `SocketHandler`, `SubscriptionTopic`, Phoenix.PubSub | Python `routes/auth/SocketAuthApi.py` and `SocketAuthorization.py` authorize current access |
+| JSON connection, subscriptions, command dispatch | `SocketHandler`, `SubscriptionTopic`, `Phoenix.PubSub` | Python `routes/auth/SocketAuthApi.py` and `SocketAuthorization.py` authorize current access |
 | `SocketConsumer` broker projection and fanout | `Broker.Kafka.Ingress`, `Broker.Envelope`, `Broker.EventProjector` | Python publishers emit inline v2 envelopes; `Broker.LegacyPayloadStore` is transitional only |
 | `NotificationConsumer` creation, unsubscribe checks, email | Python `NotificationService` and notification recovery tasks | Python notification repositories and email outbox; Phoenix does not send email |
 | Notification read/delete commands | `NotificationClient` forwards authenticated commands | Python `routes/notification/NotificationApi.py` |
@@ -62,13 +62,15 @@ The project-chat API rejects N8N before accepting work. Background Bot tasks
 remain separate: Python's Bot task request
 factory owns their supported N8N execution path.
 
-Before production deployment, complete the browser/recovery matrix,
-production document manifest and restore proof, and sustained OTel observation.
+Before production deployment, complete the browser/recovery matrix and
+production document manifest and restore proof. Run the sustained 24-hour OTel
+observation after the initial release.
 Ordinary SMTP has ambiguous failure
 windows; the outbox records uncertain delivery rather than promising exactly-once mail.
-The notification owner preflight requires a reachable SMTP TCP endpoint from the API
-runtime; it does not prove authentication or message acceptance. Review failed and uncertain
-outbox rows with `langboard notification:email:review --action list` before handoff.
+The notification owner preflight uses the configured SMTP TLS and login settings
+from the API runtime without sending a message. It does not prove message
+acceptance or delivery. Review failed and uncertain outbox rows with
+`langboard notification:email:review --action list` before handoff.
 For an older failed `reacted_to_comment` row missing `card_name`, retry requires
 `--use-current-card-title` and an operator ticket. This renders the Card's current title,
 which may differ from its title when the notification was accepted. Do not retry these
@@ -89,13 +91,64 @@ mix test
 ```
 
 From the repository root, use `make test_socket_phoenix` or `make build_socket_phoenix_image`.
-Use `make test_socket_protocol` to execute the raw WebSocket suite against Phoenix. The suite
+Use `make test_socket_phoenix_local` for a short check of the running local ingress and raw WebSocket suite. It does not build images or run production cutover checks. The suite
 covers bootstrap subscriptions, malformed and missing fields, unknown events and topics,
 authorization denial, binary JSON, ordered rapid subscribe/unsubscribe frames, subscription
 limits, authentication close codes, and oversized payloads.
 
-Before selecting Phoenix as the complete Socket owner, run the fail-closed preflight with
-the production-derived editor restore manifest and a representative 24-hour OTel soak report:
+Before selecting Phoenix as the complete Socket owner, run the fail-closed preflight.
+It checks SMTP, notification recovery, and Kafka, then validates the production-derived
+editor restore manifest. The representative 24-hour OTel soak follows release:
+
+First, quiesce editor writes and take a database snapshot with the editor-sync volume backup
+at the same point in time. Run the inventory in an API environment connected to the restored
+database, with `/secure` mounted at the same paths used below. Then audit an independent
+restored copy of the document files from the repository root:
+
+In the API environment connected to the restored database:
+
+```shell
+uv run python -m langboard.commands.EditorSyncNameInventoryCommand \
+  /secure/editor-source /secure/evidence/editor-names.json
+```
+
+From the repository root, with the source, restore, and inventory paths accessible:
+
+```shell
+cd src/socket
+elixir -S mix run scripts/editor_sync_manifest.exs -- \
+  /secure/editor-source /secure/editor-restore \
+  /secure/evidence/editor-names.json /secure/evidence/editor-sync-manifest.json
+cd ../..
+```
+
+The inventory reports unmatched 64-character hash-named `.ydoc` files as
+`opaque_source_files`; preserve them in both copies. Other unmapped files make the
+inventory fail. The manifest must also parse and checksum every named and opaque
+document, and reject extra files. Do not delete an unexpected file merely to make
+the audit pass. Complete the short browser, recovery, and restore gates before
+selecting the Phoenix owner. Run the 24-hour OTel soak after the initial release;
+do not delay the release solely to wait for that long-running test.
+
+Verify the restored Editor files before release:
+
+```shell
+make check_socket_phoenix_editor_restore \
+  PHOENIX_CUTOVER_EDITOR_MANIFEST=/secure/evidence/editor-sync-manifest.json \
+  PHOENIX_CUTOVER_EDITOR_SOURCE_DIR=/secure/editor-source \
+  PHOENIX_CUTOVER_EDITOR_RESTORE_DIR=/secure/editor-restore
+```
+
+This check does not by itself authorize production cutover. The Kafka, notification,
+worker, SMTP, and Editor restore preflights remain required.
+Failed or uncertain email deliveries are not claimed by the automatic `Pending`
+delivery workers. The preflight reports these quarantined records for operator
+review without retrying or closing them; a working SMTP connection is still
+required. Do not point `MAIL_SERVER` at `127.0.0.1` inside a container unless
+the SMTP server runs in that same container. Use a reachable, approved mail
+service and review uncertain outcomes before any manual retry.
+
+After release, run the representative 24-hour OTel soak and validate its evidence:
 
 ```shell
 make validate_socket_phoenix_cutover_evidence \
@@ -114,10 +167,11 @@ A short delivery probe does not pass.
 The preflight rereads every source and restored `.ydoc` file and rejects changed checksums,
 missing or extra files, and linked copies. Provide both host paths when the manifest was
 generated inside a container; omit both only when its recorded paths are accessible locally.
-`start_docker`, `rebuild_docker`, and `update_docker` run this production preflight;
-missing evidence prevents deployment. Build-based commands
-finish the image build before preflight, and the soak report's exact image digest must match
-the image selected for deployment. The service replacement starts only after that comparison.
+`start_docker`, `rebuild_docker`, and `update_docker` run the short production
+preflights before pulling the optional OTel image or building application images;
+missing Editor restore evidence prevents deployment. They do not wait for a 24-hour
+soak or require an OTel trace sink. The post-release soak report's exact image digest must match
+the deployed image when this evidence validator runs.
 Production owner preparation also rejects `SOCKET_PHOENIX_INTERNAL_SECRET` values shorter
 than 32 characters and verifies Kafka group readiness.
 The API and Phoenix services must receive the same internal secret. Phoenix readiness calls
@@ -135,6 +189,12 @@ The Phoenix CI workflow also runs the TypeScript realtime contract, Yjs/Yex
 interoperability, and distributed editor recovery probes under `MIX_ENV=test`.
 These supplement Elixir formatting, compilation, tests, Credo, and Dialyzer; they
 do not replace deployed browser, storage, or soak gates.
+
+After Compose starts or replaces services, the Makefile checks the host-published
+Socket `/health/ready` route for HTTP 204 and Phoenix runtime/version headers.
+A failed check makes the deployment command fail, but
+does not roll back containers already started. Inspect both the Nginx container's
+internal route and the host-published port before retrying a failed deployment.
 
 For Docker cluster recovery checks, use `make test_socket_phoenix_cluster`. The harness
 creates an isolated three-partition Kafka source topic, starts two Phoenix nodes, and
@@ -213,7 +273,7 @@ The optional Collector overlay scrapes Phoenix metrics and is not required for l
 development. By default it discards trace payloads after proving OTLP receipt.
 Set `SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT` to an approved OTLP/HTTP `/v1/traces`
 endpoint before a cutover soak; the traces overlay then replaces `nop` with
-`otlp_http/traces` for production deployment. Verify backend receipt before deployment. The
+`otlp_http/traces` for the soak. Verify backend receipt before recording soak evidence. The
 metrics pipeline is bounded by the Collector memory limiter and batch limits. Collector
 pipeline health, including accepted and rejected spans, is exposed on loopback port `8888`
 by default. Enabling this overlay does not constitute a successful 24-hour soak or authorize

@@ -64,6 +64,16 @@ def test_accepts_opaque_only_editor_restore_without_guessing_names(tmp_path: Pat
     assert validate_editor_manifest(manifest) == 1
 
 
+def test_rejects_empty_editor_restore(tmp_path: Path) -> None:
+    manifest = _manifest(tmp_path)
+    manifest["documents"] = []
+    Path(manifest["source_directory"], FILE_NAME).unlink()
+    Path(manifest["destination_directory"], FILE_NAME).unlink()
+
+    with pytest.raises(EvidenceValidationError, match="does not contain any restored documents"):
+        validate_editor_manifest(manifest)
+
+
 def _soak() -> tuple[dict[str, Any], list[dict[str, Any]]]:
     started_at = datetime(2026, 9, 18, tzinfo=UTC)
     finished_at = started_at + timedelta(hours=24)
@@ -282,6 +292,34 @@ def test_accepts_editor_activity_soak_without_board_chat_activity(tmp_path: Path
 def test_cutover_requires_otel_even_with_editor_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     manifest_path = _write_json(tmp_path / "manifest.json", _manifest(tmp_path))
     monkeypatch.setattr(sys, "argv", ["validate", str(manifest_path)])
+
+    with pytest.raises(SystemExit, match="2"):
+        _ = main()
+
+
+def test_editor_restore_can_be_checked_before_otel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest = _manifest(tmp_path)
+    manifest_path = _write_json(tmp_path / "manifest.json", manifest)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate",
+            str(manifest_path),
+            "--editor-only",
+            "--editor-source-dir",
+            manifest["source_directory"],
+            "--editor-restore-dir",
+            manifest["destination_directory"],
+        ],
+    )
+
+    assert main() == 0
+
+
+def test_editor_only_rejects_final_cutover_arguments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest_path = _write_json(tmp_path / "manifest.json", _manifest(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["validate", str(manifest_path), "soak.json", RUNTIME_IMAGE, "--editor-only"])
 
     with pytest.raises(SystemExit, match="2"):
         _ = main()

@@ -8,6 +8,7 @@ defmodule LangboardSocketWeb.Endpoint do
   end
 
   plug Plug.RequestId
+  plug :put_runtime_headers
   plug LangboardSocketWeb.TelemetryPlug
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
@@ -22,4 +23,12 @@ defmodule LangboardSocketWeb.Endpoint do
     length: 8 * 1024 * 1024
 
   plug LangboardSocketWeb.Router
+
+  def put_runtime_headers(conn, _options) do
+    version = :langboard_socket |> Application.spec(:vsn) |> to_string()
+
+    conn
+    |> Plug.Conn.put_resp_header("x-langboard-socket-runtime", "phoenix")
+    |> Plug.Conn.put_resp_header("x-langboard-socket-version", version)
+  end
 end

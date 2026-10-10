@@ -43,17 +43,29 @@ defmodule LangboardSocketWeb.SocketHandler.Outbound do
   end
 
   def push_frame({_opcode, payload} = frame, state) do
-    Telemetry.emit_outbound(byte_size(payload), message_queue_length())
-    {:push, frame, state}
+    queue_length = message_queue_length()
+
+    if queue_length >= state.max_outbound_queue do
+      Telemetry.emit_slow_client(queue_length)
+      {:stop, :normal, Contract.close_code!("try_again_later"), state}
+    else
+      Telemetry.emit_outbound(byte_size(payload), queue_length)
+      {:push, frame, state}
+    end
   end
 
   def push_frames(frames, state) do
     queue_length = message_queue_length()
 
-    Enum.each(frames, fn {_opcode, payload} ->
-      Telemetry.emit_outbound(byte_size(payload), queue_length)
-    end)
+    if queue_length + length(frames) > state.max_outbound_queue do
+      Telemetry.emit_slow_client(queue_length)
+      {:stop, :normal, Contract.close_code!("try_again_later"), state}
+    else
+      Enum.each(frames, fn {_opcode, payload} ->
+        Telemetry.emit_outbound(byte_size(payload), queue_length)
+      end)
 
-    {:push, frames, state}
+      {:push, frames, state}
+    end
   end
 end

@@ -15,7 +15,7 @@ class NotificationEmailDeliveryRepository(BaseRepository[NotificationEmailDelive
         return "notification_email_delivery"
 
     def get_review_items(self, limit: int) -> list[NotificationEmailDelivery]:
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             return db.exec(
                 SqlBuilder.select.table(NotificationEmailDelivery)
                 .where(
@@ -56,7 +56,7 @@ class NotificationEmailDeliveryRepository(BaseRepository[NotificationEmailDelive
             )
 
     def get_review_item(self, delivery_id: SnowflakeID) -> NotificationEmailDelivery | None:
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             return db.exec(
                 SqlBuilder.select.table(NotificationEmailDelivery).where(
                     NotificationEmailDelivery.column("id") == delivery_id

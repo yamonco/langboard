@@ -1,6 +1,7 @@
 from sqlalchemy import func
 from ...core.db import DbSession, SqlBuilder
 from ...domain.services import DomainService
+from .ProjectEmailNotificationTask import recover_pending_project_activity_email
 
 
 def recover_pending_web_fanout() -> int:
@@ -18,10 +19,18 @@ def recover_pending_web_fanout() -> int:
 
 
 def recover_pending_email_delivery() -> int:
-    with DomainService.use() as service:
-        return service.notification.recover_pending_email_delivery()
+    completed = 0
+    try:
+        with DomainService.use() as service:
+            completed = service.notification.recover_pending_email_delivery()
+    finally:
+        project_completed = recover_pending_project_activity_email()
+    return completed + project_completed
 
 
 def purge_terminal_email_deliveries() -> int:
     with DomainService.use() as service:
-        return service.notification.purge_terminal_email_deliveries()
+        return (
+            service.notification.purge_terminal_email_deliveries()
+            + service.project_email_notification.purge_terminal_deliveries()
+        )

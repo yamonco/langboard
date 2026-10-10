@@ -138,6 +138,8 @@ make update_docker
 make stop_docker
 ```
 
+`stop_docker` preserves Docker volumes and images, including the database, Kafka data, and the Phoenix rollback image.
+
 - If you want to use `docs`
 
 ```bash

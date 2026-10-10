@@ -196,24 +196,26 @@ defmodule LangboardSocket.BoardChat.RunWorker do
 
   def handle_info({:graph_event, task_pid, {:token, content}}, state)
       when is_binary(content) do
-    if current_task?(state, task_pid) and content != state.content do
-      case state.run_client.progress(state.project_uid, state.run_uid, state.attempt, content) do
-        :ok ->
-          receiver_event(state, :buffer, %{
-            uid: state.ai_message_uid,
-            message: %{content: content}
-          })
+    if current_task?(state, task_pid) do
+      persist_content(state, content)
+    else
+      {:noreply, state}
+    end
+  end
 
-          {:noreply, %{state | content: content}}
+  def handle_info({:graph_event, task_pid, {:delta, content}}, state)
+      when is_binary(content) do
+    if current_task?(state, task_pid) do
+      persist_content(state, state.content <> content)
+    else
+      {:noreply, state}
+    end
+  end
 
-        {:error, :conflict} ->
-          receiver_event(state, :lease_lost, %{})
-          {:stop, :normal, state}
-
-        {:error, _reason} ->
-          receiver_event(state, :result_unknown, %{})
-          {:stop, :normal, state}
-      end
+  def handle_info({:graph_event, task_pid, {:snapshot, content}}, state)
+      when is_binary(content) do
+    if current_task?(state, task_pid) do
+      persist_content(state, content)
     else
       {:noreply, state}
     end
@@ -303,6 +305,30 @@ defmodule LangboardSocket.BoardChat.RunWorker do
   end
 
   def terminate(_reason, _state), do: :ok
+
+  defp persist_content(state, content) do
+    if content != state.content do
+      case state.run_client.progress(state.project_uid, state.run_uid, state.attempt, content) do
+        :ok ->
+          receiver_event(state, :buffer, %{
+            uid: state.ai_message_uid,
+            message: %{content: content}
+          })
+
+          {:noreply, %{state | content: content}}
+
+        {:error, :conflict} ->
+          receiver_event(state, :lease_lost, %{})
+          {:stop, :normal, state}
+
+        {:error, _reason} ->
+          receiver_event(state, :result_unknown, %{})
+          {:stop, :normal, state}
+      end
+    else
+      {:noreply, state}
+    end
+  end
 
   defp finish(state, status, content, error, event_status) do
     result =

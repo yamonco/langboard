@@ -455,7 +455,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
 
     useEffect(() => {
         setChatResizableSidebar((prev) => {
-            if (!prev) {
+            if (!prev || !boardChat) {
                 return prev;
             }
 
@@ -464,7 +464,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                 hidden: isMobile ? true : getBoardChatStore().isChatHidden(project.uid),
             };
         });
-    }, [isMobile, project, setChatResizableSidebar]);
+    }, [boardChat, isMobile, project, setChatResizableSidebar]);
 
     const headerNavs: IHeaderNavItem[] = [
         {

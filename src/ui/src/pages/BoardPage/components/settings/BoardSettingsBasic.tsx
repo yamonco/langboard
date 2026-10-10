@@ -60,7 +60,7 @@ const BoardSettingsBasic = memo(() => {
         uid: project.uid,
         field: "project_type",
         defaultValue: projectType,
-        disabled: isValidating || !isBasicInfoEditing,
+        disabled: !isBasicInfoEditing,
     });
 
     const setProjectType = (value: string) => {
@@ -118,7 +118,8 @@ const BoardSettingsBasic = memo(() => {
                             uid={project.uid}
                             field="title"
                             defaultValue={title}
-                            disabled={isValidating || !isBasicInfoEditing}
+                            disabled={!isBasicInfoEditing}
+                            readOnly={isValidating}
                         />
                     </Form.Field>
                 </Label>
@@ -132,7 +133,8 @@ const BoardSettingsBasic = memo(() => {
                             uid={project.uid}
                             field="description"
                             defaultValue={description}
-                            disabled={isValidating || !isBasicInfoEditing}
+                            disabled={!isBasicInfoEditing}
+                            readOnly={isValidating}
                             resize="none"
                             className="max-h-36 min-h-36"
                         />
@@ -170,7 +172,8 @@ const BoardSettingsBasic = memo(() => {
                             uid={project.uid}
                             field="archive_visible_days"
                             defaultValue={archiveVisibleDays ?? 3}
-                            disabled={isValidating || !isBasicInfoEditing}
+                            disabled={!isBasicInfoEditing}
+                            readOnly={isValidating}
                         />
                     </Form.Field>
                 </Label>

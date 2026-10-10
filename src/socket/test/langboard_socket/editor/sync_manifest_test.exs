@@ -197,6 +197,9 @@ defmodule LangboardSocket.Editor.SyncManifestTest do
   test "rejects incomplete input rather than reporting a clean migration", context do
     missing = Path.join(Path.dirname(context.source), "missing")
 
+    assert {:ok, %{"verified" => false, "documents" => [], "opaque_documents" => []}} =
+             SyncManifest.audit(context.source, context.destination, [])
+
     assert {:error, :missing_source_directory} =
              SyncManifest.audit(missing, context.destination, [])
 

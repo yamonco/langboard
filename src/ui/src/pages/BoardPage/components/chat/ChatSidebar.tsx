@@ -128,6 +128,7 @@ function ChatSidebarSessionListButton() {
             size="icon"
             className={cn("absolute left-1 top-1/2 -translate-y-1/2 transform", isSessionListOpened && "bg-accent/50")}
             title={t("project.Session list")}
+            aria-label={t("project.Session list")}
             titleAlign="start"
             titleSide="bottom"
             onClick={handleClick}

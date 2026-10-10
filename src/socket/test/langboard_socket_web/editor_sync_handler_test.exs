@@ -55,6 +55,28 @@ defmodule LangboardSocketWeb.EditorSyncHandlerTest do
              EditorSyncHandler.handle_info(:ping, missing_token)
   end
 
+  test "slow editor sockets close instead of sending another heartbeat", %{directory: directory} do
+    previous_max_queue =
+      Application.fetch_env!(:langboard_socket, :socket_max_outbound_queue_messages)
+
+    Application.put_env(:langboard_socket, :socket_max_outbound_queue_messages, 1)
+
+    on_exit(fn ->
+      Application.put_env(
+        :langboard_socket,
+        :socket_max_outbound_queue_messages,
+        previous_max_queue
+      )
+    end)
+
+    {:ok, state} = EditorSyncHandler.init({"test-token", directory, 1024, 30_000})
+    send(self(), :queued_message)
+
+    assert {:stop, :normal, 1013, ^state} = EditorSyncHandler.handle_info(:ping, state)
+    assert_receive :queued_message
+    assert :ok = EditorSyncHandler.terminate(:normal, state)
+  end
+
   test "drain rejects an editor connection that already passed the upgrade check", %{
     directory: directory
   } do

@@ -7,6 +7,7 @@ Unknown hashes are reported, never guessed or excluded from the restore audit.
 import argparse
 import hashlib
 import json
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
@@ -42,6 +43,7 @@ from langboard_shared.domain.models.InternalBot import InternalBotType
 
 
 PAGE_SIZE = 250
+HASHED_DOCUMENT_NAME = re.compile(r"[0-9a-f]{64}\.ydoc")
 
 
 def _uid(value: int) -> str:
@@ -202,14 +204,17 @@ def _candidates(db: DbSession) -> Iterator[str]:
             )
 
 
-def inventory(source: Path, db: DbSession) -> tuple[list[str], list[str]]:
+def inventory(source: Path, db: DbSession) -> tuple[list[str], list[str], list[str]]:
     file_names = {file.name for file in source.iterdir()}
     matched: dict[str, str] = {}
     for name in _candidates(db):
         file_name = f"{hashlib.sha256(name.encode('utf-8')).hexdigest()}.ydoc"
         if file_name in file_names:
             matched[file_name] = name
-    return sorted(matched.values()), sorted(file_names - matched.keys())
+    unknown = file_names - matched.keys()
+    opaque = sorted(name for name in unknown if HASHED_DOCUMENT_NAME.fullmatch(name))
+    unmapped = sorted(unknown - set(opaque))
+    return sorted(matched.values()), opaque, unmapped
 
 
 def main() -> int:
@@ -224,9 +229,11 @@ def main() -> int:
     if not source.is_dir() or output.parent == source:
         parser.error("Source must exist and the output must be outside the editor-sync directory")
     with DbSession.use(readonly=True) as db:
-        names, unknown = inventory(source, db)
+        names, opaque, unknown = inventory(source, db)
     output.write_text(json.dumps(names, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"matched": len(names), "unmapped_source_files": unknown}, indent=2))
+    print(
+        json.dumps({"matched": len(names), "opaque_source_files": opaque, "unmapped_source_files": unknown}, indent=2)
+    )
     return 0 if not unknown else 1
 
 

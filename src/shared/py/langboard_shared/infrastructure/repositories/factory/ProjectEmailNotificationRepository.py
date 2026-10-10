@@ -24,9 +24,11 @@ class ProjectEmailNotificationRepository(BaseRepository[ProjectEmailNotification
     def get_with_recipients(
         self,
         project: TProjectParam,
+        *,
+        consistent: bool = False,
     ) -> tuple[ProjectEmailNotificationPolicy | None, list[User]]:
         project_id = InfraHelper.convert_id(project)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             policy = db.exec(
                 SqlBuilder.select.table(ProjectEmailNotificationPolicy).where(
                     ProjectEmailNotificationPolicy.column("project_id") == project_id

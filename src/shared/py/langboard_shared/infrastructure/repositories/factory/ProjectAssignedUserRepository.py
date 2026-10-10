@@ -58,12 +58,14 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
             ).first()
         return int(count or 0)
 
-    def get_by_user_and_project(self, user: TUserParam, project: TProjectParam) -> ProjectAssignedUser | None:
+    def get_by_user_and_project(
+        self, user: TUserParam, project: TProjectParam, *, consistent: bool = False
+    ) -> ProjectAssignedUser | None:
         user_id = InfraHelper.convert_id(user)
         project_id = InfraHelper.convert_id(project)
 
         assigned_user = None
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             result = db.exec(
                 SqlBuilder.select.table(ProjectAssignedUser)
                 .where(

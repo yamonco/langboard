@@ -534,20 +534,34 @@ def validate(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     _ = parser.add_argument("editor_manifest", type=Path)
-    _ = parser.add_argument("otel_soak_report", type=Path)
-    _ = parser.add_argument("runtime_image", help="Exact sha256 image ID selected for deployment")
+    _ = parser.add_argument("otel_soak_report", type=Path, nargs="?")
+    _ = parser.add_argument("runtime_image", nargs="?", help="Exact sha256 image ID selected for deployment")
+    _ = parser.add_argument("--editor-only", action="store_true", help="Check Editor restore before the final soak")
     _ = parser.add_argument("--editor-source-dir", type=Path)
     _ = parser.add_argument("--editor-restore-dir", type=Path)
     args = parser.parse_args()
     editor_manifest = cast(Path, args.editor_manifest).resolve()
-    otel_soak_report = cast(Path, args.otel_soak_report).resolve()
+    source_directory = cast(Path | None, args.editor_source_dir)
+    destination_directory = cast(Path | None, args.editor_restore_dir)
     try:
+        if args.editor_only:
+            if args.otel_soak_report is not None or args.runtime_image is not None:
+                parser.error("Editor-only validation does not accept OTel evidence or a runtime image")
+            editor_document_count = validate_editor_manifest(
+                _read_object(editor_manifest),
+                source_directory=source_directory,
+                destination_directory=destination_directory,
+            )
+            print(f"Phoenix Editor restore evidence passed: editor_documents={editor_document_count}")
+            return 0
+        if args.otel_soak_report is None or args.runtime_image is None:
+            parser.error("Final cutover validation requires OTel evidence and a runtime image")
         editor_document_count, soak_seconds = validate(
             editor_manifest,
-            otel_soak_report,
+            cast(Path, args.otel_soak_report).resolve(),
             args.runtime_image,
-            source_directory=cast(Path | None, args.editor_source_dir),
-            destination_directory=cast(Path | None, args.editor_restore_dir),
+            source_directory=source_directory,
+            destination_directory=destination_directory,
         )
     except EvidenceValidationError as error:
         parser.error(str(error))

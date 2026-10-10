@@ -32,7 +32,10 @@ assert.ok(
   [
     "connected",
     "canary",
+    "card-context",
     "cancel",
+    "mobile-comments",
+    "concurrent-ui",
     "repeated",
     "resume",
     "accepted-api-outage",
@@ -74,6 +77,7 @@ const browserSocketEvidence = [];
 const diagnosticCommandTimeout = 180000;
 let browser;
 let apiOutageActive = false;
+let notificationRefreshOutageActive = false;
 let phoenixFailoverActive = false;
 let uploadConcurrencyProbeActive = false;
 
@@ -102,7 +106,7 @@ async function snapshot() {
 }
 
 async function waitForRuntimeApi() {
-  const deadline = Date.now() + 90000;
+  const deadline = Date.now() + 180000;
   while (Date.now() < deadline) {
     try {
       const response = await fetch(`${apiOrigin}/health`);
@@ -112,7 +116,18 @@ async function waitForRuntimeApi() {
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error("The isolated browser API did not recover after restart");
+  const [state, logs] = await Promise.all([
+    exec("docker", [
+      "inspect",
+      "--format",
+      "{{.State.Status}} {{.State.ExitCode}}",
+      runtimeApiContainer,
+    ]),
+    exec("docker", ["logs", "--tail", "40", runtimeApiContainer]),
+  ]);
+  throw new Error(
+    `The isolated browser API did not recover after restart: ${state.stdout.trim()}\n${logs.stdout}\n${logs.stderr}`,
+  );
 }
 
 async function completedGraphRequestCount() {
@@ -321,7 +336,7 @@ async function assertLangflowPartialCancel(page, credentials) {
         .map((frame) => frame.data?.message?.content),
     offset,
   );
-  assert.deepEqual(frames, ["Draft Langflow answer", answer]);
+  assert.deepEqual(frames, ["Draft ", "Draft Langflow answer", answer]);
   const before = await snapshot();
   assert.equal(before.runs.length, 1);
   assert.equal(before.runs[0].client_task_id, taskId);
@@ -597,6 +612,28 @@ async function assertApiOutageRejectsChatWithoutPersisting(page, credentials) {
       baseline.frameOffset,
       { timeout: 45000 },
     );
+    try {
+      await outageToast.waitFor({ timeout: 45000 });
+    } catch (error) {
+      const state = await page.evaluate(
+        (offset) => ({
+          inputDisabled: document.querySelector(
+            'textarea[placeholder="Enter a message"]',
+          )?.disabled,
+          frames: window.__chatFrames.slice(offset).map((frame) => ({
+            event: frame.event,
+            code: frame.code,
+            topic: frame.topic,
+            action: frame.data?.action,
+          })),
+        }),
+        baseline.frameOffset,
+      );
+      throw new Error(
+        `API outage had no visible error: ${JSON.stringify(state)}`,
+        { cause: error },
+      );
+    }
   } finally {
     await exec("docker", ["start", runtimeApiContainer], {
       timeout: diagnosticCommandTimeout,
@@ -604,7 +641,6 @@ async function assertApiOutageRejectsChatWithoutPersisting(page, credentials) {
     await waitForRuntimeApi();
   }
 
-  await outageToast.waitFor({ timeout: 90000 });
   await page.waitForFunction(
     ({ projectUID, subscriptions, availability }) =>
       window.__chatFrames.filter(
@@ -1153,6 +1189,7 @@ async function assertRevokedMemberCannotResumeProjectAccess(
   );
   assert.equal(JSON.parse(status.stdout.trim()).peer_assigned, false);
 
+  await waitForBoardSocketReady(pages[0], credentials.project_uid);
   await assertNonmemberChatAvailabilityDenied(
     owner,
     credentials.users[1].access_token,
@@ -1804,8 +1841,112 @@ async function assertNotificationRealtimeAndCommands(owner, peer, credentials) {
     "post-failover-user-notifications-fanned-out-and-rendered-with-private-isolation",
   );
 
+  const replayOffsets = await Promise.all(
+    [owner, ownerMirror].map((page) =>
+      page.evaluate(() => window.__chatFrames.length),
+    ),
+  );
+  const replay = await exec(
+    "docker",
+    [
+      "exec",
+      apiContainer,
+      "uv",
+      "run",
+      "--no-sync",
+      "python",
+      fixturePath,
+      "replay-notify",
+      runId,
+    ],
+    { timeout: diagnosticCommandTimeout },
+  );
+  assert.equal(
+    JSON.parse(replay.stdout.trim()).notification_uid,
+    notificationUIDs.owner_read,
+  );
+  await Promise.all(
+    [owner, ownerMirror].map((page, index) =>
+      page.waitForFunction(
+        ({ offset, uid }) =>
+          window.__chatFrames
+            .slice(offset)
+            .some(
+              (frame) =>
+                frame.event === "user:notified" &&
+                frame.data?.notification?.uid === uid,
+            ),
+        { offset: replayOffsets[index], uid: notificationUIDs.owner_read },
+        { timeout: 30000 },
+      ),
+    ),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  for (const page of [owner, ownerMirror]) {
+    await notificationButton(page).getByText("2", { exact: true }).waitFor();
+  }
+  steps.push("replayed-user-notification-did-not-increment-unread-badge");
+
   await notificationButton(ownerMirror).click();
   await readAllNotificationsButton(ownerMirror).waitFor();
+  let releaseRangeRequest;
+  let markRangeRequestStarted;
+  const rangeRequestStarted = new Promise(
+    (resolve) => (markRangeRequestStarted = resolve),
+  );
+  const rangeRequestGate = new Promise(
+    (resolve) => (releaseRangeRequest = resolve),
+  );
+  await ownerMirror.route("**/notifications?time_range=7d*", async (route) => {
+    markRangeRequestStarted();
+    await rangeRequestGate;
+    await route.continue();
+  });
+  await ownerMirror
+    .getByRole("combobox")
+    .filter({ hasText: "In last 3 days" })
+    .click();
+  await ownerMirror.getByRole("option", { name: "In last 7 days" }).click();
+  await rangeRequestStarted;
+  await ownerMirror
+    .getByText("No notifications received.", { exact: true })
+    .waitFor();
+  assert.equal(await deleteNotificationButtons(ownerMirror).count(), 1);
+  const rangeResponse = ownerMirror.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/notifications" &&
+      new URL(response.url()).searchParams.get("time_range") === "7d" &&
+      response.request().method() === "GET",
+  );
+  releaseRangeRequest();
+  assert.equal((await rangeResponse).status(), 200);
+  await ownerMirror.waitForFunction(
+    () =>
+      document.querySelectorAll("button:has(svg.lucide-trash-2)").length === 3,
+  );
+  await ownerMirror.unroute("**/notifications?time_range=7d*");
+  await ownerMirror
+    .getByRole("combobox")
+    .filter({ hasText: "In last 7 days" })
+    .click();
+  const originalRangeResponse = ownerMirror.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/notifications" &&
+      new URL(response.url()).searchParams.get("time_range") === "3d" &&
+      response.request().method() === "GET",
+  );
+  await ownerMirror.getByRole("option", { name: "In last 3 days" }).click();
+  assert.equal((await originalRangeResponse).status(), 200);
+  await ownerMirror
+    .getByRole("combobox")
+    .filter({ hasText: "In last 3 days" })
+    .waitFor();
+  await ownerMirror.waitForFunction(
+    () =>
+      document.querySelectorAll("button:has(svg.lucide-trash-2)").length === 3,
+  );
+  steps.push("notification-time-range-cleared-stale-list-before-response");
+
   const ownerReadOneMutationOffsets = await Promise.all(
     [owner, ownerMirror].map((page) =>
       page.evaluate(() => window.__chatFrames.length),
@@ -1915,6 +2056,59 @@ async function assertNotificationRealtimeAndCommands(owner, peer, credentials) {
       waitForNotificationState(credentials, credentials.users[0], uid, "read"),
     ),
   );
+  const readReplayOffsets = await Promise.all(
+    [owner, ownerMirror].map((page) =>
+      page.evaluate(() => window.__chatFrames.length),
+    ),
+  );
+  const readReplay = await exec(
+    "docker",
+    [
+      "exec",
+      apiContainer,
+      "uv",
+      "run",
+      "--no-sync",
+      "python",
+      fixturePath,
+      "replay-notify",
+      runId,
+      "--notification-uid",
+      notificationUIDs.owner_read,
+    ],
+    { timeout: diagnosticCommandTimeout },
+  );
+  assert.equal(
+    JSON.parse(readReplay.stdout.trim()).notification_uid,
+    notificationUIDs.owner_read,
+  );
+  await Promise.all(
+    [owner, ownerMirror].map((page, index) =>
+      page.waitForFunction(
+        ({ offset, uid }) =>
+          window.__chatFrames
+            .slice(offset)
+            .some(
+              (frame) =>
+                frame.event === "user:notified" &&
+                frame.data?.notification?.uid === uid,
+            ),
+        { offset: readReplayOffsets[index], uid: notificationUIDs.owner_read },
+        { timeout: 30000 },
+      ),
+    ),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  for (const page of [owner, ownerMirror]) {
+    await page
+      .getByText("No notifications received.", { exact: true })
+      .waitFor();
+    assert.equal(
+      await notificationButton(page).getByText("1", { exact: true }).count(),
+      0,
+    );
+  }
+  steps.push("replayed-unread-notification-did-not-revert-read-all");
   await owner.reload({ waitUntil: "domcontentloaded" });
   await notificationButton(owner).waitFor();
   steps.push(
@@ -2004,6 +2198,29 @@ async function assertNotificationRealtimeAndCommands(owner, peer, credentials) {
       page.evaluate(() => window.__chatFrames.length),
     ),
   );
+  const mirrorSocketCount = await ownerMirror.evaluate(() => {
+    const socket = window.__probeSockets.find(
+      (candidate) =>
+        new URL(candidate.url).pathname === "/" &&
+        candidate.readyState === WebSocket.OPEN,
+    );
+    if (!socket || !socket.onclose) {
+      throw new Error("Owner mirror socket is not ready");
+    }
+    const onClose = socket.onclose;
+    socket.onclose = () => {
+      onClose.call(socket, new CloseEvent("close", { code: 1012 }));
+    };
+    socket.close();
+    return window.__probeSockets.length;
+  });
+  await ownerMirror.waitForFunction(() =>
+    window.__probeSockets.some(
+      (socket) =>
+        new URL(socket.url).pathname === "/" &&
+        socket.readyState === WebSocket.CLOSED,
+    ),
+  );
   const ownerDeleteResponse = owner.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/notifications" &&
@@ -2011,28 +2228,118 @@ async function assertNotificationRealtimeAndCommands(owner, peer, credentials) {
   );
   await deleteAllNotificationsButton(owner).click();
   assert.equal((await ownerDeleteResponse).status(), 200);
-  await Promise.all(
-    [owner, ownerMirror].map((page, index) =>
-      page.waitForFunction(
-        ({ offset, userUID }) =>
-          window.__chatFrames
-            .slice(offset)
-            .some(
-              (frame) =>
-                frame.event === "user:notification:mutated" &&
-                frame.topic === "user_private" &&
-                frame.topic_id === userUID &&
-                frame.data?.action === "delete_all" &&
-                frame.data?.unread_count === 0,
-            ),
-        {
-          offset: ownerDeleteAllMutationOffsets[index],
-          userUID: credentials.users[0].uid,
-        },
-        { timeout: 30000 },
+  await owner.waitForFunction(
+    ({ offset, userUID }) =>
+      window.__chatFrames
+        .slice(offset)
+        .some(
+          (frame) =>
+            frame.event === "user:notification:mutated" &&
+            frame.topic_id === userUID &&
+            frame.data?.action === "delete_all",
+        ),
+    {
+      offset: ownerDeleteAllMutationOffsets[0],
+      userUID: credentials.users[0].uid,
+    },
+  );
+  assert.equal(
+    await ownerMirror.evaluate(
+      (offset) =>
+        window.__chatFrames
+          .slice(offset)
+          .some(
+            (frame) =>
+              frame.event === "user:notification:mutated" &&
+              frame.data?.action === "delete_all",
+          ),
+      ownerDeleteAllMutationOffsets[1],
+    ),
+    false,
+  );
+  assert.equal(await deleteNotificationButtons(ownerMirror).count(), 2);
+  await ownerMirror.waitForFunction(
+    (previousCount) =>
+      window.__probeSockets.length > previousCount &&
+      window.__probeSockets.some(
+        (socket, index) =>
+          index >= previousCount &&
+          new URL(socket.url).pathname === "/" &&
+          socket.readyState === WebSocket.OPEN,
       ),
+    mirrorSocketCount,
+    { timeout: 30000 },
+  );
+  await ownerMirror
+    .getByText("No notifications received.", { exact: true })
+    .waitFor();
+  steps.push("notification-missed-delete-all-reconciled-on-socket-open");
+
+  const restoredMutationOffsets = await Promise.all(
+    [owner, ownerMirror].map((page) =>
+      page.evaluate(() => window.__chatFrames.length),
     ),
   );
+  const restoredDeleteResponse = owner.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/notifications" &&
+      response.request().method() === "DELETE",
+  );
+  await deleteAllNotificationsButton(owner).click();
+  assert.equal((await restoredDeleteResponse).status(), 200);
+  try {
+    await Promise.all(
+      [owner, ownerMirror].map((page, index) =>
+        page.waitForFunction(
+          ({ offset, userUID }) =>
+            window.__chatFrames
+              .slice(offset)
+              .some(
+                (frame) =>
+                  frame.event === "user:notification:mutated" &&
+                  frame.topic === "user_private" &&
+                  frame.topic_id === userUID &&
+                  frame.data?.action === "delete_all" &&
+                  frame.data?.unread_count === 0,
+              ),
+          {
+            offset: restoredMutationOffsets[index],
+            userUID: credentials.users[0].uid,
+          },
+          { timeout: 30000 },
+        ),
+      ),
+    );
+  } catch (error) {
+    const observed = await Promise.all(
+      [owner, ownerMirror].map((page, index) =>
+        page.evaluate(
+          (offset) => ({
+            frames: window.__chatFrames.slice(offset).map((frame) => ({
+              event: frame.event,
+              topic: frame.topic,
+              action: frame.data?.action,
+              unreadCount: frame.data?.unread_count,
+              code: frame.code,
+              path: frame.path,
+              at: frame.at,
+            })),
+            sockets: window.__probeSockets.map((socket) => ({
+              readyState: socket.readyState,
+              path: new URL(socket.url).pathname,
+            })),
+          }),
+          restoredMutationOffsets[index],
+        ),
+      ),
+    );
+    throw new Error(
+      `Notification delete-all did not reach both browsers: ${JSON.stringify(observed)}`,
+      {
+        cause: error,
+      },
+    );
+  }
   await Promise.all(
     [owner, ownerMirror].map((page) =>
       page.getByText("No notifications received.", { exact: true }).waitFor(),
@@ -2048,6 +2355,115 @@ async function assertNotificationRealtimeAndCommands(owner, peer, credentials) {
       ),
     ),
   );
+  const deletedReplayOffsets = await Promise.all(
+    [owner, ownerMirror].map((page) =>
+      page.evaluate(() => window.__chatFrames.length),
+    ),
+  );
+  let rejectedNotificationRefreshes = 0;
+  const notificationRefreshRoute = async (route) => {
+    if (rejectedNotificationRefreshes++ === 0) {
+      await route.fulfill({
+        status: 503,
+        body: "Temporary notification outage",
+      });
+      return;
+    }
+    await route.continue();
+  };
+  const notificationRefreshUrl = (url) =>
+    url.port === "15694" && url.pathname === "/notifications";
+  await owner.route(notificationRefreshUrl, notificationRefreshRoute);
+  notificationRefreshOutageActive = true;
+  const rejectedRefresh = owner.waitForResponse(
+    (response) =>
+      notificationRefreshUrl(new URL(response.url())) &&
+      response.request().method() === "GET" &&
+      response.status() === 503,
+    { timeout: diagnosticCommandTimeout + 30000 },
+  );
+  const refreshResponses = [[], []];
+  const refreshResponseListeners = [owner, ownerMirror].map((page, index) => {
+    const listener = (response) => {
+      if (
+        new URL(response.url()).pathname === "/notifications" &&
+        response.request().method() === "GET"
+      ) {
+        refreshResponses[index].push(response.status());
+      }
+    };
+    page.on("response", listener);
+    return listener;
+  });
+  const deletedReplayRefreshes = [owner, ownerMirror].map((page, index) =>
+    page
+      .waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/notifications" &&
+          response.request().method() === "GET" &&
+          response.status() === 200,
+        { timeout: diagnosticCommandTimeout + 30000 },
+      )
+      .catch((error) => {
+        throw new Error(
+          `Notification refresh timed out on tab ${index}: ${JSON.stringify(refreshResponses)}`,
+          { cause: error },
+        );
+      }),
+  );
+  const deletedReplay = await exec(
+    "docker",
+    [
+      "exec",
+      apiContainer,
+      "uv",
+      "run",
+      "--no-sync",
+      "python",
+      fixturePath,
+      "replay-deleted-notify",
+      runId,
+    ],
+    { timeout: diagnosticCommandTimeout },
+  );
+  assert.equal(
+    JSON.parse(deletedReplay.stdout.trim()).notification_uid,
+    notificationUIDs.owner_read,
+  );
+  assert.equal((await rejectedRefresh).status(), 503);
+  await Promise.all(
+    [owner, ownerMirror].map(async (page, index) => {
+      await page.waitForFunction(
+        ({ offset, uid }) =>
+          window.__chatFrames
+            .slice(offset)
+            .some(
+              (frame) =>
+                frame.event === "user:notified" &&
+                frame.data?.notification?.uid === uid,
+            ),
+        {
+          offset: deletedReplayOffsets[index],
+          uid: notificationUIDs.owner_read,
+        },
+        { timeout: 30000 },
+      );
+      assert.equal((await deletedReplayRefreshes[index]).status(), 200);
+      await notificationButton(page)
+        .getByText("1", { exact: true })
+        .waitFor({ state: "detached" });
+      await page
+        .getByText("No notifications received.", { exact: true })
+        .waitFor();
+    }),
+  );
+  await owner.unroute(notificationRefreshUrl, notificationRefreshRoute);
+  [owner, ownerMirror].forEach((page, index) =>
+    page.off("response", refreshResponseListeners[index]),
+  );
+  notificationRefreshOutageActive = false;
+  assert.equal(rejectedNotificationRefreshes, 2);
+  steps.push("deleted-notification-late-replay-reconciled-with-server-state");
   await owner.reload({ waitUntil: "domcontentloaded" });
   await notificationButton(owner).waitFor();
   await ownerMirror.close();
@@ -2079,6 +2495,1323 @@ async function assertNotificationRealtimeAndCommands(owner, peer, credentials) {
   await openPeerCardDocument(peer, credentials);
 }
 
+async function assertConcurrentCardComments(owner, peer, credentials) {
+  assert.notEqual(credentials.users[0].uid, credentials.users[1].uid);
+  const pagesUnderTest = [owner, peer];
+  const commentPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}/comment`;
+  const texts = pagesUnderTest.map(
+    (_, index) => `Concurrent comment ${index} ${runId}`,
+  );
+  const cardUrl = `${origin}/board/${credentials.project_uid}/${credentials.card_uid}`;
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(cardUrl, { waitUntil: "networkidle" });
+    await page.getByText("No description", { exact: true }).waitFor();
+  }));
+  await Promise.all(pagesUnderTest.map(async (page, index) => {
+    const comments = page.getByRole("button", { name: "Comments", exact: true });
+    const composer = page.getByText(`Add a comment as ${credentials.users[index].name}`, {
+      exact: true,
+    }).and(page.locator(":visible"));
+    if (!(await composer.isVisible())) {
+      await comments.click();
+    }
+    try {
+      await composer.click();
+    } catch (error) {
+      const layout = await page.evaluate(() => ({
+        width: innerWidth,
+        desktopLayout: matchMedia("(min-width: 768px)").matches,
+        panels: [...document.querySelectorAll("[aria-hidden]")].map((element) => ({
+          hidden: element.getAttribute("aria-hidden"),
+          width: element.getBoundingClientRect().width,
+          text: element.textContent?.slice(0, 80),
+        })),
+        commentForms: document.querySelectorAll("[data-card-comment-form]").length,
+        pressed: [...document.querySelectorAll("button")].filter((button) =>
+          button.textContent?.trim() === "Comments").map((button) => button.getAttribute("aria-pressed")),
+      }));
+      throw new Error(`${error}\nComment layout: ${JSON.stringify(layout)}`);
+    }
+    const editor = page.locator(
+      '[data-card-comment-form] [data-slate-editor="true"]:visible',
+    );
+    try {
+      await editor.waitFor();
+    } catch (error) {
+      const layout = await page.evaluate(() => ({
+        pressed: [...document.querySelectorAll("button")].filter((button) =>
+          button.textContent?.trim() === "Comments").map((button) => button.getAttribute("aria-pressed")),
+        forms: [...document.querySelectorAll("[data-card-comment-form]")].map((form) => ({
+          visible: form.getClientRects().length > 0,
+          text: form.textContent?.slice(0, 100),
+        })),
+      }));
+      throw new Error(`Comment editor did not open: ${JSON.stringify(layout)}`, { cause: error });
+    }
+    await editor.fill(texts[index]);
+    await page
+      .getByRole("button", { name: "Save", exact: true })
+      .and(page.locator(":visible"))
+      .waitFor();
+  }));
+
+  const offsets = await Promise.all(
+    pagesUnderTest.map((page) =>
+      page.evaluate(() => window.__chatFrames.length),
+    ),
+  );
+  let arrivals = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const holdBothPosts = async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    arrivals += 1;
+    if (arrivals === 2) release();
+    await gate;
+    await route.continue();
+  };
+  for (const page of pagesUnderTest) {
+    await page.route(`**${commentPath}`, holdBothPosts);
+  }
+  let timeout;
+  try {
+    await Promise.all(
+      pagesUnderTest.map((page) =>
+        page
+          .getByRole("button", { name: "Save", exact: true })
+          .and(page.locator(":visible"))
+          .click(),
+      ),
+    );
+    await Promise.race([
+      gate,
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`Only ${arrivals}/2 comment POSTs arrived`)),
+          15000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    release();
+    for (const page of pagesUnderTest) {
+      await page.unroute(`**${commentPath}`, holdBothPosts);
+    }
+  }
+  assert.equal(arrivals, 2);
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await page.waitForFunction(
+      ({ offset, cardUID }) =>
+        window.__chatFrames
+          .slice(offset)
+          .filter(
+            (frame) => frame.event === `board:card:comment:added:${cardUID}`,
+          ).length >= 2,
+      { offset: offsets[index], cardUID: credentials.card_uid },
+      { timeout: 30000 },
+    );
+    for (const content of texts) await waitForVisibleSlateText(page, content);
+    const events = await page.evaluate(
+      ({ offset, cardUID }) =>
+        window.__chatFrames
+          .slice(offset)
+          .filter(
+            (frame) => frame.event === `board:card:comment:added:${cardUID}`,
+          ),
+      { offset: offsets[index], cardUID: credentials.card_uid },
+    );
+    assert.equal(events.length, 2);
+    assert.equal(new Set(events.map((event) => event.data?.comment?.uid)).size, 2);
+  }
+  const response = await requestApi(
+    credentials,
+    credentials.users[0],
+    `${commentPath}s`,
+  );
+  const { comments } = await response.json();
+  for (const content of texts) {
+    assert.equal(
+      comments.filter((comment) =>
+        JSON.stringify(comment.content).includes(content),
+      ).length,
+      1,
+    );
+  }
+  assert.equal(new Set(comments.map((comment) => comment.uid)).size, comments.length);
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByText("No description", { exact: true }).waitFor();
+    const commentsButton = page.getByRole("button", { name: "Comments", exact: true });
+    if ((await commentsButton.getAttribute("aria-pressed")) !== "true") {
+      await commentsButton.click();
+    }
+    for (const content of texts) await waitForVisibleSlateText(page, content);
+  }
+  steps.push("two-distinct-users-overlapping-comment-posts-persisted-once-and-fanned-out-to-both-browsers");
+}
+
+async function assertConcurrentChecklists(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const checklistPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}/checklist`;
+  const titles = pagesUnderTest.map(
+    (_, index) => `Concurrent checklist ${index} ${runId}`,
+  );
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}/${credentials.card_uid}`, { waitUntil: "networkidle" });
+    await page.getByText("No description", { exact: true }).waitFor();
+  }));
+  for (const [index, page] of pagesUnderTest.entries()) {
+    const addChecklist = page.getByRole("button", { name: "Add checklist", exact: true });
+    const actions = page.getByRole("button", { name: "Actions", exact: true });
+    if (!(await addChecklist.isVisible())) {
+      await actions.click();
+    }
+    await addChecklist.click();
+    await page.getByLabel("Checklist title", { exact: true }).fill(titles[index]);
+    await page
+      .getByRole("button", { name: "Save", exact: true })
+      .and(page.locator(":visible"))
+      .waitFor();
+  }
+  const offsets = await Promise.all(
+    pagesUnderTest.map((page) =>
+      page.evaluate(() => window.__chatFrames.length),
+    ),
+  );
+  let arrivals = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const holdBothPosts = async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    arrivals += 1;
+    if (arrivals === 2) release();
+    await gate;
+    await route.continue();
+  };
+  for (const page of pagesUnderTest) {
+    await page.route(`**${checklistPath}`, holdBothPosts);
+  }
+  let timeout;
+  try {
+    await Promise.all(
+      pagesUnderTest.map((page) =>
+        page
+          .getByRole("button", { name: "Save", exact: true })
+          .and(page.locator(":visible"))
+          .click(),
+      ),
+    );
+    await Promise.race([
+      gate,
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`Only ${arrivals}/2 checklist POSTs arrived`)),
+          15000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    release();
+    for (const page of pagesUnderTest) {
+      await page.unroute(`**${checklistPath}`, holdBothPosts);
+    }
+  }
+  assert.equal(arrivals, 2);
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await page.waitForFunction(
+      ({ offset, cardUID }) =>
+        window.__chatFrames
+          .slice(offset)
+          .filter(
+            (frame) => frame.event === `board:card:checklist:created:${cardUID}`,
+          ).length >= 2,
+      { offset: offsets[index], cardUID: credentials.card_uid },
+      { timeout: 30000 },
+    );
+    const events = await page.evaluate(
+      ({ offset, cardUID }) =>
+        window.__chatFrames
+          .slice(offset)
+          .filter(
+            (frame) => frame.event === `board:card:checklist:created:${cardUID}`,
+          ),
+      { offset: offsets[index], cardUID: credentials.card_uid },
+    );
+    assert.equal(events.length, 2);
+    assert.equal(new Set(events.map((event) => event.data?.checklist?.uid)).size, 2);
+    for (const title of titles) {
+      await page.getByText(title, { exact: true }).waitFor();
+    }
+  }
+  const response = await requestApi(
+    credentials,
+    credentials.users[0],
+    checklistPath,
+  );
+  const { checklists } = await response.json();
+  for (const title of titles) {
+    assert.equal(checklists.filter((checklist) => checklist.title === title).length, 1);
+  }
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByText("No description", { exact: true }).waitFor();
+    for (const title of titles) {
+      await page.getByText(title, { exact: true }).waitFor();
+    }
+  }
+  steps.push("two-distinct-users-overlapping-checklist-posts-persisted-once-and-fanned-out-to-both-browsers");
+}
+
+async function assertConcurrentCheckitems(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const checklistPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}/checklist`;
+  const checklistTitle = `Concurrent checkitems ${runId}`;
+  const created = await requestApi(credentials, credentials.users[0], checklistPath, {
+    method: "POST",
+    body: JSON.stringify({ title: checklistTitle }),
+  });
+  assert.equal(created.status, 201);
+  const checklistUID = (await created.json()).checklist.uid;
+  const itemPath = `${checklistPath}/${checklistUID}/checkitem`;
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}/${credentials.card_uid}`, { waitUntil: "networkidle" });
+    const checklist = page.getByText(checklistTitle, { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'snap-center')]");
+    await checklist.locator("button:has(svg.lucide-plus)").waitFor();
+  }));
+  let arrivals = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const holdBothPosts = async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    arrivals += 1;
+    if (arrivals === 2) release();
+    await gate;
+    await route.continue();
+  };
+  for (const page of pagesUnderTest) await page.route(`**${itemPath}`, holdBothPosts);
+  let timeout;
+  try {
+    await Promise.race([Promise.all(pagesUnderTest.map((page) => page.getByText(checklistTitle, { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'snap-center')]")
+      .locator("button:has(svg.lucide-plus)").click())),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error(`Only ${arrivals}/2 checkitem POSTs arrived`)), 15000); }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    release();
+    for (const page of pagesUnderTest) await page.unroute(`**${itemPath}`, holdBothPosts);
+  }
+  assert.equal(arrivals, 2);
+  for (const page of pagesUnderTest) {
+    const checklist = page.getByText(checklistTitle, { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'snap-center')]");
+    const expand = checklist.getByRole("button", { name: "Expand", exact: true });
+    if (await expand.count()) await expand.click();
+    await page.waitForFunction((title) => {
+      const checklist = [...document.querySelectorAll(".snap-center")].find((element) => element.textContent?.includes(title));
+      return checklist && [...checklist.querySelectorAll("*")].filter((element) => element.textContent?.trim() === "New checkitem").length >= 2;
+    }, checklistTitle);
+  }
+  const response = await requestApi(credentials, credentials.users[0], checklistPath);
+  const { checklists } = await response.json();
+  const items = checklists.find((checklist) => checklist.uid === checklistUID)?.checkitems ?? [];
+  assert.equal(items.filter((item) => item.title === "New checkitem").length, 2);
+  assert.equal(new Set(items.map((item) => item.uid)).size, items.length);
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByText(checklistTitle, { exact: true }).waitFor();
+    const reloaded = page.getByText(checklistTitle, { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'snap-center')]");
+    await reloaded.getByRole("button", { name: "Expand", exact: true }).click();
+    await page.waitForFunction((title) => {
+      const checklist = [...document.querySelectorAll(".snap-center")].find((element) => element.textContent?.includes(title));
+      return checklist && [...checklist.querySelectorAll("*")].filter((element) => element.textContent?.trim() === "New checkitem").length >= 2;
+    }, checklistTitle);
+  }
+  steps.push("two-distinct-users-overlapping-checkitem-posts-persisted-once-and-fanned-out-to-both-browsers");
+}
+
+async function assertConcurrentCheckitemDetails(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const checklistPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}/checklist`;
+  const checklistTitle = `Concurrent checkitem details ${runId}`;
+  const itemTitle = `Original checkitem ${runId}`;
+  const newTitle = `Renamed checkitem ${runId}`;
+  const checklistResponse = await requestApi(credentials, credentials.users[0], checklistPath, {
+    method: "POST",
+    body: JSON.stringify({ title: checklistTitle }),
+  });
+  assert.equal(checklistResponse.status, 201);
+  const checklistUID = (await checklistResponse.json()).checklist.uid;
+  const itemResponse = await requestApi(credentials, credentials.users[0], `${checklistPath}/${checklistUID}/checkitem`, {
+    method: "POST",
+    body: JSON.stringify({ title: itemTitle }),
+  });
+  assert.equal(itemResponse.status, 201);
+  const itemUID = (await itemResponse.json()).checkitem.uid;
+  const itemPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}/checkitem/${itemUID}`;
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}/${credentials.card_uid}`, { waitUntil: "networkidle" });
+    await page.getByText(checklistTitle, { exact: true }).waitFor();
+    await page.getByText(checklistTitle, { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'snap-center')]")
+      .getByRole("button", { name: "Expand", exact: true }).click();
+    await page.getByText(itemTitle, { exact: true }).waitFor();
+  }));
+  const itemRow = (page) => page.getByText(itemTitle, { exact: true })
+    .locator("xpath=ancestor::div[contains(@class,'border-accent')][1]");
+  await itemRow(owner).getByRole("button", { name: "More", exact: true }).click();
+  await owner.getByRole("menuitem", { name: "Edit title" }).click();
+  await owner.getByPlaceholder("Checkitem title", { exact: true }).fill(newTitle);
+  const titleResponse = owner.waitForResponse((response) => response.request().method() === "PUT" &&
+    response.url().includes(`${itemPath}/title`));
+  const checkedResponse = peer.waitForResponse((response) => response.request().method() === "PUT" &&
+    response.url().includes(`${itemPath}/toggle-checked`));
+  await Promise.all([
+    owner.getByRole("button", { name: "Save", exact: true }).click(),
+    itemRow(peer).getByRole("checkbox").click(),
+  ]);
+  assert.deepEqual((await Promise.all([titleResponse, checkedResponse])).map((response) => response.status()), [200, 200]);
+  const persisted = await requestApi(credentials, credentials.users[0], checklistPath);
+  const item = (await persisted.json()).checklists.find((checklist) => checklist.uid === checklistUID)
+    ?.checkitems.find((checkitem) => checkitem.uid === itemUID);
+  assert.equal(item?.title, newTitle);
+  assert.equal(item?.is_checked, true);
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByText(checklistTitle, { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'snap-center')]")
+      .getByRole("button", { name: "Expand", exact: true }).click();
+    await page.getByText(newTitle, { exact: true }).waitFor({ timeout: 30000 });
+    await page.getByText(newTitle, { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'border-accent')][1]")
+      .locator('[role="checkbox"][data-state="checked"]').waitFor();
+  }
+  steps.push("two-distinct-users-concurrent-same-checkitem-title-and-checked-state-preserved-after-reload");
+}
+
+async function assertConcurrentBoardChatSends(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const messages = pagesUnderTest.map(
+    (_, index) => `Concurrent chat ${index} ${runId}: reply with OK.`,
+  );
+  const before = await snapshot();
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await page.goto(`${origin}/board/${credentials.project_uid}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await waitForBoardSocketReady(page, credentials.project_uid);
+    await openBoardChat(page);
+    await page
+      .getByPlaceholder("Enter a message", { exact: true })
+      .fill(messages[index]);
+  }
+  const offsets = await Promise.all(
+    pagesUnderTest.map((page) =>
+      page.evaluate(() => window.__chatFrames.length),
+    ),
+  );
+  await Promise.all(
+    pagesUnderTest.map((page) =>
+      page.getByPlaceholder("Enter a message", { exact: true }).press("Enter"),
+    ),
+  );
+  const taskIds = [];
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await page.waitForFunction(
+      (offset) =>
+        window.__chatFrames
+          .slice(offset)
+          .some(
+            (frame) =>
+              frame.event === "outbound" &&
+              frame.data?.event === "board:chat:send",
+          ),
+      offsets[index],
+      { timeout: 30000 },
+    );
+    taskIds.push(
+      await page.evaluate(
+        (offset) =>
+          window.__chatFrames
+            .slice(offset)
+            .find(
+              (frame) =>
+                frame.event === "outbound" &&
+                frame.data?.event === "board:chat:send",
+            )?.data?.data?.task_id,
+        offsets[index],
+      ),
+    );
+  }
+  assert.equal(new Set(taskIds).size, 2);
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await page.waitForFunction(
+      (offset) =>
+        window.__chatFrames
+          .slice(offset)
+          .some((frame) => frame.event === "board:chat:stream:end"),
+      offsets[index],
+      { timeout: 150000 },
+    );
+    await page.getByText(messages[index], { exact: true }).waitFor();
+  }
+  const after = await snapshot();
+  for (const [index, taskId] of taskIds.entries()) {
+    const runs = after.runs.filter((run) => run.client_task_id === taskId);
+    assert.equal(runs.length, 1);
+    assert.ok(
+      ["InternalBotRunStatus.Completed", "InternalBotRunStatus.AwaitingApproval"].includes(runs[0].status),
+      `${taskId}: ${runs[0].status}`,
+    );
+    if (runs[0].status === "InternalBotRunStatus.AwaitingApproval") {
+      await pagesUnderTest[index].getByText("Human input required", { exact: true }).waitFor();
+    }
+    assert.ok(!before.runs.some((run) => run.client_task_id === taskId));
+  }
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await openBoardChat(page);
+    await page.getByText(messages[index], { exact: true }).waitFor();
+  }
+  steps.push("two-distinct-users-concurrent-board-chat-sends-completed-or-awaiting-approval-and-survived-reload");
+}
+
+async function assertConcurrentNotificationReads(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  for (const user of credentials.users) {
+    await requestApi(credentials, user, "/notifications", {
+      method: "DELETE",
+    });
+  }
+  const created = await exec(
+    "docker",
+    ["exec", apiContainer, "uv", "run", "--no-sync", "python", fixturePath, "notify", runId],
+    { timeout: diagnosticCommandTimeout },
+  );
+  const notificationUIDs = JSON.parse(created.stdout.trim()).notification_uids;
+  const expectedUIDs = [
+    [notificationUIDs.owner_read, notificationUIDs.owner_bulk],
+    [notificationUIDs.peer],
+  ];
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await notificationButton(page).getByText(String(expectedUIDs[index].length), { exact: true }).waitFor();
+    await notificationButton(page).click();
+    await readAllNotificationsButton(page).waitFor();
+  }
+  const offsets = await Promise.all(
+    pagesUnderTest.map((page) => page.evaluate(() => window.__chatFrames.length)),
+  );
+  await Promise.all(pagesUnderTest.map((page) => readAllNotificationsButton(page).click()));
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await page.waitForFunction(
+      ({ offset, userUID }) =>
+        window.__chatFrames.slice(offset).some(
+          (frame) =>
+            frame.event === "user:notification:mutated" &&
+            frame.topic === "user_private" &&
+            frame.topic_id === userUID &&
+            frame.data?.action === "read_all" &&
+            frame.data?.unread_count === 0,
+        ),
+      { offset: offsets[index], userUID: credentials.users[index].uid },
+      { timeout: 30000 },
+    );
+    await notificationButton(page)
+      .getByText(String(expectedUIDs[index].length), { exact: true })
+      .waitFor({ state: "detached" });
+    for (const uid of expectedUIDs[index]) {
+      await waitForNotificationState(credentials, credentials.users[index], uid, "read");
+    }
+  }
+  steps.push("two-distinct-users-concurrent-notification-read-all-kept-private-counts-consistent");
+}
+
+function dashboardProjectCounts(page) {
+  return page.evaluate((title) => {
+    const heading = [...document.querySelectorAll("h3")]
+      .find((element) => element.textContent?.trim() === title);
+    const project = heading?.parentElement?.parentElement;
+    if (!project) return null;
+    return [...project.lastElementChild.querySelectorAll("span.text-sm.font-semibold")]
+      .map((element) => Number(element.textContent));
+  }, `Migration editor access probe ${runId}`);
+}
+
+async function assertConcurrentCardCreation(owner, peer, credentials, dashboard) {
+  const pagesUnderTest = [owner, peer];
+  const createPath = `/board/${credentials.project_uid}/card`;
+  const titles = pagesUnderTest.map(
+    (_, index) => `Concurrent board card ${index} ${runId}`,
+  );
+  const dashboardBefore = dashboard ? await dashboardProjectCounts(dashboard) : null;
+  if (dashboard) assert.ok(dashboardBefore);
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await waitForBoardSocketReady(page, credentials.project_uid);
+    await page.getByRole("button", { name: "Add a card", exact: true }).first().waitFor();
+  }));
+  const cancelledTitle = `Cancelled board card ${runId}`;
+  const ownerColumn = owner.getByText("Editor verification", { exact: true })
+    .locator("xpath=ancestor::*[contains(@class, 'snap-center')][1]");
+  let cancelledRequests = 0;
+  const onOwnerRequest = (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname.endsWith(createPath)) {
+      cancelledRequests += 1;
+    }
+  };
+  owner.on("request", onOwnerRequest);
+  try {
+    await ownerColumn.getByRole("button", { name: "Add a card", exact: true }).click();
+    await ownerColumn.getByPlaceholder("Enter a title", { exact: true }).fill(cancelledTitle);
+    await ownerColumn.locator("button:has(svg.lucide-x)").click();
+    await owner.getByRole("button", { name: "Filters", exact: true }).click();
+    assert.equal(cancelledRequests, 0);
+    await owner.keyboard.press("Escape");
+  } finally {
+    owner.off("request", onOwnerRequest);
+  }
+  await Promise.all(pagesUnderTest.map(async (page, index) => {
+    await page.getByRole("button", { name: "Add a card", exact: true }).first().click();
+    await page.getByPlaceholder("Enter a title", { exact: true }).fill(titles[index]);
+  }));
+  const offsets = await Promise.all(
+    pagesUnderTest.map((page) => page.evaluate(() => window.__chatFrames.length)),
+  );
+  let arrivals = 0;
+  let release;
+  const pendingRoutes = [];
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const holdBothPosts = async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    arrivals += 1;
+    if (arrivals === 2) release();
+    await gate;
+    const pending = route.continue();
+    pendingRoutes.push(pending);
+    await pending;
+  };
+  for (const page of pagesUnderTest) {
+    await page.route(`**${createPath}`, holdBothPosts);
+  }
+  let timeout;
+  try {
+    const clicks = Promise.all(
+      pagesUnderTest.map((page) =>
+        page.getByRole("button", { name: "Add card", exact: true }).click({ noWaitAfter: true }),
+      ),
+    );
+    await Promise.race([
+      gate,
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`Only ${arrivals}/2 card POSTs arrived`)),
+          15000,
+        );
+      }),
+    ]);
+    await clicks;
+  } catch (error) {
+    const states = await Promise.all(pagesUnderTest.map((page) => page.evaluate(() => ({
+      pathname: location.pathname,
+      editorValue: document.querySelector('textarea[placeholder="Enter a title"]')?.value ?? null,
+      addCardButtons: [...document.querySelectorAll("button")]
+        .filter((button) => button.textContent?.trim() === "Add card").length,
+      visibleText: document.body.innerText.slice(-600),
+    }))));
+    throw new Error(`${error}\nCard editor states: ${JSON.stringify(states)}`);
+  } finally {
+    clearTimeout(timeout);
+    release();
+    await Promise.allSettled(pendingRoutes);
+    for (const page of pagesUnderTest) {
+      await page.unroute(`**${createPath}`, holdBothPosts);
+    }
+  }
+  assert.equal(arrivals, 2);
+  for (const [index, page] of pagesUnderTest.entries()) {
+    await page.waitForFunction(
+      ({ offset }) =>
+        window.__chatFrames.slice(offset).filter(
+          (frame) => frame.event.startsWith("board:card:created:"),
+        ).length >= 2,
+      { offset: offsets[index] },
+      { timeout: 30000 },
+    );
+    const events = await page.evaluate(
+      (offset) =>
+        window.__chatFrames.slice(offset).filter(
+          (frame) => frame.event.startsWith("board:card:created:"),
+        ),
+      offsets[index],
+    );
+    assert.equal(events.length, 2);
+    assert.equal(new Set(events.map((event) => event.data?.card?.uid)).size, 2);
+    await closeOpenCard(page);
+    for (const title of titles) {
+      await page
+        .locator('[id^="board-card-"]')
+        .getByRole("heading", { name: title, exact: true })
+        .waitFor();
+    }
+  }
+  const response = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/cards`);
+  const { cards } = await response.json();
+  assert.equal(cards.filter((card) => card.title === cancelledTitle).length, 0);
+  for (const title of titles) {
+    assert.equal(cards.filter((card) => card.title === title).length, 1);
+  }
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    for (const title of titles) {
+      await page
+        .locator('[id^="board-card-"]')
+        .getByRole("heading", { name: title, exact: true })
+        .waitFor();
+    }
+  }
+  if (dashboard) {
+    await dashboard.waitForFunction(
+      ({ title, count }) => {
+        const heading = [...document.querySelectorAll("h3")]
+          .find((element) => element.textContent?.trim() === title);
+        const project = heading?.parentElement?.parentElement;
+        const counts = [...(project?.lastElementChild?.querySelectorAll("span.text-sm.font-semibold") ?? [])]
+          .map((element) => Number(element.textContent));
+        return counts.reduce((sum, value) => sum + value, 0) === count + 2;
+      },
+      { title: `Migration editor access probe ${runId}`, count: dashboardBefore.reduce((sum, value) => sum + value, 0) },
+      { timeout: 30000 },
+    );
+  }
+  steps.push("two-distinct-users-overlapping-card-creates-persisted-once-and-fanned-out-to-both-boards");
+}
+
+async function assertConcurrentColumnCreation(owner, peer, credentials, dashboard) {
+  const pagesUnderTest = [owner, peer];
+  const names = pagesUnderTest.map((_, index) => `Concurrent column ${index} ${runId}`);
+  const dashboardBefore = dashboard ? await dashboardProjectCounts(dashboard) : null;
+  if (dashboard) assert.ok(dashboardBefore);
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}`, { waitUntil: "domcontentloaded" });
+    await waitForBoardSocketReady(page, credentials.project_uid);
+    await page.getByRole("button", { name: "Add column", exact: true }).waitFor();
+  }));
+  await Promise.all(pagesUnderTest.map(async (page, index) => {
+    await page.getByRole("button", { name: "Add column", exact: true }).click();
+    await page.getByPlaceholder("Enter a name", { exact: true }).fill(names[index]);
+  }));
+  await Promise.all(pagesUnderTest.map((page) =>
+    page.getByPlaceholder("Enter a name", { exact: true }).press("Enter"),
+  ));
+  for (const page of pagesUnderTest) {
+    for (const name of names) {
+      await page.getByText(name, { exact: true }).waitFor();
+    }
+  }
+  const response = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/columns`);
+  const { columns } = await response.json();
+  for (const name of names) {
+    assert.equal(columns.filter((column) => column.name === name).length, 1);
+  }
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    for (const name of names) {
+      await page.getByText(name, { exact: true }).waitFor();
+    }
+  }
+  if (dashboard) {
+    await dashboard.waitForFunction(
+      ({ title, count }) => {
+        const heading = [...document.querySelectorAll("h3")]
+          .find((element) => element.textContent?.trim() === title);
+        const project = heading?.parentElement?.parentElement;
+        return project?.lastElementChild?.querySelectorAll("span.text-sm.font-semibold").length === count + 2;
+      },
+      { title: `Migration editor access probe ${runId}`, count: dashboardBefore.length },
+      { timeout: 30000 },
+    );
+  }
+  steps.push("two-distinct-users-concurrent-column-creates-persisted-once-and-fanned-out-to-both-boards");
+}
+
+async function assertConcurrentColumnRename(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const originalNames = pagesUnderTest.map((_, index) => `Concurrent column ${index} ${runId}`);
+  const renamedNames = originalNames.map((name) => `${name} renamed`);
+  const response = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/columns`);
+  const { columns } = await response.json();
+  const targetColumns = originalNames.map((name) => columns.find((column) => column.name === name));
+  assert.ok(targetColumns.every(Boolean));
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}`, { waitUntil: "networkidle" });
+    await waitForBoardSocketReady(page, credentials.project_uid);
+    for (const name of originalNames) await page.getByText(name, { exact: true }).waitFor();
+  }));
+  await Promise.all(pagesUnderTest.map(async (page, index) => {
+    const column = page.getByText(originalNames[index], { exact: true }).locator("xpath=../..");
+    await column.locator("button[aria-haspopup='menu']").click();
+    await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+    await page.getByPlaceholder("Enter a name", { exact: true }).fill(renamedNames[index]);
+  }));
+  await Promise.all(pagesUnderTest.map((page) => page.getByRole("button", { name: "Save", exact: true }).click()));
+  for (const page of pagesUnderTest) {
+    for (const name of renamedNames) await page.getByText(name, { exact: true }).waitFor({ timeout: 30000 });
+  }
+  const persistedResponse = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/columns`);
+  const persisted = (await persistedResponse.json()).columns;
+  for (const [index, column] of targetColumns.entries()) {
+    assert.equal(persisted.find((item) => item.uid === column.uid)?.name, renamedNames[index]);
+  }
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    for (const name of renamedNames) await page.getByText(name, { exact: true }).waitFor({ timeout: 30000 });
+  }
+  steps.push("two-distinct-users-concurrent-column-renames-persisted-and-fanned-out-to-both-boards");
+}
+
+async function assertConcurrentCardDetails(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const title = `Concurrent card title ${runId}`;
+  const description = `Concurrent card description ${runId}`;
+  const cardUrl = `${origin}/board/${credentials.project_uid}/${credentials.card_uid}`;
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(cardUrl, { waitUntil: "networkidle" });
+    await page.getByText("No description", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Edit", exact: true }).last().click();
+    await page.getByRole("button", { name: "Save", exact: true }).waitFor();
+  }));
+  const cardDialog = pagesUnderTest[0].locator('[data-dialog-content="true"]');
+  await cardDialog.getByText(credentials.card_title, { exact: true }).first().click();
+  const titleInput = cardDialog.locator('textarea:visible').first();
+  await titleInput.waitFor();
+  await titleInput.fill(title);
+  await pagesUnderTest[1].locator("[data-card-description]").click();
+  const descriptionEditor = pagesUnderTest[1].locator('[data-card-description] [data-slate-editor="true"]:visible');
+  await descriptionEditor.waitFor();
+  await descriptionEditor.fill(description);
+  const beforeSave = await Promise.all(pagesUnderTest.map((page) => page.evaluate(() => ({
+    buttons: [...document.querySelectorAll("button")].filter((button) => ["Edit", "Save"].includes(button.textContent?.trim())).map((button) => button.textContent?.trim()),
+    title: document.querySelector("textarea")?.value,
+    editor: document.querySelector('[data-card-description] [data-slate-editor="true"]')?.textContent,
+  }))));
+  assert.ok(beforeSave.every((state) => state.buttons.includes("Save")), JSON.stringify(beforeSave));
+  const detailPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}/details`;
+  const requests = [];
+  for (const [index, page] of pagesUnderTest.entries()) {
+    page.on("request", (request) => {
+      if (request.method() === "PUT" && request.url().includes(detailPath)) {
+        requests.push({ user: index, body: request.postDataJSON() });
+      }
+    });
+  }
+  const responsePromises = pagesUnderTest.map((page) => page.waitForResponse((response) =>
+    response.request().method() === "PUT" && response.url().includes(detailPath), { timeout: 15000 })
+    .catch((error) => error));
+  await Promise.all(pagesUnderTest.map((page) => page.getByRole("button", { name: "Save", exact: true }).click()));
+  const responses = await Promise.all(responsePromises);
+  if (responses.some((response) => response instanceof Error)) {
+    const states = await Promise.all(pagesUnderTest.map((page) => page.evaluate(() => ({
+      editButtons: [...document.querySelectorAll("button")].filter((button) => ["Edit", "Save"].includes(button.textContent?.trim())).map((button) => button.textContent?.trim()),
+      title: document.querySelector("textarea")?.value,
+      editor: document.querySelector('[data-card-description] [data-slate-editor="true"]')?.textContent,
+      alerts: [...document.querySelectorAll('[role="status"], [role="alert"]')].map((element) => element.textContent),
+    }))));
+    throw new Error(`Card save did not issue two responses: ${JSON.stringify({ requests, states, errors: responses.filter((response) => response instanceof Error).map(String) })}`);
+  }
+  assert.deepEqual(responses.map((response) => response.status()), [200, 200]);
+  for (const page of pagesUnderTest) {
+    await page.getByText(title, { exact: true }).first().waitFor({ timeout: 30000 });
+    await page.getByText(description, { exact: true }).first().waitFor({ timeout: 30000 });
+  }
+  const persistedResponse = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/card/${credentials.card_uid}`);
+  const { card } = await persistedResponse.json();
+  assert.equal(card.title, title);
+  assert.ok(card.description?.content?.includes(description), JSON.stringify({ requests, description: card.description }));
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByText(title, { exact: true }).first().waitFor({ timeout: 30000 });
+    await page.getByText(description, { exact: true }).first().waitFor({ timeout: 30000 });
+  }
+  steps.push("two-distinct-users-concurrent-same-card-title-and-description-preserved-after-reload");
+}
+
+async function assertTwoUserCardDrag(owner, peer, credentials) {
+  const cardPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}`;
+  const cardResponse = await requestApi(credentials, credentials.users[0], cardPath);
+  const originalColumnUID = (await cardResponse.json()).card.project_column_uid;
+  const columnResponse = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/column`, {
+    method: "POST",
+    body: JSON.stringify({ name: `Drag destination ${runId}` }),
+  });
+  assert.equal(columnResponse.status, 201);
+  const destinationUID = (await columnResponse.json()).column.uid;
+  const card = (page) => page.locator(`[data-board-card-touch-dnd-uid="${credentials.card_uid}"]`);
+  const column = (page, uid) => page.locator(`[data-board-column-touch-dnd-uid="${uid}"]`);
+  await Promise.all([owner, peer].map(async (page) => {
+    await page.setViewportSize({ width: 1920, height: 900 });
+    await page.goto(`${origin}/board/${credentials.project_uid}`, { waitUntil: "networkidle" });
+    await waitForBoardSocketReady(page, credentials.project_uid);
+    if (await page.getByPlaceholder("Enter a message", { exact: true }).isVisible()) {
+      await page.getByRole("button", { name: "Chat with AI", exact: true }).click();
+      await page.getByPlaceholder("Enter a message", { exact: true }).waitFor({ state: "hidden" });
+    }
+    await card(page).waitFor();
+    await column(page, destinationUID).waitFor();
+  }));
+  for (const [actor, observer, targetUID] of [
+    [owner, peer, destinationUID],
+    [peer, owner, originalColumnUID],
+  ]) {
+    const responsePromise = actor.waitForResponse((response) => response.request().method() === "PUT" &&
+      response.url().includes(`${cardPath}/order`), { timeout: 30000 }).catch((error) => error);
+    await card(actor).locator(":scope > div").first().dragTo(column(actor, targetUID), {
+      sourcePosition: { x: 100, y: 30 },
+      targetPosition: { x: 100, y: 60 },
+    });
+    const response = await responsePromise;
+    if (response instanceof Error) {
+      const state = await actor.evaluate(() => ({
+        dragging: [...document.querySelectorAll('[data-board-card-touch-dnd-uid]')].map((element) => ({
+          uid: element.getAttribute("data-board-card-touch-dnd-uid"),
+          text: element.textContent?.slice(0, 80),
+        })),
+        alerts: [...document.querySelectorAll('[role="alert"], [role="status"]')].map((element) => element.textContent),
+      }));
+      throw new Error(`Card drag did not send order update to ${targetUID}: ${JSON.stringify(state)}`);
+    }
+    assert.equal(response.status(), 200);
+    await observer.waitForFunction(({ cardUID, columnUID }) =>
+      document.querySelector(`[data-board-column-touch-dnd-uid="${columnUID}"]`)
+        ?.querySelector(`[data-board-card-touch-dnd-uid="${cardUID}"]`) !== null,
+    { cardUID: credentials.card_uid, columnUID: targetUID }, { timeout: 30000 });
+    const persisted = await requestApi(credentials, credentials.users[0], cardPath);
+    assert.equal((await persisted.json()).card.project_column_uid, targetUID);
+  }
+  for (const page of [owner, peer]) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await column(page, originalColumnUID).locator(`[data-board-card-touch-dnd-uid="${credentials.card_uid}"]`)
+      .waitFor({ timeout: 30000 });
+  }
+  steps.push("two-distinct-users-bidirectional-card-drag-fanned-out-persisted-and-survived-reload");
+}
+
+async function assertTwoUserCardArchive(owner, peer, credentials) {
+  const cardPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}`;
+  const boardResponse = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/cards`);
+  const archiveUID = (await boardResponse.json()).columns.find((column) => column.is_archive)?.uid;
+  assert.ok(archiveUID);
+  await Promise.all([
+    owner.goto(`${origin}/board/${credentials.project_uid}/${credentials.card_uid}`, { waitUntil: "networkidle" }),
+    peer.goto(`${origin}/board/${credentials.project_uid}`, { waitUntil: "networkidle" }),
+  ]);
+  await waitForBoardSocketReady(peer, credentials.project_uid);
+  const peerCard = peer.locator(`[data-board-card-touch-dnd-uid="${credentials.card_uid}"]`);
+  await peerCard.waitFor();
+  await owner.getByRole("button", { name: "Actions", exact: true }).last().click();
+  await owner.getByRole("button", { name: "Archive card", exact: true }).click();
+  const responsePromise = owner.waitForResponse((response) => response.request().method() === "PUT" &&
+    response.url().includes(`${cardPath}/archive`), { timeout: 30000 });
+  await owner.getByRole("button", { name: "Archive", exact: true }).click();
+  assert.equal((await responsePromise).status(), 200);
+  await peer.locator(`[data-board-column-touch-dnd-uid="${archiveUID}"]`)
+    .locator(`[data-board-card-touch-dnd-uid="${credentials.card_uid}"]`)
+    .waitFor({ timeout: 30000 });
+  const persisted = await requestApi(credentials, credentials.users[0], cardPath);
+  const archived = (await persisted.json()).card;
+  assert.equal(archived.project_column_uid, archiveUID);
+  assert.ok(archived.archived_at);
+  await peer.reload({ waitUntil: "domcontentloaded" });
+  await peer.locator(`[data-board-column-touch-dnd-uid="${archiveUID}"]`)
+    .locator(`[data-board-card-touch-dnd-uid="${credentials.card_uid}"]`)
+    .waitFor({ timeout: 30000 });
+  steps.push("two-distinct-users-card-archive-button-fanned-out-and-persisted-after-reload");
+}
+
+async function assertTwoUserCardRelationship(owner, peer, credentials) {
+  const cardPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}`;
+  const board = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/cards`);
+  const columnUID = (await board.json()).columns.find((column) => column.name === "Editor verification")?.uid;
+  assert.ok(columnUID);
+  const candidateTitle = `Concurrent related card ${runId}`;
+  const candidateResponse = await requestApi(credentials, credentials.users[0],
+    `/board/${credentials.project_uid}/card`, {
+      method: "POST",
+      body: JSON.stringify({ title: candidateTitle, project_column_uid: columnUID }),
+    });
+  const candidateUID = (await candidateResponse.json()).card.uid;
+  const relationshipType = credentials.relationship_type_uid;
+  assert.ok(relationshipType);
+  await Promise.all([owner, peer].map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}/${credentials.card_uid}`, { waitUntil: "networkidle" });
+    await waitForBoardSocketReady(page, credentials.project_uid);
+    await page.locator('[data-dialog-content="true"] button:has(svg.lucide-git-fork)').first().waitFor();
+  }));
+  const parentButton = (page) => page.locator('[data-dialog-content="true"] button:has(svg.lucide-git-fork)').first();
+  await parentButton(owner).click();
+  await owner.getByRole("button", { name: "Select cards", exact: true }).click();
+  await owner.locator(`[data-board-card-touch-dnd-uid="${candidateUID}"] #board-card-${candidateUID}`).click();
+  const picker = owner.getByRole("dialog").last();
+  await picker.getByRole("button", { name: `Migration parent ${runId}`, exact: true }).click();
+  await picker.getByRole("button", { name: "Save", exact: true }).click();
+  const saved = owner.waitForResponse((response) => response.request().method() === "PUT" &&
+    response.url().includes(`${cardPath}/relationships`), { timeout: 30000 });
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  assert.equal((await saved).status(), 200);
+  const relatedTitle = peer.getByRole("button", { name: `Migration parent ${runId} > ${candidateTitle}` });
+  await parentButton(peer).click();
+  await relatedTitle.waitFor({ timeout: 30000 });
+  const persisted = await requestApi(credentials, credentials.users[0], cardPath);
+  const relationships = (await persisted.json()).card.relationships;
+  assert.ok(relationships.some((relationship) => relationship.parent_card_uid === candidateUID &&
+    relationship.child_card_uid === credentials.card_uid && relationship.relationship_type_uid === relationshipType));
+  await peer.reload({ waitUntil: "domcontentloaded" });
+  await parentButton(peer).click();
+  await relatedTitle.waitFor({ timeout: 30000 });
+  steps.push("two-distinct-users-card-relationship-selection-fanned-out-and-persisted-after-reload");
+}
+
+async function assertTwoUserCardMemberAssignment(owner, peer, credentials) {
+  const cardPath = `/board/${credentials.project_uid}/card/${credentials.card_uid}`;
+  await Promise.all([owner, peer].map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}/${credentials.card_uid}`, { waitUntil: "networkidle" });
+    await page.locator('[data-dialog-content="true"]')
+      .getByText("Members", { exact: true }).waitFor();
+  }));
+  await owner.getByRole("button", { name: "Edit", exact: true }).last().click();
+  await owner.locator('[data-dialog-content="true"]')
+    .getByText("Members", { exact: true }).locator("xpath=..").locator("button").first().click();
+  await owner.locator('[data-radix-popper-content-wrapper] [data-slate-editor="true"]:visible')
+    .last().fill(credentials.users[1].name.split(" ").at(-1));
+  const requests = [];
+  owner.on("request", (request) => {
+    if (request.url().includes("assigned-users")) requests.push({ method: request.method(), url: request.url(), body: request.postData() });
+  });
+  const responsePromise = owner.waitForResponse((response) => response.request().method() === "PUT" &&
+    response.url().includes(`${cardPath}/assigned-users`), { timeout: 30000 }).catch((error) => error);
+  await owner.getByRole("option", { name: credentials.users[1].name, exact: true }).click();
+  const response = await responsePromise;
+  if (response instanceof Error) {
+    const state = await owner.evaluate(() => ({
+      selected: [...document.querySelectorAll('[data-avatar-user]')].map((element) => element.getAttribute("data-avatar-user")),
+      popover: [...document.querySelectorAll('[data-radix-popper-content-wrapper]')].map((element) => element.textContent?.slice(0, 200)),
+    }));
+    throw new Error(`Card member selection sent no update: ${JSON.stringify({ requests, state })}`);
+  }
+  assert.equal(response.status(), 200);
+  const peerAvatar = peer.locator('[data-dialog-content="true"]')
+    .locator(`[data-avatar-user="${credentials.users[1].uid}"]`).first();
+  await peerAvatar.waitFor({ timeout: 30000 });
+  const persisted = await requestApi(credentials, credentials.users[0], cardPath);
+  assert.ok((await persisted.json()).card.member_uids.includes(credentials.users[1].uid));
+  await peer.reload({ waitUntil: "domcontentloaded" });
+  await peerAvatar.waitFor({ timeout: 30000 });
+  steps.push("two-distinct-users-card-member-assignment-persisted-and-visible-after-reload");
+}
+
+async function assertConcurrentProjectSettings(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const description = `Concurrent project description ${runId}`;
+  const saveRequests = [];
+  for (const [index, page] of pagesUnderTest.entries()) {
+    page.on("request", (request) => {
+      if (request.method() === "PUT" && request.url().includes(`/board/${credentials.project_uid}/settings/details`)) {
+        saveRequests.push({ user: index, body: request.postDataJSON() });
+      }
+    });
+  }
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}/settings`, { waitUntil: "networkidle" });
+    await page.locator('form input[name="title"]').waitFor();
+  }));
+  const forms = pagesUnderTest.map((page) => page.locator("form")
+    .filter({ has: page.locator('input[name="title"]') }));
+  const initialDays = await Promise.all(forms.map((form) =>
+    form.locator('input[name="archive_visible_days"]').inputValue()));
+  const originalDays = Number(initialDays[0]);
+  const changedDays = originalDays + 1;
+  await Promise.all(forms.map((form) => form.getByRole("button", { name: "Edit", exact: true }).click()));
+  await Promise.all(forms.map((form) => form.getByRole("button", { name: "Save", exact: true }).waitFor()));
+  await Promise.all(pagesUnderTest.map((page) => page.waitForFunction(() =>
+    ["title", "description", "archive_visible_days"].every((name) => {
+      const input = document.querySelector(`[name="${name}"]`);
+      return input && !input.disabled;
+    }),
+  )));
+  await Promise.all([
+    forms[0].locator('textarea[name="description"]').fill(description),
+    forms[1].locator('input[name="archive_visible_days"]').fill(String(changedDays)),
+  ]);
+  try {
+    await Promise.all(pagesUnderTest.map((page) => page.waitForFunction(
+      ({ description, days }) =>
+        document.querySelector('textarea[name="description"]')?.value === description &&
+        document.querySelector('input[name="archive_visible_days"]')?.value === String(days),
+      { description, days: changedDays },
+      { timeout: 10000 },
+    )));
+  } catch (error) {
+    const values = await Promise.all(pagesUnderTest.map((page) => page.evaluate(() => ({
+      description: document.querySelector('textarea[name="description"]')?.value,
+      days: document.querySelector('input[name="archive_visible_days"]')?.value,
+    }))));
+    throw new Error(`${error}\nInitial days: ${JSON.stringify(initialDays)}; expected days: ${changedDays}; collaborative settings values: ${JSON.stringify(values)}`);
+  }
+  const saveResponses = await Promise.all(pagesUnderTest.map(async (page, index) => {
+    const responsePromise = page.waitForResponse((response) => response.request().method() === "PUT" &&
+      response.url().includes(`/board/${credentials.project_uid}/settings/details`));
+    await forms[index].getByRole("button", { name: "Save", exact: true }).click();
+    return responsePromise;
+  }));
+  assert.deepEqual(saveResponses.map((response) => response.status()), [200, 200]);
+  const response = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/details`);
+  const { project } = await response.json();
+  assert.equal(project.description, description, JSON.stringify({ initialDays, saveRequests, description: project.description, archive_visible_days: project.archive_visible_days }));
+  assert.equal(project.archive_visible_days, changedDays, JSON.stringify({ initialDays, saveRequests, description: project.description, archive_visible_days: project.archive_visible_days }));
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      ({ description, days }) =>
+        document.querySelector('textarea[name="description"]')?.value === description &&
+        document.querySelector('input[name="archive_visible_days"]')?.value === String(days),
+      { description, days: changedDays },
+      { timeout: 30000 },
+    );
+  }
+  steps.push("two-distinct-users-concurrent-project-settings-preserved-both-fields-after-reload");
+}
+
+async function assertConcurrentLabelCreation(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const settingsUrl = `${origin}/board/${credentials.project_uid}/settings`;
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(settingsUrl, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Add a label", exact: true }).waitFor();
+  }));
+
+  const labelPath = `/board/${credentials.project_uid}/settings/label`;
+  const beforeResponse = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/details`);
+  const beforeCount = (await beforeResponse.json()).project.labels.filter((label) => label.name === "New Label").length;
+  let arrivals = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const holdBothPosts = async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    arrivals += 1;
+    if (arrivals === 2) release();
+    await gate;
+    await route.continue();
+  };
+  for (const page of pagesUnderTest) {
+    await page.route(`**${labelPath}`, holdBothPosts);
+  }
+  try {
+    const responses = await Promise.all(pagesUnderTest.map(async (page) => {
+      const responsePromise = page.waitForResponse((response) => response.request().method() === "POST" &&
+        response.url().includes(labelPath));
+      await page.getByRole("button", { name: "Add a label", exact: true }).click();
+      return responsePromise;
+    }));
+    assert.deepEqual(responses.map((response) => response.status()), [201, 201]);
+    await Promise.all(pagesUnderTest.map((page) => page.getByText("New Label", { exact: true })
+      .and(page.locator(":visible")).nth(beforeCount + 1).waitFor({ timeout: 30000 })));
+    const afterResponse = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/details`);
+    const afterCount = (await afterResponse.json()).project.labels.filter((label) => label.name === "New Label").length;
+    assert.equal(afterCount, beforeCount + 2);
+    steps.push("two-distinct-users-concurrent-label-creates-persisted-and-fanned-out-to-both-settings-pages");
+  } finally {
+    for (const page of pagesUnderTest) {
+      await page.unroute(`**${labelPath}`, holdBothPosts);
+    }
+  }
+}
+
+async function assertConcurrentLabelDetails(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const labelName = `Concurrent label ${runId}`;
+  const newName = `Renamed label ${runId}`;
+  const newDescription = `Concurrent label description ${runId}`;
+  const labelPath = `/board/${credentials.project_uid}/settings/label`;
+  const created = await requestApi(credentials, credentials.users[0], labelPath, {
+    method: "POST",
+    body: JSON.stringify({ name: labelName, color: "#228b72", description: "Original description" }),
+  });
+  assert.equal(created.status, 201);
+  const labelUID = (await created.json()).label.uid;
+  const detailPath = `${labelPath}/${labelUID}/details`;
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}/settings`, { waitUntil: "networkidle" });
+    await page.getByText(labelName, { exact: true }).first().waitFor();
+  }));
+  await Promise.all(pagesUnderTest.map(async (page, index) => {
+    const row = page.getByText(labelName, { exact: true }).first().locator("xpath=ancestor::div[contains(@class,'relative')][1]");
+    await row.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("menuitem", { name: index === 0 ? "Rename" : "Change description" }).click();
+    await page.getByPlaceholder(index === 0 ? "Label name" : "Description", { exact: true })
+      .fill(index === 0 ? newName : newDescription);
+  }));
+  const requests = [];
+  for (const [index, page] of pagesUnderTest.entries()) {
+    page.on("request", (request) => {
+      if (request.method() === "PUT" && request.url().includes(detailPath)) {
+        requests.push({ user: index, body: request.postDataJSON() });
+      }
+    });
+  }
+  const responses = pagesUnderTest.map((page) => page.waitForResponse((response) =>
+    response.request().method() === "PUT" && response.url().includes(detailPath), { timeout: 30000 }));
+  await Promise.all(pagesUnderTest.map((page) => page.getByRole("button", { name: "Save", exact: true }).click()));
+  assert.deepEqual((await Promise.all(responses)).map((response) => response.status()), [200, 200]);
+  assert.ok(requests.some((request) => request.user === 0 && request.body.name === newName), JSON.stringify(requests));
+  assert.ok(requests.some((request) => request.user === 1 && request.body.description === newDescription), JSON.stringify(requests));
+  const detailResponse = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/details`);
+  const label = (await detailResponse.json()).project.labels.find((item) => item.uid === labelUID);
+  assert.equal(label?.name, newName);
+  assert.equal(label?.description, newDescription);
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByText(newName, { exact: true }).first().waitFor({ timeout: 30000 });
+    await page.getByText(newDescription, { exact: true }).first().waitFor({ timeout: 30000 });
+  }
+  steps.push("two-distinct-users-concurrent-same-label-name-and-description-preserved-after-reload");
+}
+
+async function assertConcurrentWikiCreation(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const createPath = `/board/${credentials.project_uid}/wiki`;
+  for (const page of pagesUnderTest) {
+    await page.goto(`${origin}/board/${credentials.project_uid}/wiki`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.locator(`#board-wiki-${credentials.wiki_uid}-tab`).waitFor();
+    await page.locator("button:has(svg.lucide-plus):visible").last().waitFor();
+  }
+  let arrivals = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const holdBothPosts = async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    arrivals += 1;
+    if (arrivals === 2) release();
+    await gate;
+    await route.continue();
+  };
+  for (const page of pagesUnderTest) {
+    await page.route(`**${createPath}`, holdBothPosts);
+  }
+  let timeout;
+  try {
+    await Promise.all(
+      pagesUnderTest.map((page) =>
+        page.locator("button:has(svg.lucide-plus):visible").last().click(),
+      ),
+    );
+    await Promise.race([
+      gate,
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`Only ${arrivals}/2 wiki POSTs arrived`)),
+          15000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    release();
+    for (const page of pagesUnderTest) {
+      await page.unroute(`**${createPath}`, holdBothPosts);
+    }
+  }
+  assert.equal(arrivals, 2);
+  for (const page of pagesUnderTest) {
+    await page.waitForFunction(
+      () => [...document.querySelectorAll("[id^='board-wiki-'][id$='-tab']")]
+        .filter((tab) => tab.textContent?.includes("New page")).length === 2,
+    );
+  }
+  const response = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/wikis`);
+  const { wikis } = await response.json();
+  assert.equal(wikis.filter((wiki) => wiki.title === "New page").length, 2);
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      () => [...document.querySelectorAll("[id^='board-wiki-'][id$='-tab']")]
+        .filter((tab) => tab.textContent?.includes("New page")).length === 2,
+    );
+  }
+  steps.push("two-distinct-users-overlapping-wiki-creates-persisted-once-and-fanned-out-to-both-tabs");
+}
+
+async function assertConcurrentWikiDetails(owner, peer, credentials) {
+  const pagesUnderTest = [owner, peer];
+  const title = `Concurrent wiki title ${runId}`;
+  const content = `Concurrent wiki content ${runId}`;
+  const detailsPath = `/board/${credentials.project_uid}/wiki/${credentials.wiki_uid}/details`;
+  await Promise.all(pagesUnderTest.map(async (page) => {
+    await page.goto(`${origin}/board/${credentials.project_uid}/wiki`, { waitUntil: "networkidle" });
+    await page.locator(`#board-wiki-${credentials.wiki_uid}-tab`).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).waitFor();
+  }));
+  await owner.locator("h1 span").filter({ hasText: `Migration wiki ${runId}` }).click();
+  await owner.locator("textarea:visible:enabled:not([placeholder])").fill(title);
+  await peer.locator("[data-wiki-content]").click();
+  const editor = peer.locator('[data-wiki-content] [data-slate-editor="true"]:visible');
+  await editor.waitFor();
+  await editor.click();
+  await peer.keyboard.press("ControlOrMeta+A");
+  await editor.pressSequentially(content, { delay: 10 });
+  await peer.waitForFunction((expected) => document.querySelector('[data-wiki-content] [data-slate-editor="true"]')?.textContent?.includes(expected), content);
+  const beforeSave = await Promise.all(pagesUnderTest.map((page) => page.evaluate(() => ({
+    buttons: [...document.querySelectorAll("button")].filter((button) => ["Edit", "Save"].includes(button.textContent?.trim())).map((button) => button.textContent?.trim()),
+    title: document.querySelector("textarea:not([placeholder])")?.value,
+    content: document.querySelector('[data-wiki-content] [data-slate-editor="true"]')?.textContent,
+  }))));
+  assert.ok(beforeSave.every((state) => state.buttons.includes("Save")), JSON.stringify(beforeSave));
+  const requests = [];
+  for (const [index, page] of pagesUnderTest.entries()) {
+    page.on("request", (request) => {
+      if (request.method() === "PUT" && request.url().includes(detailsPath)) {
+        requests.push({ user: index, body: request.postDataJSON() });
+      }
+    });
+  }
+  const responses = pagesUnderTest.map((page) => page.waitForResponse((response) =>
+    response.request().method() === "PUT" && response.url().includes(detailsPath), { timeout: 30000 }).catch((error) => error));
+  await Promise.all(pagesUnderTest.map((page) => page.getByRole("button", { name: "Save", exact: true }).click()));
+  const results = await Promise.all(responses);
+  if (results.some((result) => result instanceof Error)) {
+    throw new Error(`Wiki save did not issue two responses: ${JSON.stringify({ beforeSave, requests, errors: results.filter((result) => result instanceof Error).map(String) })}`);
+  }
+  assert.deepEqual(results.map((response) => response.status()), [200, 200]);
+  assert.ok(requests.some((request) => request.user === 0 && request.body.title === title), JSON.stringify(requests));
+  assert.ok(requests.some((request) => request.user === 1 && request.body.content?.content?.includes(content)), JSON.stringify(requests));
+  const response = await requestApi(credentials, credentials.users[0], `/board/${credentials.project_uid}/wiki/${credentials.wiki_uid}`);
+  const { wiki } = await response.json();
+  assert.equal(wiki.title, title);
+  assert.ok(wiki.content?.content?.includes(content));
+  for (const page of pagesUnderTest) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator(`#board-wiki-${credentials.wiki_uid}-tab`).click();
+    await page.getByText(title, { exact: true }).first().waitFor();
+    await page.getByText(content, { exact: true }).first().waitFor();
+  }
+  steps.push("two-distinct-users-concurrent-same-wiki-title-and-content-preserved-after-reload");
+}
+
 async function assertCardCommentRealtimeLifecycle(owner, peer, credentials) {
   const commentButton = peer.getByRole("button", {
     name: "Comments",
@@ -2087,22 +3820,230 @@ async function assertCardCommentRealtimeLifecycle(owner, peer, credentials) {
   if ((await commentButton.getAttribute("aria-pressed")) !== "true") {
     await commentButton.click();
   }
-  await peer.waitForFunction(() =>
-    [...document.querySelectorAll("button")].some(
+  try {
+    await peer.waitForFunction(() =>
+      [...document.querySelectorAll("button")].some(
+        (button) =>
+          button.textContent?.includes("Comments") &&
+          button.getAttribute("aria-pressed") === "true",
+      ),
+    );
+  } catch (error) {
+    const buttons = await peer.locator("button").evaluateAll((nodes) =>
+      nodes
+        .filter((node) => node.textContent?.includes("Comments"))
+        .map((node) => ({
+          text: node.textContent,
+          pressed: node.getAttribute("aria-pressed"),
+        })),
+    );
+    throw new Error(`Comments did not open: ${JSON.stringify({ buttons })}`, {
+      cause: error,
+    });
+  }
+  await peer.evaluate(() => {
+    window.__commentInitialButton = [
+      ...document.querySelectorAll("button"),
+    ].find((button) => button.textContent?.trim() === "Comments");
+    window.__commentInitialCard = document.querySelector(
+      "[data-dialog-content]",
+    );
+    window.__commentInitialMain = document.querySelector("main");
+  });
+  await peer.setViewportSize({ width: 800, height: 844 });
+  try {
+    await peer
+      .getByText(`Add a comment as ${credentials.users[1].name}`, {
+        exact: true,
+      })
+      .and(peer.locator(":visible"))
+      .waitFor();
+  } catch (error) {
+    const state = await peer.evaluate(() => ({
+      mainConnected: window.__commentInitialMain?.isConnected,
+      cardConnected: window.__commentInitialCard?.isConnected,
+      initialButtonConnected: window.__commentInitialButton?.isConnected,
+      pressed: [...document.querySelectorAll("button")]
+        .filter((button) => button.textContent?.trim() === "Comments")
+        .map((button) => button.getAttribute("aria-pressed")),
+      forms: [...document.querySelectorAll("form")].map((form) => ({
+        visible: form.getClientRects().length > 0,
+        text: form.textContent?.slice(0, 100),
+      })),
+    }));
+    throw new Error(`Desktop comment composer did not render: ${JSON.stringify(state)}`, { cause: error });
+  }
+  await peer.setViewportSize({ width: 390, height: 844 });
+  try {
+    await peer
+      .getByText(`Add a comment as ${credentials.users[1].name}`, {
+        exact: true,
+      })
+      .and(peer.locator(":visible"))
+      .waitFor();
+  } catch (error) {
+    const state = await peer.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      mainConnected: window.__commentInitialMain?.isConnected,
+      desktopComments: window.matchMedia("(min-width: 768px)").matches,
+      mobileForm: [...document.querySelectorAll("form")].map((form) => ({
+        visible: form.getClientRects().length > 0,
+        text: form.textContent?.slice(0, 100),
+      })),
+      commentSections: [...document.querySelectorAll("*")]
+        .filter((element) => element.textContent?.trim() === "Comments")
+        .slice(-8)
+        .map((element) => ({
+          tag: element.tagName,
+          visible: element.getClientRects().length > 0,
+        })),
+    }));
+    throw new Error(
+      `Card comment composer did not render: ${JSON.stringify(state)}`,
+      {
+        cause: error,
+      },
+    );
+  }
+  try {
+    await peer
+      .getByText("No comments", { exact: true })
+      .and(peer.locator(":visible"))
+      .waitFor();
+  } catch (error) {
+    const state = await peer.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      mobileMedia: window.matchMedia("(max-width: 767px)").matches,
+      mainConnected: window.__commentInitialMain?.isConnected,
+      pressed: [...document.querySelectorAll("button")]
+        .filter((button) => button.textContent?.trim() === "Comments")
+        .map((button) => button.getAttribute("aria-pressed")),
+      comments: [...document.querySelectorAll("*")]
+        .filter((element) => element.textContent?.trim() === "No comments")
+        .map((element) => ({
+          tag: element.tagName,
+          visible: element.getClientRects().length > 0,
+          className: element.className,
+        })),
+      cardSections: [...document.querySelectorAll("*")]
+        .filter((element) => element.textContent?.trim() === "Comments")
+        .slice(-8)
+        .map((element) => ({
+          tag: element.tagName,
+          visible: element.getClientRects().length > 0,
+          className: element.className,
+          parentClassName: element.parentElement?.className,
+        })),
+    }));
+    throw new Error(`Comments list did not render: ${JSON.stringify(state)}`, {
+      cause: error,
+    });
+  }
+  await peer.evaluate(() => {
+    window.__commentClickObserver?.disconnect();
+    window.__commentClickAbortController?.abort();
+    const commentsButton = [...document.querySelectorAll("button")].find(
       (button) =>
-        button.textContent?.includes("Comments") &&
-        button.getAttribute("aria-pressed") === "true",
-    ),
+        button.textContent?.trim() === "Comments" &&
+        button.hasAttribute("aria-pressed"),
+    );
+    window.__commentClickTrace = [];
+    const controller = new AbortController();
+    window.__commentClickAbortController = controller;
+    const record = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      window.__commentClickTrace.push({
+        type: event.type,
+        target: target.closest("button, [role='button']")?.textContent?.trim(),
+        pressed: commentsButton?.getAttribute("aria-pressed"),
+      });
+    };
+    document.addEventListener("pointerdown", record, {
+      capture: true,
+      once: true,
+      signal: controller.signal,
+    });
+    document.addEventListener("click", record, {
+      capture: true,
+      once: true,
+      signal: controller.signal,
+    });
+    if (commentsButton) {
+      const observer = new MutationObserver(() => {
+        window.__commentClickTrace.push({
+          type: "comments-state",
+          pressed: commentsButton.getAttribute("aria-pressed"),
+          connected: commentsButton.isConnected,
+        });
+      });
+      observer.observe(commentsButton, {
+        attributes: true,
+        attributeFilter: ["aria-pressed"],
+      });
+      window.__commentClickObserver = observer;
+    }
+  });
+  try {
+    await peer
+      .getByText(`Add a comment as ${credentials.users[1].name}`, {
+        exact: true,
+      })
+      .and(peer.locator(":visible"))
+      .click();
+  } catch (error) {
+    const state = await peer.evaluate(() => ({
+      trace: window.__commentClickTrace,
+      buttonConnected: window.__commentInitialButton?.isConnected,
+      cardConnected: window.__commentInitialCard?.isConnected,
+      mainConnected: window.__commentInitialMain?.isConnected,
+      commentsPressed: [...document.querySelectorAll("button")]
+        .filter((button) => button.textContent?.trim() === "Comments")
+        .map((button) => button.getAttribute("aria-pressed")),
+      mobileComposer: [...document.querySelectorAll("[role='button']")]
+        .filter((element) => element.textContent?.includes("Add a comment as"))
+        .map((element) => ({
+          visible: element.getClientRects().length > 0,
+          connected: element.isConnected,
+        })),
+    }));
+    await peer.evaluate(() => {
+      window.__commentClickObserver?.disconnect();
+      window.__commentClickAbortController?.abort();
+    });
+    throw new Error(
+      `Card comment composer click failed: ${JSON.stringify(state)}`,
+      { cause: error },
+    );
+  }
+  await peer.evaluate(() => {
+    window.__commentClickObserver?.disconnect();
+    window.__commentClickAbortController?.abort();
+  });
+  const commentEditors = peer.locator(
+    '[data-card-comment-form] [data-slate-editor="true"]',
   );
+  try {
+    await commentEditors.first().waitFor({ state: "visible" });
+  } catch (error) {
+    const state = await peer.evaluate(() => ({
+      buttonConnected: window.__commentInitialButton?.isConnected,
+      cardConnected: window.__commentInitialCard?.isConnected,
+      mainConnected: window.__commentInitialMain?.isConnected,
+      pressed: [...document.querySelectorAll("button")]
+        .filter((button) => button.textContent?.trim() === "Comments")
+        .map((button) => button.getAttribute("aria-pressed")),
+    }));
+    throw new Error(
+      `Card comment editor did not open: ${JSON.stringify(state)}`,
+      { cause: error },
+    );
+  }
+  assert.equal(await commentEditors.count(), 1);
   await peer
-    .getByText(`Add a comment as ${credentials.users[1].name}`, {
-      exact: true,
-    })
-    .waitFor();
-  await peer
-    .getByText("No comments", { exact: true })
+    .getByRole("button", { name: "Cancel", exact: true })
     .and(peer.locator(":visible"))
-    .waitFor();
+    .click();
 
   const addedText = `Realtime comment ${runId}`;
   const updatedText = `Updated realtime comment ${runId}`;
@@ -3353,7 +5294,7 @@ async function main() {
     : credentials.users;
   for (const [index, user] of users.entries()) {
     const context = await browser.newContext(
-      index === 1
+      index === 1 && failoverStage !== "concurrent-ui"
         ? {
             viewport: { width: 390, height: 844 },
             isMobile: true,
@@ -3402,6 +5343,13 @@ async function main() {
           if (protocols === undefined) super(url);
           else super(url, protocols);
           window.__probeSockets.push(this);
+          this.addEventListener("open", () =>
+            window.__chatFrames.push({
+              event: "open",
+              path: new URL(this.url).pathname,
+              at: Date.now(),
+            }),
+          );
           this.addEventListener("message", (event) => {
             if (typeof event.data !== "string") {
               const binary =
@@ -3434,13 +5382,15 @@ async function main() {
                 "error",
               ].includes(data.event)
             )
-              window.__chatFrames.push(data);
+              window.__chatFrames.push({ ...data, at: Date.now() });
           });
           this.addEventListener("close", (event) =>
             window.__chatFrames.push({
               event: "close",
               code: event.code,
+              path: new URL(this.url).pathname,
               json: new URL(this.url).pathname === "/",
+              at: Date.now(),
             }),
           );
         }
@@ -3498,8 +5448,14 @@ async function main() {
           uploadConcurrencyProbeActive &&
           error.message.startsWith("Failed to load resource:") &&
           (error.message.includes("406") || error.message.includes("503"));
+        const expectedNotificationRefreshError =
+          notificationRefreshOutageActive &&
+          index === 0 &&
+          error.message.startsWith("Failed to load resource:") &&
+          error.message.includes("503");
         if (
           expectedUploadError ||
+          expectedNotificationRefreshError ||
           expectedFailoverError ||
           (apiOutageActive &&
             (error.message.includes("net::ERR_CONNECTION_REFUSED") ||
@@ -3530,7 +5486,14 @@ async function main() {
           [406, 503].includes(response.status())
         )
           expectedUploadErrors.push(error);
-        else if (apiOutageActive) expectedOutageErrors.push(error);
+        else if (
+          apiOutageActive ||
+          (notificationRefreshOutageActive &&
+            index === 0 &&
+            url.pathname === "/notifications" &&
+            response.status() === 503)
+        )
+          expectedOutageErrors.push(error);
         else errors.push(error);
       }
     });
@@ -3565,7 +5528,11 @@ async function main() {
     }
     steps.push("owner-and-member-browser-sockets-use-authenticated-route-keys");
   } else {
-    steps.push("desktop-owner-and-mobile-member-connected-to-live-phoenix");
+  steps.push(
+    failoverStage === "concurrent-ui"
+      ? "desktop-owner-and-desktop-member-connected-to-live-phoenix"
+      : "desktop-owner-and-mobile-member-connected-to-live-phoenix",
+  );
   }
   for (const page of pages) {
     await page.waitForFunction(
@@ -3580,7 +5547,7 @@ async function main() {
       credentials.project_uid,
     );
   }
-  steps.push("desktop-owner-and-mobile-member-received-chat-availability");
+  steps.push("owner-and-member-received-chat-availability");
   if (failoverStage === "canary") {
     const owner = pages[0];
     const peer = pages[1];
@@ -3626,6 +5593,83 @@ async function main() {
     steps.push(
       "canary-browser-reload-restored-board-subscriptions-and-chat-history",
     );
+    for (const [index, page] of pages.entries()) {
+      await page.screenshot({ path: path.join(output, `page-${index}.png`) });
+    }
+    assert.deepEqual(errors, []);
+    return;
+  }
+  if (failoverStage === "card-context") {
+    const owner = pages[0];
+    await owner.goto(
+      `${origin}/board/${credentials.project_uid}/${credentials.card_uid}`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await owner.waitForFunction(
+      (projectUID) =>
+        window.__chatFrames.some(
+          (frame) =>
+            frame.event === "board:chat:available" &&
+            frame.topic_id === projectUID &&
+            frame.data?.available === true,
+        ),
+      credentials.project_uid,
+    );
+    const cardDialog = owner
+      .locator('[data-dialog-content="true"]')
+      .filter({ hasText: credentials.card_title });
+    await cardDialog.getByRole("button", { name: "Expand" }).click();
+    await cardDialog.getByRole("button", { name: "Collapse" }).waitFor();
+    await openBoardChat(owner);
+    await owner.getByText("Card", { exact: true }).last().waitFor();
+    await owner.getByRole("button", { name: "Session list" }).click();
+    await owner.getByRole("button", { name: "New chat" }).click();
+    await owner.getByRole("button", { name: "Session list" }).click();
+    const scopedInput = owner.getByPlaceholder("Enter a message", {
+      exact: true,
+    });
+    const scopedFrameOffset = await owner.evaluate(
+      () => window.__chatFrames.length,
+    );
+    await scopedInput.fill(
+      "Report the title of the card in context. Do not change anything.",
+    );
+    await cardDialog.getByRole("button", { name: "Collapse" }).waitFor();
+    await scopedInput.press("Enter");
+    await owner.waitForFunction(
+      ({ offset, cardUID }) =>
+        window.__chatFrames
+          .slice(offset)
+          .some(
+            (frame) =>
+              frame.event === "outbound" &&
+              frame.data?.event === "board:chat:send" &&
+              frame.data?.data?.scope_table === "card" &&
+              frame.data?.data?.scope_uid === cardUID &&
+              !frame.data?.data?.session_uid,
+          ),
+      { offset: scopedFrameOffset, cardUID: credentials.card_uid },
+    );
+    await owner.waitForFunction(
+      ({ offset, title }) =>
+        window.__chatFrames
+          .slice(offset)
+          .filter((frame) => frame.event === "board:chat:stream:buffer")
+          .map((frame) => frame.data?.message?.content || "")
+          .join("")
+          .includes(title),
+      { offset: scopedFrameOffset, title: credentials.card_title },
+      { timeout: 150000 },
+    );
+    await owner.waitForFunction(
+      () =>
+        !document.querySelector('textarea[placeholder="Enter a message"]')
+          ?.disabled,
+      null,
+      { timeout: 150000 },
+    );
+    await cardDialog.getByRole("button", { name: "Collapse" }).waitFor();
+    steps.push("expanded-card-chat-sent-locked-card-context-in-new-session");
     for (const [index, page] of pages.entries()) {
       await page.screenshot({ path: path.join(output, `page-${index}.png`) });
     }
@@ -3743,6 +5787,133 @@ async function main() {
   steps.push("nonmember-chat-subscription-and-availability-command-denied");
   const owner = pages[0];
   const peer = pages[1];
+  if (failoverStage === "concurrent-ui") {
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "comment") {
+      await assertConcurrentCardComments(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "card") {
+      await assertConcurrentCardCreation(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "column") {
+      await assertConcurrentColumnCreation(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "column-rename") {
+      await assertConcurrentColumnCreation(owner, peer, credentials);
+      await assertConcurrentColumnRename(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "card-details") {
+      await assertConcurrentCardDetails(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "card-drag") {
+      await assertTwoUserCardDrag(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "card-archive") {
+      await assertTwoUserCardArchive(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "card-member") {
+      await assertTwoUserCardMemberAssignment(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "relationship") {
+      await assertTwoUserCardRelationship(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "wiki-details") {
+      await assertConcurrentWikiDetails(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "checklist") {
+      await assertConcurrentChecklists(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "checkitem") {
+      await assertConcurrentCheckitems(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "checkitem-details") {
+      await assertConcurrentCheckitemDetails(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "settings") {
+      await assertConcurrentProjectSettings(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "label") {
+      await assertConcurrentLabelCreation(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (process.env.PHOENIX_CONCURRENT_UI_ONLY === "label-details") {
+      await assertConcurrentLabelDetails(owner, peer, credentials);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    await assertConcurrentCardComments(owner, peer, credentials);
+    await assertConcurrentChecklists(owner, peer, credentials);
+    await assertConcurrentCheckitems(owner, peer, credentials);
+    await assertConcurrentCheckitemDetails(owner, peer, credentials);
+    await assertConcurrentBoardChatSends(owner, peer, credentials);
+    await assertConcurrentNotificationReads(owner, peer, credentials);
+    await assertConcurrentWikiCreation(owner, peer, credentials);
+    await assertConcurrentWikiDetails(owner, peer, credentials);
+    const dashboard = await owner.context().newPage();
+    await dashboard.goto(`${origin}/dashboard/projects/all`, { waitUntil: "domcontentloaded" });
+    await dashboard.getByRole("heading", {
+      name: `Migration editor access probe ${runId}`,
+      exact: true,
+    }).waitFor();
+    await assertConcurrentCardCreation(owner, peer, credentials, dashboard);
+    await assertConcurrentColumnCreation(owner, peer, credentials, dashboard);
+    await assertConcurrentColumnRename(owner, peer, credentials);
+    await dashboard.close();
+    steps.push("open-dashboard-reflected-concurrent-card-and-column-creates-without-reload");
+    await assertConcurrentProjectSettings(owner, peer, credentials);
+    await assertConcurrentLabelCreation(owner, peer, credentials);
+    await assertConcurrentLabelDetails(owner, peer, credentials);
+    await assertConcurrentCardDetails(owner, peer, credentials);
+    await assertTwoUserCardDrag(owner, peer, credentials);
+    await assertTwoUserCardMemberAssignment(owner, peer, credentials);
+    await assertTwoUserCardRelationship(owner, peer, credentials);
+    await assertTwoUserCardArchive(owner, peer, credentials);
+    assert.deepEqual(errors, []);
+    return;
+  }
+  if (failoverStage === "mobile-comments") {
+    await peer.goto(
+      `${origin}/board/${credentials.project_uid}/${credentials.card_uid}`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await peer.getByText("No description", { exact: true }).waitFor();
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await assertCardCommentRealtimeLifecycle(owner, peer, credentials);
+      await peer.reload({ waitUntil: "domcontentloaded" });
+      await peer.getByText("No description", { exact: true }).waitFor();
+    }
+    steps.push("mobile-card-comments-survived-six-reloads-and-resizes");
+    assert.deepEqual(errors, []);
+    return;
+  }
   if (attachmentProbe) {
     if (failoverStage === "resume") {
       await assertLangflowAttachmentProcessLoss(owner);
@@ -4159,7 +6330,9 @@ async function main() {
   }
   if (race) {
     await Promise.all([
-      owner.getByRole("button", { name: "Approve", exact: true }).click(),
+      owner
+        .getByRole("button", { name: race === "approve" ? "Approve" : "Reject", exact: true })
+        .click(),
       pages[2]
         .getByRole("button", {
           name: race === "approve" ? "Approve" : "Reject",
@@ -4184,6 +6357,7 @@ async function main() {
     assert.equal(resumed[0].attempt, 2);
     assert.equal(resumed[0].status, "InternalBotRunStatus.Completed");
     approved = resumed[0].decision.approved;
+    assert.equal(approved, race === "approve");
     assert.equal(state.approvals.length, 1);
     assert.equal(
       state.approvals[0].status,
@@ -4191,7 +6365,7 @@ async function main() {
         ? "GraphApprovalStatus.Approved"
         : "GraphApprovalStatus.Rejected",
     );
-    assert.equal(state.history_count, 5);
+    assert.equal(state.history_count, approved ? 5 : 4);
     await fs.writeFile(
       path.join(output, "race-state.json"),
       JSON.stringify(state, null, 2),

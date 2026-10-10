@@ -46,21 +46,19 @@ function Test-PostgresUrl {
         # Check if URL matches postgresql:// or postgres:// format
         if ($Url -notmatch '^postgres(ql)?://') {
             Write-Host "Error: $UrlName must start with postgresql:// or postgres://" -ForegroundColor Red
-            Write-Host "Current value: $Url"
             exit 1
         }
 
         # Basic structure check: postgresql://user:pass@host:port/db
         if ($Url -notmatch '^postgres(ql)?://[^:]+(:[^@]+)?@[^:]+:[0-9]+/.+$') {
             Write-Host "Warning: $UrlName may not be in correct format (postgresql://user:password@host:port/database)" -ForegroundColor Yellow
-            Write-Host "Current value: $Url"
             $response = Read-Host "Continue anyway? (y/N)"
             if ($response -ne 'y' -and $response -ne 'Y') {
                 exit 1
             }
         }
 
-        Write-Host "✓ $UrlName is valid: $Url" -ForegroundColor Green
+        Write-Host "✓ $UrlName is valid" -ForegroundColor Green
     }
 }
 

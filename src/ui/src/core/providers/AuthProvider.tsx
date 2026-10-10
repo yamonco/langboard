@@ -9,8 +9,6 @@ import { useTranslation } from "react-i18next";
 import useAuthStore, { getAuthStore } from "@/core/stores/AuthStore";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import Progress from "@/components/base/Progress";
-import useGetNotificationList from "@/controllers/api/notification/useGetNotificationList";
-import { useUserSettings } from "@/core/stores/UserSettingsStore";
 
 export interface IAuthContext {
     signIn: (accessToken: string, redirectCallback?: () => void) => Promise<void>;
@@ -36,8 +34,6 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
     const [_, i18n] = useTranslation();
     const { queryClient } = useQueryMutation();
     const { state, currentUser, pageLoaded, updateToken, removeToken } = useAuthStore();
-    const { mutate } = useGetNotificationList();
-    const timeRange = useUserSettings("notifications_time_range");
     const navigate = usePageNavigateRef();
     const hadAuthenticatedUserRef = useRef(false);
     useEffect(() => {
@@ -69,16 +65,6 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
                 return;
         }
     }, [state, currentUser]);
-
-    useEffect(() => {
-        if (state !== "loaded" || !pageLoaded || !currentUser) {
-            return;
-        }
-
-        mutate({
-            time_range: timeRange || "3d",
-        });
-    }, [state, pageLoaded, currentUser, timeRange]);
 
     useEffect(() => {
         if (currentUser) {

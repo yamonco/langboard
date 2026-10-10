@@ -1,16 +1,19 @@
 from dataclasses import dataclass
+from datetime import timedelta
+from email.message import EmailMessage
 from html import escape
 from typing import Any
 from urllib.parse import urlparse
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from ....core.domain import BaseDomainService
-from ....core.types import SnowflakeID
+from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TProjectParam
 from ....core.utils.String import concat
 from ....Env import UI_QUERY_NAMES, Env
 from ....helpers import InfraHelper
 from ....tasks.activities import ProjectActivityTask
-from ...models import Bot, Project, ProjectActivity, ProjectWikiActivity, User
+from ...models import Bot, Project, ProjectActivity, ProjectActivityEmailDelivery, ProjectWikiActivity, User
+from ...models.NotificationEmailDelivery import NotificationEmailDeliveryStatus
 from ...models.ProjectActivity import ProjectActivityType
 from ...models.ProjectEmailNotificationPolicy import (
     ProjectEmailNotificationCategory,
@@ -92,6 +95,49 @@ class ProjectEmailNotificationService(BaseDomainService):
         ProjectEmailNotificationCategory.Cards,
         ProjectEmailNotificationCategory.Comments,
     ]
+
+    def count_deliveries_for_review(self) -> int:
+        return self.repo.project_activity_email_delivery.count_for_review()
+
+    def get_deliveries_for_review(self, limit: int = 20) -> list[ProjectActivityEmailDelivery]:
+        if limit < 1 or limit > 100:
+            raise ValueError("Review limit must be between 1 and 100")
+        return self.repo.project_activity_email_delivery.get_review_items(limit)
+
+    def resolve_delivery_review(
+        self, delivery_id: SnowflakeID, action: str, ticket: str, acknowledge_uncertain: bool = False
+    ) -> bool:
+        if action not in ("retry", "confirm-sent", "close"):
+            raise ValueError("Invalid email review action")
+        ticket = ticket.strip()
+        if not ticket or len(ticket) > 120:
+            raise ValueError("A review ticket of at most 120 characters is required")
+        repository = self.repo.project_activity_email_delivery
+        delivery = repository.get_review_item(delivery_id)
+        if delivery is None or delivery.status not in (
+            NotificationEmailDeliveryStatus.Failed,
+            NotificationEmailDeliveryStatus.Uncertain,
+        ):
+            return False
+        if delivery.status == NotificationEmailDeliveryStatus.Uncertain and not acknowledge_uncertain:
+            raise ValueError("An uncertain SMTP outcome requires explicit acknowledgement")
+        if action == "confirm-sent" and delivery.status != NotificationEmailDeliveryStatus.Uncertain:
+            raise ValueError("Only an uncertain delivery can be confirmed as sent")
+        target_status = {
+            "retry": NotificationEmailDeliveryStatus.Pending,
+            "confirm-sent": NotificationEmailDeliveryStatus.ConfirmedSent,
+            "close": NotificationEmailDeliveryStatus.Closed,
+        }[action]
+        note = f"Operator {action} under ticket {ticket}; previous outcome: {delivery.failure_reason or 'none'}"
+        return repository.resolve_review_item(delivery_id, delivery.status, target_status, note[:1000])
+
+    def purge_terminal_deliveries(self, limit: int = 100) -> int:
+        retention_days = Env.NOTIFICATION_EMAIL_OUTBOX_RETENTION_DAYS
+        if retention_days < 1 or limit < 1 or limit > 100:
+            raise ValueError("Email outbox retention and cleanup limit must be positive")
+        return self.repo.project_activity_email_delivery.purge_terminal_before(
+            SafeDateTime.now() - timedelta(days=retention_days), limit
+        )
 
     @staticmethod
     def name() -> str:
@@ -271,23 +317,33 @@ class ProjectEmailNotificationService(BaseDomainService):
         self,
         activity: ProjectActivity | ProjectWikiActivity,
         recipient_email: str,
-    ) -> bool:
+    ) -> bool | None:
         """Send one policy-authorized activity email through the existing SMTP service."""
 
+        message = self.prepare_activity_email(activity, recipient_email)
+        if message is None:
+            return None
+        return self._get_service(EmailService).send_message(message, strict=True)
+
+    def prepare_activity_email(
+        self,
+        activity: ProjectActivity | ProjectWikiActivity,
+        recipient_email: str,
+    ) -> EmailMessage | None:
         recipient = self._get_delivery_recipient(activity, recipient_email)
         if recipient is None:
-            return True
+            return None
         project = InfraHelper.get_by_id_like(Project, activity.project_id)
         if not project:
-            return True
+            return None
         notifier = self._get_activity_notifier(activity)
         if not notifier:
-            return True
+            return None
 
         history = activity.activity_history
         target_name = self._activity_target_name(history, project.title)
         action_name = activity.activity_type.value.replace("_", " ").capitalize()
-        return self._get_service(EmailService).send_template(
+        return self._get_service(EmailService).prepare_template_message(
             recipient.language,
             recipient.email,
             "project_activity_updated",
@@ -309,7 +365,9 @@ class ProjectEmailNotificationService(BaseDomainService):
         """Revalidate one queued recipient without loading every project member."""
 
         category = self.category_for_activity(activity.activity_type.value)
-        policy, configured_recipients = self.repo.project_email_notification.get_with_recipients(activity.project_id)
+        policy, configured_recipients = self.repo.project_email_notification.get_with_recipients(
+            activity.project_id, consistent=True
+        )
         if (
             category is None
             or not policy
@@ -338,7 +396,9 @@ class ProjectEmailNotificationService(BaseDomainService):
                 member = candidate
 
         if member and member.deleted_at is None and member.activated_at is not None:
-            assignment = self.repo.project_assigned_user.get_by_user_and_project(member, activity.project_id)
+            assignment = self.repo.project_assigned_user.get_by_user_and_project(
+                member, activity.project_id, consistent=True
+            )
             if assignment:
                 return ProjectEmailDeliveryRecipient(email=email, language=member.preferred_lang)
 
