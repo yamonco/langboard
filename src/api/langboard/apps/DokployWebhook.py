@@ -13,6 +13,7 @@ from langboard_shared.domain.models import (
     DokployWebhookBinding,
     User,
 )
+from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied, require_connection_access
 from langboard_shared.domain.services.AppRegistry import signal_app_allowed
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
@@ -22,12 +23,16 @@ from . import DokployConnection as connection
 MAX_BODY = 65536
 
 
-def _scope(service, actor, project_uid, connection_uid, *, allow_unconfigured=False):
+def _scope(service, actor, project_uid, connection_uid, *, allow_unconfigured=False, unattended=False):
     board = connection._board(service, actor, project_uid)
     with DbSession.use(readonly=False) as db:
         if not signal_app_allowed(db, "dokploy", lock=True):
             raise connection.DokployUnavailable()
         conn = connection._connection(db, actor, connection_uid, lock=True)
+        try:
+            require_connection_access(db, actor, board, conn, unattended=unattended)
+        except AppGovernanceDenied:
+            raise connection.DokployUnavailable() from None
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding)
             .where(
@@ -218,7 +223,7 @@ def _authenticate(service, config_uid, authorization):
         if actor is None or binding is None:
             raise connection.DokployUnavailable()
     conn, binding, resources, current = _scope(
-        service, actor, InfraHelper.convert_uid(binding.project_id), conn.get_uid()
+        service, actor, InfraHelper.convert_uid(binding.project_id), conn.get_uid(), unattended=True
     )
     _granted(binding, resources)
     if (

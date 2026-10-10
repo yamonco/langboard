@@ -13,6 +13,7 @@ from langboard_shared.domain.models import (
     BoardAppBinding,
     DokployNotificationReceipt,
     DokployWebhookBinding,
+    Organization,
     SecretReference,
     User,
 )
@@ -31,6 +32,16 @@ def configured(setup):
     for model in (DokployWebhookBinding, DokployNotificationReceipt, AppSignal):
         model.__table__.create(DbEngine.get_main_engine(), checkfirst=True)
     conn = connect(setup)
+    with DbSession.atomic() as db:
+        organization = Organization(name="Webhook fixture", slug="webhook-fixture", owner_user_id=board[1].id)
+        db.insert(organization)
+        board[2].organization_id = organization.id
+        saved = db.exec(SqlBuilder.select.table(AppConnection)).first()
+        saved.ownership = "organization"
+        saved.organization_id = organization.id
+        db.update(board[2])
+        db.update(saved)
+        conn["revision"] = dk._revision(saved)
     dk.bind_resource(
         service,
         board[1],
@@ -69,6 +80,47 @@ def accept(configured, body=BODY, authorization="Bearer receiver-token"):
     config = configured[3]
     revision = webhook.authenticate(service, config["config_uid"], authorization)
     return webhook.receive(service, config["config_uid"], authorization, body, revision)
+
+
+@pytest.mark.parametrize("scope", ["personal", "private-personal", "foreign", "inactive", "suspended"])
+def test_notification_receipt_rechecks_unattended_connection_scope(configured, scope):
+    from langboard_shared.core.types import SafeDateTime
+
+    service, board, *_ = configured[0]
+    config = configured[3]
+    # Authenticate first, then change authority before the streaming body is saved.
+    revision = webhook.authenticate(service, config["config_uid"], "Bearer receiver-token")
+    with DbSession.atomic() as db:
+        saved = db.exec(SqlBuilder.select.table(AppConnection)).first()
+        organization = db.exec(SqlBuilder.select.table(Organization).where(Organization.id == saved.organization_id)).first()
+        if scope in {"personal", "private-personal"}:
+            saved.ownership = "personal"
+            saved.organization_id = None
+            db.update(saved)
+            current = db.exec(SqlBuilder.select.table(DokployWebhookBinding)).first()
+            current.connection_revision = dk._revision(saved)
+            db.update(current)
+            if scope == "private-personal":
+                board[2].organization_id = None
+                board[2].owner_id = board[1].id
+                db.update(board[2])
+        elif scope == "foreign":
+            board[2].organization_id = None
+            db.update(board[2])
+        elif scope == "inactive":
+            organization.is_active = False
+            db.update(organization)
+        else:
+            organization.suspended_at = SafeDateTime.now()
+            db.update(organization)
+    if scope == "private-personal":
+        result = webhook.receive(service, config["config_uid"], "Bearer receiver-token", BODY, revision)
+        assert not result["duplicate"]
+    else:
+        with pytest.raises(dk.DokployUnavailable):
+            webhook.receive(service, config["config_uid"], "Bearer receiver-token", BODY, revision)
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(DokployNotificationReceipt)).all()) == (1 if scope == "private-personal" else 0)
 
 
 def test_durable_minimal_deduplicated_health_no_provider_io(configured):
