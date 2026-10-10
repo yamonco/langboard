@@ -68,6 +68,13 @@ Authority of the connection owner alone cannot authorize another actor to publis
 that person's unshared personal Signal. Instance administration does not override
 this connection ownership check.
 
+Policy-disabled apps cannot create or rebind card Signal scopes. A currently
+authorized card reader can still read the existing binding IDs and revisions for
+cleanup while provider evidence stays hidden by the app policy. Unlink requires
+current native card update authority and the expected binding revision, but does
+not require app-use permission. It disables the binding without deleting evidence
+or changing the card's revision.
+
 `GET /board/{board_uid}/settings/apps/github/connections/{connection_uid}/resources/{resource_uid}/signals`
 requires browser authentication and current board Read permission in addition to the live
 consumer authority above. It returns 25 events per page with a scoped opaque cursor,
