@@ -40,7 +40,7 @@ def open_document_store(
             index={
                 "dims": dimensions,
                 "embed": validated_embeddings(embeddings, dimensions),
-                "fields": ["text"],
+                "text_fields": ["text"],
                 "distance_type": "cosine",
             },
         )

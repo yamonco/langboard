@@ -93,3 +93,27 @@ server still apply their own current permission checks. The UI regression uses
 a character splitter because disabled fields do not participate in FormData;
 relying on separator validation to stop a disabled submission would leave that
 mode unguarded. This guard does not establish deployed authorization behavior.
+
+### Text-only SQLite embedding and explicit splitter reindex
+
+The official `langgraph-checkpoint-sqlite` store uses `text_fields`, not `fields`,
+to select indexed properties. Configure `text_fields: ["text"]` so only each
+split chunk is embedded. The wrong option silently selects the entire serialized
+record, adding source identifiers and metadata to inference input and diluting
+the semantic content. Source metadata remains stored for filtering and readback.
+
+The worker regression runs the actual snapshot resolver, LangChain splitter,
+SQLite vector store and generation replacement. It indexes multilingual text
+with a 128-character chunk limit, explicitly reindexes with a 64-character limit
+under the same model fingerprint, and reopens the store to verify smaller chunks
+and removal of the prior generation after publication. Later global model and
+splitter edits do not change a queued request; credential rotation is retained.
+Captured embedding input must equal persisted chunk text without source metadata.
+The original transcription remains unchanged and duplicate delivery does not
+repeat inference. Existing attachments are not automatically reindexed.
+
+Inference is a recording test implementation and the metadata publication fence
+is a test double. This establishes the local worker/splitter/store contract, not
+live provider inference, PostgreSQL publication, broker delivery or deployed UI
+acceptance. Previously indexed records require the user's explicit reindex action
+to receive text-only vectors.
