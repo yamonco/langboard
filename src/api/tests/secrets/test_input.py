@@ -38,7 +38,12 @@ def test_one_use_secret_stays_outside_mcp_and_metadata(flow):
     assert pending["input_url"] == "https://langboard.example/secret-input/" + uid
     assert get_secret_input_status(uid, actor, service) == {"state": "pending"}
     details, challenge = input_flow.open_input(service, actor, uid)
-    assert details == {"name": "provider/api-key", "scope": "personal", "operation": "create"}
+    assert details == {
+        "name": "provider/api-key",
+        "scope": "personal",
+        "operation": "create",
+        "reason_codes": list(input_flow.REASONS["create"]),
+    }
     result = input_flow.complete_input(service, actor, uid, SecretStr("fixture-secret"), challenge)
     assert result == get_secret_input_status(uid, actor, service)
     assert result["state"] == "completed"
@@ -157,7 +162,12 @@ def test_authenticated_browser_transport_never_echoes_invalid_material(flow, mon
         assert compressed.status_code == 400 and "fixture-sensitive" not in compressed.text
         assert opened.headers["cache-control"] == "no-store"
         assert "HttpOnly" in opened.headers["set-cookie"]
-        for body in [{"value": {"fixture-sensitive": "bad"}}, {"value": "fixture-sensitive", "extra": True}]:
+        for body in [
+            {"value": {"fixture-sensitive": "bad"}},
+            {"value": "fixture-sensitive", "extra": True},
+            {"value": "fixture-sensitive", "reason_code": "security_response"},
+            {"value": "fixture-sensitive", "reason_code": "fixture-sensitive"},
+        ]:
             response = client.post(url, json=body, headers=headers)
             assert response.status_code == 400 and "fixture-sensitive" not in response.text
         assert (
@@ -166,9 +176,14 @@ def test_authenticated_browser_transport_never_echoes_invalid_material(flow, mon
             ).status_code
             == 400
         )
-        response = client.post(url, json={"value": "fixture-sensitive"}, headers=headers)
+        response = client.post(
+            url, json={"value": "fixture-sensitive", "reason_code": "integration_setup"}, headers=headers
+        )
         assert response.status_code == 200 and "fixture-sensitive" not in response.text
         assert response.json()["state"] == "completed"
+        history = service.secret_reference.list_audit(actor, response.json()["secret_ref"])
+        assert history["items"][0]["reason_code"] == "integration_setup"
+        assert "fixture-sensitive" not in json.dumps(history)
         assert client.post(url, json={"value": "replay"}, headers=headers).status_code == 400
 
 
@@ -322,3 +337,30 @@ def test_nonce_claim_crossing_expiry_never_stores_or_replaces_material(flow, mon
     else:
         with pytest.raises(SecretReferenceUnavailable):
             service.secret_reference.get_metadata(actor, "secret://me/provider/late")
+
+
+@pytest.mark.parametrize("reason", ["routine_rotation", "credential_expired", "security_response"])
+def test_selected_rotation_reason_is_persisted_without_material(flow, reason):
+    service, actor, _ = flow
+    created = service.secret_reference.create(actor, "personal", "me", "reason/key", SecretStr("initial"))
+    uid = input_flow.begin_rotation(service, actor, created["uri"], 0)["input_uid"]
+    details, challenge = input_flow.open_input(service, actor, uid)
+    assert details["reason_codes"] == list(input_flow.REASONS["rotate"])
+    result = input_flow.complete_input(service, actor, uid, SecretStr("replacement"), challenge, reason)
+    history = service.secret_reference.list_audit(actor, result["secret_ref"])
+    assert history["items"][0]["action"] == "rotated"
+    assert history["items"][0]["reason_code"] == reason
+    assert "replacement" not in json.dumps(history)
+
+
+@pytest.mark.parametrize("reason", ["security_response", "arbitrary-sensitive-text", None, {}, ["user_input"]])
+def test_invalid_or_wrong_operation_reason_does_not_consume_input(flow, reason):
+    service, actor, _ = flow
+    uid = input_flow.begin_input(service, actor, "personal", "me", "reason/create")["input_uid"]
+    _, challenge = input_flow.open_input(service, actor, uid)
+    with pytest.raises(SecretReferenceUnavailable):
+        input_flow.complete_input(service, actor, uid, SecretStr("never-save"), challenge, reason)
+    assert input_flow.input_status(service, actor, uid) == {"state": "pending"}
+    result = input_flow.complete_input(service, actor, uid, SecretStr("created"), challenge, "integration_setup")
+    history = service.secret_reference.list_audit(actor, result["secret_ref"])
+    assert history["items"][0]["reason_code"] == "integration_setup"

@@ -17,6 +17,10 @@ from pydantic import SecretStr
 
 TTL = 600
 COOKIE = "langboard_secret_input"
+REASONS = {
+    "create": ("user_input", "integration_setup"),
+    "rotate": ("user_input", "routine_rotation", "credential_expired", "security_response"),
+}
 
 
 def _key(uid):
@@ -135,11 +139,18 @@ def open_input(service, actor, uid):
     challenge = secrets.token_urlsafe(32)
     # Separate short-lived browser proof; opening does not extend the input TTL.
     Cache.set(_key(uid) + ":browser", hashlib.sha256(challenge.encode()).hexdigest(), TTL)
-    return {"name": context["name"], "scope": context["scope"], "operation": context["operation"]}, challenge
+    return {
+        "name": context["name"],
+        "scope": context["scope"],
+        "operation": context["operation"],
+        "reason_codes": list(REASONS[context["operation"]]),
+    }, challenge
 
 
-def complete_input(service, actor, uid, value, challenge):
+def complete_input(service, actor, uid, value, challenge, reason_code="user_input"):
     context = _pending(service, actor, uid)
+    if not isinstance(reason_code, str) or reason_code not in REASONS[context["operation"]]:
+        raise SecretReferenceUnavailable()
     proof = Cache.get(_key(uid) + ":browser")
     if (
         context["state"] != "pending"
@@ -155,7 +166,7 @@ def complete_input(service, actor, uid, value, challenge):
     try:
         # The input UID is a bearer URL nonce, not a public audit identifier.
         source = SecretAuditSource(
-            "api", "secret_input", request_id=hashlib.sha256(uid.encode()).hexdigest(), reason_code="user_input"
+            "api", "secret_input", request_id=hashlib.sha256(uid.encode()).hexdigest(), reason_code=reason_code
         )
         if context["operation"] == "rotate":
             reference = service.secret_reference.rotate(

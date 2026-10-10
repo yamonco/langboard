@@ -8,13 +8,18 @@ for (const width of [1440, 390]) {
             const method = route.request().method();
             if (method === "POST") {
                 posts++;
-                expect(route.request().postDataJSON()).toEqual({ value: "fixture-sensitive" });
+                expect(route.request().postDataJSON()).toEqual({ value: "fixture-sensitive", reason_code: "security_response" });
             }
             if (method === "DELETE") cancelled = true;
             await route.fulfill({
                 json:
                     method === "GET"
-                        ? { name: "provider/api-key", scope: "personal", operation: "rotate" }
+                        ? {
+                              name: "provider/api-key",
+                              scope: "personal",
+                              operation: "rotate",
+                              reason_codes: ["user_input", "routine_rotation", "credential_expired", "security_response"],
+                          }
                         : { state: "completed", secret_ref: "secret://ref/fixture" },
             });
         });
@@ -24,6 +29,7 @@ for (const width of [1440, 390]) {
         await expect(page.getByText("Replace existing secret value", { exact: false })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: `test-results/secret-input-${width}.png` });
+        await page.getByRole("combobox", { name: "Reason", exact: true }).selectOption("security_response");
         await input.fill("fixture-sensitive");
         await page.locator('button[type="submit"]').click();
         await expect(input).toHaveCount(0);

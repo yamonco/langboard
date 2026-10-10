@@ -47,7 +47,8 @@
     "cancel": "요청 취소",
     "cancelled": "취소했습니다. 시크릿은 저장하지 않았습니다.",
     "create": "시크릿 생성",
-    "rotate": "기존 시크릿 값 교체"
+    "rotate": "기존 시크릿 값 교체",
+    "reason": "변경 사유"
   },
   "secretHistory": {
     "title": "시크릿 변경 이력",
@@ -75,7 +76,11 @@
       "reference_revoked": "참조 폐기",
       "value_rotated": "시크릿 값 교체",
       "reference_bound": "권한이 확인된 앱 연결 바인딩",
-      "provider_migrated": "시크릿 저장소 변경"
+      "provider_migrated": "시크릿 저장소 변경",
+      "integration_setup": "연동 설정",
+      "routine_rotation": "정기 비밀값 교체",
+      "credential_expired": "만료된 비밀값 교체",
+      "security_response": "보안 대응"
     },
     "openSource": "원본 카드 열기",
     "openSourceWiki": "원본 위키 열기"

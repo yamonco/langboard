@@ -47,7 +47,8 @@
     "cancel": "取消请求",
     "cancelled": "已取消。未保存密钥。",
     "create": "创建密钥",
-    "rotate": "替换现有密钥值"
+    "rotate": "替换现有密钥值",
+    "reason": "更改原因"
   },
   "secretHistory": {
     "title": "密钥历史",
@@ -75,7 +76,11 @@
       "reference_revoked": "撤销引用",
       "value_rotated": "替换秘密值",
       "reference_bound": "已授权的应用连接绑定",
-      "provider_migrated": "密钥存储提供方已更改"
+      "provider_migrated": "密钥存储提供方已更改",
+      "integration_setup": "集成配置",
+      "routine_rotation": "定期轮换凭据",
+      "credential_expired": "替换已过期凭据",
+      "security_response": "安全响应"
     },
     "openSource": "打开来源卡片",
     "openSourceWiki": "打开来源 Wiki"

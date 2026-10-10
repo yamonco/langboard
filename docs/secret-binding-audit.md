@@ -23,3 +23,11 @@ remain separate work. History access still checks current reference authority on
 request, and readable source links require their own native ACL.
 
 This implementation covers native Dokploy and GlitchTip registration and resource selection, GitHub manifest registration, and Dokploy receiver credential binding. A failed GitHub connection transaction rolls back its binding fact and revokes the independently stored reference; a failed receiver transaction preserves the previous configuration and history. Wiki secretization/copy producers, authorized source links, and live canary acceptance require their own integration and verification. A binding fact is not evidence of deployment success or workflow approval.
+
+Browser input offers bounded operation-specific audit reasons. Creation accepts explicit
+user input or integration setup; rotation additionally distinguishes routine rotation,
+expired credentials, and security response. The authenticated native endpoint validates
+the reason before claiming the one-use input. Invalid free text and reasons for another
+operation cannot write a value or consume the input. Older clients that omit the reason
+retain `user_input`. English, Korean, Japanese, and Chinese labels share the same stored
+reason codes; no credential material is accepted in an audit reason.

@@ -47,7 +47,8 @@
     "cancel": "要求をキャンセル",
     "cancelled": "キャンセルしました。シークレットは保存されていません。",
     "create": "シークレットを作成",
-    "rotate": "既存の秘密値を置換"
+    "rotate": "既存の秘密値を置換",
+    "reason": "変更理由"
   },
   "secretHistory": {
     "title": "シークレット履歴",
@@ -75,7 +76,11 @@
       "reference_revoked": "参照失効",
       "value_rotated": "秘密値の更新",
       "reference_bound": "認可済みのアプリ接続への紐付け",
-      "provider_migrated": "シークレット保存プロバイダー変更"
+      "provider_migrated": "シークレット保存プロバイダー変更",
+      "integration_setup": "連携設定",
+      "routine_rotation": "定期的な認証情報の更新",
+      "credential_expired": "期限切れ認証情報の交換",
+      "security_response": "セキュリティ対応"
     },
     "openSource": "元のカードを開く",
     "openSourceWiki": "元のWikiを開く"

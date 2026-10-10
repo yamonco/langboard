@@ -7,8 +7,9 @@ import Button from "@/components/base/Button";
 export default function SecretInputPage() {
     const { inputUID } = useParams();
     const [t] = useTranslation();
-    const [target, setTarget] = useState<{ name: string; scope: string; operation: "create" | "rotate" }>();
+    const [target, setTarget] = useState<{ name: string; scope: string; operation: "create" | "rotate"; reason_codes: string[] }>();
     const [state, setState] = useState<"loading" | "ready" | "saving" | "completed" | "failed" | "cancelled">("loading");
+    const [reason, setReason] = useState("user_input");
     const [historyUID, setHistoryUID] = useState<string>();
     const input = useRef<HTMLInputElement>(null);
     const url = `/secret-input/${inputUID}`;
@@ -18,6 +19,7 @@ export default function SecretInputPage() {
             .then(({ data }) => {
                 if (active) {
                     setTarget(data);
+                    setReason("user_input");
                     setState("ready");
                 }
             })
@@ -67,7 +69,7 @@ export default function SecretInputPage() {
                                 input.current.value = "";
                                 setState("saving");
                                 try {
-                                    const { data } = await submitSecretInput(url, value);
+                                    const { data } = await submitSecretInput(url, value, reason);
                                     const referenceUID = /^secret:\/\/ref\/([A-Za-z0-9]{1,11})$/.exec(data.secret_ref)?.[1];
                                     setHistoryUID(referenceUID);
                                     setState("completed");
@@ -88,6 +90,21 @@ export default function SecretInputPage() {
                                     maxLength={65536}
                                     disabled={state === "saving"}
                                 />
+                            </label>
+                            <label className="flex flex-col gap-2 text-sm">
+                                {t("myAccount.secretInput.reason")}
+                                <select
+                                    className="select w-full rounded-md border bg-background"
+                                    value={reason}
+                                    disabled={state === "saving"}
+                                    onChange={(event) => setReason(event.target.value)}
+                                >
+                                    {(target?.reason_codes ?? ["user_input"]).map((code) => (
+                                        <option key={code} value={code}>
+                                            {t(`myAccount.secretHistory.reasons.${code}`, { defaultValue: code })}
+                                        </option>
+                                    ))}
+                                </select>
                             </label>
                             <Button type="submit" disabled={state === "saving"}>
                                 {t("myAccount.secretInput.save")}

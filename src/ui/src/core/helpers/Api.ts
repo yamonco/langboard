@@ -149,10 +149,10 @@ api.interceptors.response.use(
 );
 
 /** One-shot credential transport. Global auth attachment remains active. */
-export const submitSecretInput = (url: string, value: string) =>
+export const submitSecretInput = (url: string, value: string, reasonCode?: string) =>
     api.post(
         url,
-        { value },
+        { value, ...(reasonCode ? { reason_code: reasonCode } : {}) },
         {
             // Skip automatic gzip: the server's normal decompressor spools to disk.
             transformRequest: [(data) => JSON.stringify(data)],
