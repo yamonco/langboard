@@ -12,6 +12,7 @@ from ....tasks.bots import CardBotTask, CardCheckitemBotTask
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Card, Checkitem, CheckitemTimerRecord, Checklist, Project, ProjectColumn, User
 from ...models.Checkitem import CheckitemStatus
+from ..CardAppMutation import guard_card_app_mutation
 
 
 class CheckitemService(BaseDomainService):
@@ -174,6 +175,7 @@ class CheckitemService(BaseDomainService):
 
         return api_checkitems, list(api_cards.values()), list(api_projects.values())
 
+    @guard_card_app_mutation
     def create(
         self,
         user_or_bot: TUserOrBot,
@@ -223,6 +225,7 @@ class CheckitemService(BaseDomainService):
         if include_bot:
             CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
 
+    @guard_card_app_mutation
     def change_title(
         self,
         user_or_bot: TUserOrBot,
@@ -265,6 +268,7 @@ class CheckitemService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def change_deadline(
         self,
         project: TProjectParam,
@@ -285,6 +289,7 @@ class CheckitemService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def change_order(
         self,
         project: TProjectParam,
@@ -322,6 +327,7 @@ class CheckitemService(BaseDomainService):
             db.after_commit(lambda: CheckitemPublisher.order_changed(card, changed_item, old_checklist, new_checklist))
         return True
 
+    @guard_card_app_mutation
     def change_status(
         self,
         user_or_bot: TUserOrBot,
@@ -431,6 +437,7 @@ class CheckitemService(BaseDomainService):
             db.after_commit(publish)
         return True
 
+    @guard_card_app_mutation
     def complete_unchecked_by_card(
         self,
         user_or_bot: TUserOrBot,
@@ -512,6 +519,7 @@ class CheckitemService(BaseDomainService):
                 db.after_commit(lambda: CheckitemPublisher.workflow_effects_applied(project, card, changed))
         return {"completed": completed, "stopped": stopped}
 
+    @guard_card_app_mutation
     def toggle_checked(
         self,
         user_or_bot: TUserOrBot,
@@ -567,6 +575,7 @@ class CheckitemService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def cardify(
         self,
         user_or_bot: TUserOrBot,
@@ -630,6 +639,7 @@ class CheckitemService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def delete(
         self,
         user_or_bot: TUserOrBot,

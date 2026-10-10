@@ -55,6 +55,7 @@ from ...models import (
 from ...models.Checkitem import CheckitemStatus
 from ...models.ProjectRole import ProjectRoleAction
 from ..AppSignalProjection import card_signal_projections
+from ..CardAppMutation import guard_card_app_mutation
 from ..CardApprovalGate import pending_card_approvals
 from ..CardVerification import VerificationConflict, VerificationSubmission
 from ..CardVisibilityPolicy import CardVisibility, CardVisibilityContext
@@ -1324,6 +1325,7 @@ class CardService(BaseDomainService):
             checkitem.title = card.title
             self.repo.checkitem.update(checkitem)
 
+    @guard_card_app_mutation
     def set_card_completed(
         self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, completed: bool
     ) -> bool | None:
@@ -1502,6 +1504,7 @@ class CardService(BaseDomainService):
             for user in users:
                 notification_service.notify_assigned_to_card(user_or_bot, user, project, card)
 
+    @guard_card_app_mutation
     def cardify_selection(
         self,
         user_or_bot: TUserOrBot,
@@ -1578,6 +1581,7 @@ class CardService(BaseDomainService):
             "link_markdown": link,
         }
 
+    @guard_card_app_mutation
     def convert_description_checkboxes(
         self,
         user_or_bot: TUserOrBot,
@@ -1666,6 +1670,7 @@ class CardService(BaseDomainService):
 
         return [{"anchor": anchor_value, "count": count} for anchor_value, count in sorted(counts.items())]
 
+    @guard_card_app_mutation
     def copy_selection_to_wiki(
         self,
         user_or_bot: TUserOrBot,
@@ -1750,6 +1755,7 @@ class CardService(BaseDomainService):
         next_cursor = page[-1].get_uid() if has_more and page else None
         return {"entries": entries, "has_more": has_more, "next_cursor": next_cursor}
 
+    @guard_card_app_mutation
     def update(
         self,
         user_or_bot: TUserOrBot,
@@ -1847,6 +1853,7 @@ class CardService(BaseDomainService):
 
         return model
 
+    @guard_card_app_mutation
     def change_order(
         self,
         user_or_bot: TUserOrBot,
@@ -1925,6 +1932,7 @@ class CardService(BaseDomainService):
             CardActivityTask.card_moved(user_or_bot, project, card, old_column)
             CardBotTask.card_moved(user_or_bot, project, card, old_column, False)
 
+    @guard_card_app_mutation
     def assign_self(self, user: User, project: TProjectParam, card: TCardParam) -> dict[str, Any]:
         """Assign the authenticated project member additively; never infer an identity."""
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
@@ -1944,6 +1952,7 @@ class CardService(BaseDomainService):
             )
         return {"card_uid": card.get_uid(), "assigned_user_uid": user.get_uid(), "changed": changed}
 
+    @guard_card_app_mutation
     def assign_member(
         self, actor: TUserOrBot, project: TProjectParam, card: TCardParam, assignee_uid: str
     ) -> dict[str, Any]:
@@ -1969,6 +1978,7 @@ class CardService(BaseDomainService):
             self._get_service(NotificationService).notify_assigned_to_card(actor, assignee, project, card)
         return {"changed": changed, "member_uids": [assigned.get_uid() for assigned in users]}
 
+    @guard_card_app_mutation
     def update_assigned_users(
         self,
         user_or_bot: TUserOrBot,
@@ -2022,6 +2032,7 @@ class CardService(BaseDomainService):
         )
         return new_users
 
+    @guard_card_app_mutation
     def update_labels(
         self,
         user_or_bot: TUserOrBot,
@@ -2062,6 +2073,7 @@ class CardService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def archive(self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None) -> bool | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -2081,6 +2093,7 @@ class CardService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def delete(self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None) -> bool:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:

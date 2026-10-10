@@ -43,12 +43,12 @@ from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
 from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execution
 from ...card_workspace.application import get_card_bundle, validate_card_graph_patch
+from ...card_workspace.application.execution_receipts import receipt_history
 from ...card_workspace.domain import CardBundleInclude, CardGraphEdge, CardGraphNewCard, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ...card_workspace.infrastructure.linked_wikis import visible_linked_wikis
 from ..dashboard.DashboardForm import RecentCardsAvailabilityForm
 from .CardAccess import require_visible_card
-from .ExecutionReceiptApi import receipt_history
 from .forms import (
     AssignUsersForm,
     CardifySelectionForm,

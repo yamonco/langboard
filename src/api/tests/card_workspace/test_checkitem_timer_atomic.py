@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
+from langboard_shared.domain.models import User
 from langboard_shared.domain.models.Checkitem import CheckitemStatus
 from langboard_shared.domain.services.factory.CheckitemService import CheckitemService
 from langboard_shared.helpers import InfraHelper
@@ -71,7 +72,14 @@ def test_stop_timer_state_and_dispatch_are_atomic(monkeypatch, mode):
 
     def stop():
         with DbSession.atomic():
-            assert service.change_status(object(), "project", "card", "item", CheckitemStatus.Stopped, now)
+            assert service.change_status(
+                User(id=9, firstname="Test", lastname="Actor", email="test@example.invalid", password="test"),
+                "project",
+                "card",
+                "item",
+                CheckitemStatus.Stopped,
+                now,
+            )
             assert not any(cb.called for cb in callbacks)
             if mode == "outer_rollback":
                 raise RuntimeError("plan failed")
@@ -124,11 +132,19 @@ def test_checked_state_and_events_commit_together(monkeypatch, mode):
         with DbSession.use(readonly=False) as db:
             db.exec(text("UPDATE checked_state SET checked=:v").bindparams(v=int(m.is_checked)))
 
-    service = CheckitemService(lambda _: None, lambda _: None, SimpleNamespace(checkitem=SimpleNamespace(update=update)))
+    service = CheckitemService(
+        lambda _: None, lambda _: None, SimpleNamespace(checkitem=SimpleNamespace(update=update))
+    )
 
     def complete():
         with DbSession.atomic():
-            assert service.toggle_checked(object(), "project", "card", "item", desired_checked=True)
+            assert service.toggle_checked(
+                User(id=9, firstname="Test", lastname="Actor", email="test@example.invalid", password="test"),
+                "project",
+                "card",
+                "item",
+                desired_checked=True,
+            )
             assert not any(cb.called for cb in callbacks)
             if mode == "outer_rollback":
                 raise RuntimeError("Plan failed")

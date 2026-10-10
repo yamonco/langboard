@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.core.db import EditorContentModel  # noqa: E402
-from langboard_shared.domain.models import Card, Checkitem, Checklist, Project  # noqa: E402
+from langboard_shared.domain.models import Card, Checkitem, Checklist, Project, User  # noqa: E402
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
 from langboard_shared.domain.services.factory.CheckitemService import CheckitemService  # noqa: E402
 from langboard_shared.domain.services.factory.ChecklistService import ChecklistService  # noqa: E402
@@ -63,7 +63,7 @@ def test_public_project_checklists_are_filtered_before_limit() -> None:
 
     _service(ChecklistService, repository).get_api_list_only_by_project(project, limit=4)
 
-    assert calls == [{"archive_visible_since": None, "limit": 4, "is_system": False}]
+    assert calls == [{"archive_visible_since": None, "limit": 4, "is_system": False, "context": None}]
 
 
 def test_concurrent_completion_creation_reuses_constraint_winner() -> None:
@@ -96,7 +96,9 @@ def test_concurrent_completion_creation_reuses_constraint_winner() -> None:
 def test_deadline_card_with_description_uses_existing_card_checkbox() -> None:
     card = _card()
     card.description.content = "Delivery details"
-    service = _service(CardService, SimpleNamespace(checklist=SimpleNamespace(get_all_by_card=lambda *_args, **_kwargs: [])))
+    service = _service(
+        CardService, SimpleNamespace(checklist=SimpleNamespace(get_all_by_card=lambda *_args, **_kwargs: []))
+    )
 
     assert service.is_check_card(card) is False
     card.deadline_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -106,7 +108,9 @@ def test_deadline_card_with_description_uses_existing_card_checkbox() -> None:
 def test_deadline_card_with_user_checklist_keeps_checklist_completion() -> None:
     card = _card()
     card.deadline_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
-    repository = SimpleNamespace(checklist=SimpleNamespace(get_all_by_card=lambda *_args, **_kwargs: [Checklist(card_id=1, title="Tasks")]))
+    repository = SimpleNamespace(
+        checklist=SimpleNamespace(get_all_by_card=lambda *_args, **_kwargs: [Checklist(card_id=1, title="Tasks")])
+    )
 
     assert _service(CardService, repository).is_check_card(card) is False
 
@@ -134,8 +138,26 @@ def test_explicit_checked_state_replay_does_not_toggle_or_emit(monkeypatch: pyte
     monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", lambda *_: (project, card, checklist))
     monkeypatch.setattr(item_service, "_CheckitemService__get_records_by_params", lambda *_: (project, card, item))
 
-    assert checklist_service.toggle_checked(None, project, card, checklist, desired_checked=True) is True
-    assert item_service.toggle_checked(None, project, card, item, desired_checked=True) is True
+    assert (
+        checklist_service.toggle_checked(
+            User(firstname="Test", lastname="Actor", email="test@example.invalid", password="test"),
+            project,
+            card,
+            checklist,
+            desired_checked=True,
+        )
+        is True
+    )
+    assert (
+        item_service.toggle_checked(
+            User(firstname="Test", lastname="Actor", email="test@example.invalid", password="test"),
+            project,
+            card,
+            item,
+            desired_checked=True,
+        )
+        is True
+    )
     assert checklist.is_checked is True and item.is_checked is True
 
 
@@ -165,8 +187,26 @@ def test_explicit_checked_state_emits_once_across_replay(monkeypatch: pytest.Mon
         monkeypatch.setattr(owner, method, lambda *_, name=name: calls.append(name))
 
     for _ in range(2):
-        assert checklist_service.toggle_checked(None, project, card, checklist, desired_checked=True) is True
-        assert item_service.toggle_checked(None, project, card, item, desired_checked=True) is True
+        assert (
+            checklist_service.toggle_checked(
+                User(firstname="Test", lastname="Actor", email="test@example.invalid", password="test"),
+                project,
+                card,
+                checklist,
+                desired_checked=True,
+            )
+            is True
+        )
+        assert (
+            item_service.toggle_checked(
+                User(firstname="Test", lastname="Actor", email="test@example.invalid", password="test"),
+                project,
+                card,
+                item,
+                desired_checked=True,
+            )
+            is True
+        )
 
     assert checklist.is_checked is True and item.is_checked is True
     assert calls == [

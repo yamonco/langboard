@@ -439,6 +439,17 @@ stage, checklist and HITL mutation fence must be implemented before exposing the
 configuration surface. PostgreSQL concurrency and native HTTP acceptance for
 that complete fence remain pending.
 
+The first native mutation fence now wraps the existing card update/order/archive,
+assignment/labels, checklist, checkitem and comment mutation services. User-scoped
+calls continue through those operations' existing authorization. Unbound bot
+calls lock current project/card state and reject cards with an active app owner;
+caller-supplied app metadata cannot replace authenticated connection authority.
+Released and unowned cards retain their existing bot behavior. No dedicated app
+mutation grant is implemented yet, and HITL, remaining direct repository writes,
+attachments and execution receipts still require separate fence coverage before
+ownership configuration is exposed. Service tests prove the exercised denial
+paths; they do not prove deployed REST/MCP or PostgreSQL concurrency acceptance.
+
 The native GitHub health worker now has an organization-owned connection
 acceptance regression using actual SQLite lifecycle receipts and leased jobs.
 An active matching organization completes the job and restores resource health.
