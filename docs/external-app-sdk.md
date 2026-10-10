@@ -331,3 +331,11 @@ restoring resource access. Synchronous user-requested health refresh keeps its
 existing path. Local lifecycle tests cover the private-board success, shared-board
 rejection, mid-query sharing race, resource paging and authenticated diagnostics.
 Deployed organization connection onboarding and worker acceptance remain required.
+
+The native GitHub health worker now has an organization-owned connection
+acceptance regression using actual SQLite lifecycle receipts and leased jobs.
+An active matching organization completes the job and restores resource health.
+Suspension before the query produces no external inspection; suspension during
+the query prevents result publication and leaves the job blocked with retained
+unknown access. Three cases pass locally. PostgreSQL schema, real GitHub I/O and
+deployed worker execution remain unverified by this regression.
