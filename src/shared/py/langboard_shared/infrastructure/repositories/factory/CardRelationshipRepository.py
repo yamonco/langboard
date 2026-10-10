@@ -1,6 +1,7 @@
-from typing import Literal, Sequence
+from typing import Literal, Mapping, Sequence
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TGlobalCardRelationshipTypeParam, TProjectParam
 from ....domain.models import Card, CardRelationship, GlobalCardRelationshipType, Project
 from ....helpers import InfraHelper
@@ -42,12 +43,25 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
             relationships = result.all()
         return relationships
 
-    def get_all_by_project(self, project: TProjectParam) -> list[tuple[CardRelationship, GlobalCardRelationshipType]]:
+    def get_all_by_project(
+        self, project: TProjectParam, archive_visible_since: SafeDateTime | None = None
+    ) -> list[tuple[CardRelationship, GlobalCardRelationshipType]]:
         project_id = InfraHelper.convert_id(project)
+
+        visible_card_ids = None
+        if archive_visible_since is not None:
+            visible_card_ids = (
+                SqlBuilder.select.column(Card.id)
+                .where(Card.column("project_id") == project_id)
+                .where(
+                    (Card.column("archived_at") == None)  # noqa: E711
+                    | (Card.column("archived_at") >= archive_visible_since)
+                )
+            )
 
         relationships = []
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
+            query = (
                 SqlBuilder.select.tables(CardRelationship, GlobalCardRelationshipType)
                 .join(
                     GlobalCardRelationshipType,
@@ -60,8 +74,30 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
                 .join(Project, (Card.column("project_id") == Project.column("id")))
                 .where(Project.column("id") == project_id)
             )
+            if visible_card_ids is not None:
+                query = query.where(
+                    CardRelationship.column("card_id_parent").in_(visible_card_ids)
+                    & CardRelationship.column("card_id_child").in_(visible_card_ids)
+                )
+            result = db.exec(query)
             relationships = result.all()
         return relationships
+
+    def get_graph_snapshot(self, project: TProjectParam) -> list[tuple[int, int, int]]:
+        """Return only relationship and endpoint IDs needed for graph validation."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.columns(
+                CardRelationship.column("id"),
+                CardRelationship.column("card_id_parent"),
+                CardRelationship.column("card_id_child"),
+            )
+            .join(Card, CardRelationship.column("card_id_parent") == Card.column("id"))
+            .where(Card.column("project_id") == project_id)
+        )
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query).all()
 
     def get_all_by_card_and_relation(
         self, card: TCardParam, relation: Literal["parent", "child"]
@@ -92,7 +128,11 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
 
     def get_all_related_card_ids(self, project: TProjectParam, cards: Sequence[TCardParam] | None = None):
         project_id = InfraHelper.convert_id(project)
-        query = SqlBuilder.select.column(Card.column("id")).where(Card.column("project_id") == project_id)
+        query = (
+            SqlBuilder.select.column(Card.id)
+            .where(Card.column("project_id") == project_id)
+            .where(Card.column("source_type").is_(None))
+        )
 
         if cards is not None:
             if not isinstance(cards, Sequence) or isinstance(cards, str):
@@ -139,3 +179,36 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
                     | (CardRelationship.column("card_id_child") == card_id)
                 )
             )
+
+    def apply_graph_patch(
+        self,
+        new_cards: Mapping[str, Card],
+        existing_card_ids: Mapping[str, int],
+        add_edges: Sequence[tuple[str, str, int]],
+        remove_relationship_ids: Sequence[int],
+    ) -> list[CardRelationship]:
+        """Persist one validated card-and-relationship patch in one transaction."""
+
+        created_relationships: list[CardRelationship] = []
+        with DbSession.use(readonly=False) as db:
+            if remove_relationship_ids:
+                db.exec(
+                    SqlBuilder.delete.table(CardRelationship).where(
+                        CardRelationship.column("id").in_(remove_relationship_ids)
+                    )
+                )
+            if new_cards:
+                db.insert_all(new_cards.values())
+
+            card_ids = {**existing_card_ids, **{ref: card.id for ref, card in new_cards.items()}}
+            created_relationships = [
+                CardRelationship(
+                    relationship_type_id=relationship_type_id,
+                    card_id_parent=card_ids[parent_ref],
+                    card_id_child=card_ids[child_ref],
+                )
+                for parent_ref, child_ref, relationship_type_id in add_edges
+            ]
+            if created_relationships:
+                db.insert_all(created_relationships)
+        return created_relationships

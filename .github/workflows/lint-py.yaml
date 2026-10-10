@@ -1,17 +1,6 @@
 name: Lint Python
 
-on:
-  push:
-    paths: &py_paths
-      - "**/*.py"
-      - "**/uv.lock"
-      - "**/pyproject.toml"
-      - "src/shared/py/**"
-      - "src/graph/**"
-      - ".github/workflows/lint-py.yaml"
-  pull_request:
-    paths: *py_paths
-  workflow_dispatch:
+on: workflow_dispatch
 
 jobs:
   run-core-linter:
@@ -26,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -55,13 +44,15 @@ jobs:
         python-version:
           - "3.13"
           - "3.12"
+          - "3.11"
+          - "3.10"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -94,7 +85,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv

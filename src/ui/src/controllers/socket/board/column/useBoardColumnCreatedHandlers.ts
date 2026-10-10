@@ -1,6 +1,7 @@
 import { SocketEvents } from "@langboard/core/constants";
 import useSocketHandler, { IBaseUseSocketHandlersProps } from "@/core/helpers/SocketHandler";
-import { ProjectColumn } from "@/core/models";
+import { Project, ProjectColumn } from "@/core/models";
+import applyProjectDockSnapshot from "@/core/helpers/applyProjectDockSnapshot";
 import { ESocketTopic } from "@langboard/core/enums";
 
 export interface IBoardColumnCreatedRawResponse {
@@ -22,6 +23,8 @@ const useBoardColumnCreatedHandlers = ({ callback, projectUID }: IUseBoardColumn
             callback,
             responseConverter: (data) => {
                 ProjectColumn.Model.fromOne(data.column, true);
+                const snapshot = Project.Model.getModel(projectUID)?.latestDockSnapshot;
+                if (snapshot) applyProjectDockSnapshot(projectUID, snapshot);
                 return {};
             },
         },

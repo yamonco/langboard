@@ -1,13 +1,14 @@
-import { memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router";
 import { DashboardStyledLayout } from "@/components/Layout";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
+import Skeleton from "@/components/base/Skeleton";
 import Flex from "@/components/base/Flex";
-import Floating from "@/components/base/Floating";
+import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
 import IconComponent from "@/components/base/IconComponent";
-import ScrollArea from "@/components/base/ScrollArea";
 import Toast from "@/components/base/Toast";
 import { ROUTES } from "@/core/routing/constants";
 import ChatSidebar from "@/pages/BoardPage/components/chat/ChatSidebar";
@@ -19,7 +20,6 @@ import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import BoardPage from "@/pages/BoardPage/BoardPage";
 import BoardCardPage from "@/pages/BoardPage/BoardCardPage";
 import { IHeaderNavItem } from "@/components/Header/types";
-import BoardWikiPage, { SkeletonBoardWikiPage } from "@/pages/BoardPage/BoardWikiPage";
 import BoardSettingsPage, { SkeletonBoardSettingsPage } from "@/pages/BoardPage/BoardSettingsPage";
 import { TBoardViewType, useBoardController } from "@/core/providers/BoardController";
 import useBoardAssignedUsersUpdatedHandlers from "@/controllers/socket/board/useBoardAssignedUsersUpdatedHandlers";
@@ -29,17 +29,18 @@ import { SkeletonBoard } from "@/pages/BoardPage/components/board/Board";
 import useBoardAssignedInternalBotChangedHandlers from "@/controllers/socket/board/useBoardAssignedInternalBotChangedHandlers";
 import useInternalBotUpdatedHandlers from "@/controllers/socket/global/useInternalBotUpdatedHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
-import { GraphApprovalRequestModel, InternalBotModel, Project } from "@/core/models";
+import { GraphApprovalRequestModel, InternalBotModel, Project, ProjectCard } from "@/core/models";
 import { EGraphApprovalScopeTable, EGraphApprovalStatus } from "@/core/models/GraphApprovalRequestModel";
 import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
 import useBoardBotStatusMapHandlers from "@/controllers/socket/board/useBoardBotStatusMapHandlers";
 import { BoardBotScopeList, isBoardBotScopeGraphApprovalOriginType } from "@/pages/BoardPage/components/board/BoardBotScope";
 import useGetProject from "@/controllers/api/board/useGetProject";
+import useGetCards from "@/controllers/api/board/useGetCards";
 import useGetGraphApprovals from "@/controllers/api/board/graphApprovals/useGetGraphApprovals";
 import BoardActivityDialog from "@/pages/BoardPage/components/board/BoardActivityDialog";
+import BoardChangesDialog from "@/pages/BoardPage/components/board/BoardChangesDialog";
 import { cn } from "@/core/utils/ComponentUtils";
 import useCardRelationshipsUpdatedHandlers from "@/controllers/socket/card/useCardRelationshipsUpdatedHandlers";
-import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { ProjectRole } from "@/core/models/roles";
 import { ScreenMap } from "@/core/utils/VariantUtils";
@@ -55,6 +56,16 @@ import useBoardGraphApprovalDeletedHandlers from "@/controllers/socket/board/gra
 import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalRequestedHandlers";
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
+import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
+import { WORKBENCH_OPEN_CHANGES_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
+import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
+
+const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
+const BoardWikiPage = lazy(() => import("@/pages/BoardPage/BoardWikiPage"));
+const BoardRelationsSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardRelationsSidebar"));
+const BoardOutlineSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardOutlineSidebar"));
+const BoardWikiSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardWikiSidebar"));
+const SkeletonBoardWikiPage = () => <Skeleton className="m-4 h-48 w-[min(36rem,calc(100%-2rem))]" />;
 
 const getCurrentPage = (pageRoute?: string): TBoardViewType => {
     switch (pageRoute) {
@@ -62,6 +73,8 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
             return "card";
         case "wiki":
             return "wiki";
+        case "graph":
+            return "graph";
         case "settings":
             return "settings";
         default:
@@ -70,9 +83,11 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
 };
 
 type TBoardSidePanel = "botScope" | "switchProject";
+type TWorkbenchContext = "explorer" | "relations" | "outline" | "wiki";
 
 const BoardProxy = memo((): React.JSX.Element => {
     const { setPageAliasRef } = usePageHeader();
+    const { currentUser } = useAuth();
     const socket = useSocket();
     const navigate = usePageNavigateRef();
     const location = useLocation();
@@ -81,7 +96,7 @@ const BoardProxy = memo((): React.JSX.Element => {
         return <Navigate to={ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND)} replace />;
     }
 
-    const { data, isFetching, error, refetch } = useGetProject({ uid: projectUID });
+    const { data, isFetching, error, refetch } = useGetProject({ uid: projectUID }, { placeholderData: keepPreviousData });
     const { send: sendBoardBotStatusMap } = useBoardBotStatusMapHandlers({ projectUID });
 
     useEffect(() => {
@@ -89,30 +104,29 @@ const BoardProxy = memo((): React.JSX.Element => {
             return;
         }
 
-        let retryTimeout: ReturnType<typeof setTimeout> | undefined;
-
         const { handle } = setupApiErrorHandler({
             [EHttpStatus.HTTP_403_FORBIDDEN]: {
-                after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true }),
+                after: () => {
+                    if (currentUser) closeProject(currentUser.uid, projectUID);
+                    navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true });
+                },
             },
             [EHttpStatus.HTTP_404_NOT_FOUND]: {
-                after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND), { replace: true }),
+                after: () => {
+                    if (currentUser) closeProject(currentUser.uid, projectUID);
+                    navigate(ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND), { replace: true });
+                },
             },
             network: {
                 after: () => {
-                    retryTimeout = setTimeout(() => {
-                        void refetch();
+                    setTimeout(() => {
+                        refetch();
                     }, 5000);
                 },
             },
         });
 
         handle(error);
-        return () => {
-            if (retryTimeout) {
-                clearTimeout(retryTimeout);
-            }
-        };
     }, [error]);
 
     useEffect(() => {
@@ -136,20 +150,28 @@ const BoardProxy = memo((): React.JSX.Element => {
         };
     }, [data, isFetching, pageRoute, projectUID]);
 
-    if (!data || data.project.uid !== projectUID) {
+    if (!data) {
         return <SkeletonBoard />;
     }
 
-    return <BoardProxyDisplay project={data.project} pageRoute={pageRoute} isFetching={isFetching} />;
+    return (
+        <BoardProxyDisplay project={data.project} pageRoute={pageRoute} isFetching={isFetching} isProjectLoading={data.project.uid !== projectUID} />
+    );
 });
 
 interface IBoardProxyDisplayProps {
     project: Project.TModel;
     pageRoute: string;
     isFetching: bool;
+    isProjectLoading: bool;
 }
 
-function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDisplayProps): React.JSX.Element {
+function BoardHeaderCardTitle({ card }: { card: ProjectCard.TModel }) {
+    const title = card.useField("title");
+    return <span className="min-w-0 truncate">{title}</span>;
+}
+
+function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }: IBoardProxyDisplayProps): React.JSX.Element {
     const [t] = useTranslation();
     const { setPageAliasRef } = usePageHeader();
     const socket = useSocket();
@@ -157,19 +179,51 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     const navigate = usePageNavigateRef();
     const [isCardExpanded, setIsCardExpanded] = useState(false);
     const [isActivityDialogOpened, setIsActivityDialogOpened] = useState(false);
+    const [isChangesDialogOpened, setIsChangesDialogOpened] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
+    const [workbenchContextMode, setWorkbenchContextMode] = useState<TWorkbenchContext>("explorer");
+    const workbenchContextTitle = {
+        explorer: "Explorer",
+        relations: t("dashboard.Relations"),
+        outline: t("dashboard.Outline"),
+        wiki: t("board.Wiki"),
+    }[workbenchContextMode];
+    const [isContextOpen, setIsContextOpen] = useState(true);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
     const isBotScopeOpened = activeSidePanel === "botScope";
-    const isSwitchProjectOpened = activeSidePanel === "switchProject";
+    const isSwitchProjectOpened = isMobile ? activeSidePanel === "switchProject" : isContextOpen && !isBotScopeOpened;
     const openActivityDialog = useCallback(() => {
         setIsActivityDialogOpened(true);
     }, [setIsActivityDialogOpened]);
     const toggleBotScope = useCallback(() => {
         setActiveSidePanel((value) => (value === "botScope" ? undefined : "botScope"));
+        setIsContextOpen(true);
     }, [setActiveSidePanel]);
     const toggleSwitchProject = useCallback(() => {
-        setActiveSidePanel((value) => (value === "switchProject" ? undefined : "switchProject"));
-    }, [setActiveSidePanel]);
+        if (isMobile) {
+            setActiveSidePanel((value) => (value === "switchProject" ? undefined : "switchProject"));
+        } else if (isBotScopeOpened) {
+            setActiveSidePanel(undefined);
+            setIsContextOpen(true);
+        } else {
+            setIsContextOpen((open) => !open);
+        }
+    }, [isMobile, isBotScopeOpened]);
+    const showWorkbenchContext = (mode: TWorkbenchContext) => {
+        setWorkbenchContextMode(mode);
+        setIsContextOpen(true);
+        setActiveSidePanel(isMobile ? "switchProject" : undefined);
+    };
+    useEffect(() => {
+        const toggleContext = () => toggleSwitchProject();
+        const openChanges = () => setIsChangesDialogOpened(true);
+        window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
+        window.addEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
+        return () => {
+            window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
+            window.removeEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
+        };
+    }, [toggleSwitchProject]);
     const {
         boardViewType,
         selectCardViewType,
@@ -180,8 +234,10 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
         setChatResizableSidebar,
         setBoardChat,
     } = useBoardController();
-    const isCardPage = !!pageRoute && !["wiki", "settings"].includes(pageRoute);
+    const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
     const projectTitle = project.useField("title");
+    const { data: boardCardsData } = useGetCards({ project_uid: project.uid }, { enabled: isCardPage && !isProjectLoading });
+    const activeCard = boardCardsData && isCardPage ? ProjectCard.Model.getModel(pageRoute) : undefined;
     useGetGraphApprovals(
         {
             project_uid: project.uid,
@@ -190,6 +246,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
         },
         {
             interceptToast: false,
+            enabled: !isProjectLoading,
         }
     );
     const graphApprovalRequestedHandlers = useBoardGraphApprovalRequestedHandlers({ projectUID: project.uid });
@@ -261,6 +318,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                 topic: ESocketTopic.Board,
                 projectUID: project.uid,
                 callback: () => {
+                    if (currentUser) closeProject(currentUser.uid, project.uid);
                     Toast.Add.error(t("project.errors.Project closed."));
                     navigate(ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
                 },
@@ -465,6 +523,15 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             hidden: !!selectCardViewType,
         },
         {
+            name: t("board.Relationship graph"),
+            onClick: () => {
+                setBoardViewType("graph");
+                navigate(ROUTES.BOARD.GRAPH(project.uid), { smooth: true });
+            },
+            active: boardViewType === "graph",
+            hidden: !!selectCardViewType,
+        },
+        {
             name: t("board.Activity"),
             onClick: openActivityDialog,
             active: isActivityDialogOpened,
@@ -541,7 +608,16 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
 
     let PageComponent;
     let SkeletonComponent;
-    switch (boardViewType) {
+    // Route-backed pages must win during the render that observes a location
+    // change. Waiting for the boardViewType effect leaves the previous Wiki
+    // tree mounted for one render, where its auto-selection can overwrite a
+    // card deep link and navigate back to the Wiki.
+    const renderedViewType = pageRoute ? getCurrentPage(pageRoute) : boardViewType;
+    switch (renderedViewType) {
+        case "graph":
+            PageComponent = BoardGraphPage;
+            SkeletonComponent = SkeletonBoard;
+            break;
         case "wiki":
             PageComponent = BoardWikiPage;
             SkeletonComponent = SkeletonBoardWikiPage;
@@ -559,8 +635,122 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     return (
         <>
             <DashboardStyledLayout
-                headerNavs={headerNavs}
-                headerTitle={projectTitle}
+                inert={isProjectLoading}
+                aria-busy={isProjectLoading}
+                headerNavs={[
+                    ...headerNavs,
+                    {
+                        name: t("dashboard.Relations panel"),
+                        onClick: () => showWorkbenchContext("relations"),
+                        active: workbenchContextMode === "relations",
+                    },
+                    {
+                        name: t("dashboard.Outline"),
+                        onClick: () => showWorkbenchContext("outline"),
+                        active: workbenchContextMode === "outline",
+                    },
+                    {
+                        name: t("dashboard.Wiki panel"),
+                        onClick: () => showWorkbenchContext("wiki"),
+                        active: workbenchContextMode === "wiki",
+                    },
+                ]}
+                headerTitle={
+                    <span className="flex min-w-0 items-center gap-1">
+                        <span className="max-w-32 shrink-0 truncate">{projectTitle}</span>
+                        {isCardPage && activeCard && (
+                            <>
+                                <IconComponent icon="chevron-right" size="3" className="shrink-0 text-muted-foreground" />
+                                <BoardHeaderCardTitle card={activeCard} />
+                            </>
+                        )}
+                    </span>
+                }
+                activityRailItems={[
+                    {
+                        icon: "panel-left",
+                        label: "Explorer",
+                        onClick: () =>
+                            workbenchContextMode === "explorer" && !isBotScopeOpened ? toggleSwitchProject() : showWorkbenchContext("explorer"),
+                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "explorer",
+                    },
+                    {
+                        icon: "list-checks",
+                        label: t("dashboard.My Work"),
+                        onClick: () => navigate(`${ROUTES.DASHBOARD.MY_WORK}?project_uid=${project.uid}`),
+                    },
+                    {
+                        icon: "circle-dot",
+                        label: t("dashboard.Changes"),
+                        onClick: () => setIsChangesDialogOpened(true),
+                        active: isChangesDialogOpened,
+                    },
+                    {
+                        icon: "network",
+                        label: t("dashboard.Relations"),
+                        onClick: () => showWorkbenchContext("relations"),
+                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "relations",
+                    },
+                    {
+                        icon: "list-tree",
+                        label: t("dashboard.Outline"),
+                        onClick: () => showWorkbenchContext("outline"),
+                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "outline",
+                    },
+                    {
+                        icon: "notebook-pen",
+                        label: t("board.Wiki"),
+                        onClick: () => showWorkbenchContext("wiki"),
+                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "wiki",
+                    },
+                    ...headerNavs.map((nav, index) => ({
+                        icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
+                        label: String(nav.name),
+                        onClick: nav.onClick!,
+                        active: nav.active,
+                        hidden: nav.hidden || index === 1 || index === 2,
+                        badge: index === 5 ? pendingGraphApprovalBadge : undefined,
+                    })),
+                ]}
+                workbenchContext={
+                    isBotScopeOpened ? (
+                        <BoardBotScopeSidebar project={project} />
+                    ) : workbenchContextMode === "explorer" ? (
+                        <ProjectExplorerSidebar currentProject={project} onNavigate={() => setActiveSidePanel(undefined)} />
+                    ) : (
+                        <Suspense fallback={<Skeleton className="m-3 h-24" />}>
+                            {workbenchContextMode === "relations" ? (
+                                <BoardRelationsSidebar projectUID={project.uid} cardUID={activeCard?.uid} />
+                            ) : workbenchContextMode === "outline" ? (
+                                <BoardOutlineSidebar
+                                    cardUID={activeCard?.uid}
+                                    onRelations={() => showWorkbenchContext("relations")}
+                                    onNavigate={() => isMobile && setActiveSidePanel(undefined)}
+                                />
+                            ) : (
+                                <BoardWikiSidebar projectUID={project.uid} onNavigate={() => setActiveSidePanel(undefined)} />
+                            )}
+                        </Suspense>
+                    )
+                }
+                workbenchContextHidden={!isContextOpen || isMobile || !!selectCardViewType}
+                mobileWorkbenchContext={
+                    isMobile && !selectCardViewType && activeSidePanel
+                        ? {
+                              title: isBotScopeOpened ? "Bots" : workbenchContextTitle,
+                              icon: isBotScopeOpened
+                                  ? "bot"
+                                  : workbenchContextMode === "explorer"
+                                    ? "panel-left"
+                                    : workbenchContextMode === "relations"
+                                      ? "network"
+                                      : workbenchContextMode === "outline"
+                                        ? "list-tree"
+                                        : "notebook-pen",
+                              onClose: () => setActiveSidePanel(undefined),
+                          }
+                        : undefined
+                }
                 resizableSidebar={
                     chatResizableSidebar
                         ? {
@@ -572,28 +762,16 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                 }
                 className="!p-0"
             >
-                {currentUser && project ? (
+                {!isProjectLoading && currentUser && project ? (
                     <Flex
                         position="relative"
                         w="full"
                         h="full"
                         className={cn(
-                            "h-[calc(100dvh_-_theme(spacing.16))] min-h-[calc(100dvh_-_theme(spacing.16))]",
+                            "h-[calc(100dvh-2.75rem)] min-h-[calc(100dvh-2.75rem)]",
                             pageRoute === "settings" ? "overflow-y-auto overflow-x-hidden" : "overflow-hidden"
                         )}
                     >
-                        {!selectCardViewType && (
-                            <BoardSidePanel
-                                activePanel={activeSidePanel}
-                                currentProjectUID={project.uid}
-                                project={project}
-                                onSelectProject={(selectedProjectUID) => {
-                                    setActiveSidePanel(undefined);
-                                    setBoardViewType("board");
-                                    navigate(ROUTES.BOARD.MAIN(selectedProjectUID), { smooth: true });
-                                }}
-                            />
-                        )}
                         <Box className="relative min-w-0 flex-1">
                             <Box
                                 className={cn(
@@ -608,6 +786,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                             </Box>
                             {isCardPage && (
                                 <BoardCardPage
+                                    key={pageRoute}
                                     projectUID={project.uid}
                                     cardUID={pageRoute}
                                     embedded
@@ -615,18 +794,22 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                                     setIsExpanded={setIsCardExpanded}
                                 />
                             )}
-                            {!isCardPage && !selectCardViewType && (
-                                <Floating.Nav
-                                    fixed
-                                    items={floatingNavs.map((nav, index) => ({
-                                        key: index,
-                                        label: nav.name,
-                                        icon: nav.icon,
-                                        badge: nav.badge,
-                                        active: nav.active,
-                                        hidden: nav.hidden,
-                                        onClick: nav.onClick,
-                                    }))}
+                            {!isCardPage && !selectCardViewType && (isMobile || boardChat || renderedViewType === "board") && (
+                                <BoardFloatingNavigation
+                                    project={project}
+                                    currentUser={currentUser}
+                                    dockEnabled={renderedViewType === "board"}
+                                    items={(isMobile ? floatingNavs : floatingNavs.filter((nav) => nav.icon === "message-circle")).map(
+                                        (nav, index) => ({
+                                            key: index,
+                                            label: nav.name,
+                                            icon: nav.icon,
+                                            badge: nav.badge,
+                                            active: nav.active,
+                                            hidden: nav.hidden,
+                                            onClick: nav.onClick,
+                                        })
+                                    )}
                                 />
                             )}
                             <BoardMobileChatOverlay
@@ -643,7 +826,12 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                     <SkeletonComponent />
                 )}
             </DashboardStyledLayout>
-            <BoardActivityDialog isOpened={isActivityDialogOpened} setIsOpened={setIsActivityDialogOpened} />
+            <BoardActivityDialog isOpened={!isProjectLoading && isActivityDialogOpened} setIsOpened={setIsActivityDialogOpened} />
+            <BoardChangesDialog
+                projectUID={project.uid}
+                isOpened={!isProjectLoading && isChangesDialogOpened}
+                setIsOpened={setIsChangesDialogOpened}
+            />
         </>
     );
 }
@@ -662,64 +850,11 @@ function BoardMobileChatOverlay({
     }
 
     return (
-        <Box className="fixed inset-x-0 bottom-[4.75rem] top-16 z-50 overflow-hidden border-t bg-background shadow-2xl md:hidden">
+        <Box className="fixed inset-x-0 bottom-[4.75rem] top-11 z-50 overflow-hidden border-t bg-background shadow-2xl md:hidden">
             <Button variant="ghost" size="icon-sm" className="absolute right-2 top-2 z-10" onClick={onClose}>
                 <IconComponent icon="x" size="5" />
             </Button>
             {children}
-        </Box>
-    );
-}
-
-function BoardSidePanel({
-    activePanel,
-    currentProjectUID,
-    project,
-    onSelectProject,
-}: {
-    activePanel?: TBoardSidePanel;
-    currentProjectUID: string;
-    project: Project.TModel;
-    onSelectProject: (projectUID: string) => void;
-}): React.JSX.Element {
-    const isOpened = !!activePanel;
-    const isBotScope = activePanel === "botScope";
-    const title = isBotScope ? "Bots" : "Switch Project";
-    const icon = isBotScope ? "bot" : "folder-kanban";
-    const widthClassName = isBotScope ? "w-auto md:w-80" : "w-auto md:w-72";
-
-    return (
-        <Box
-            className={cn(
-                "fixed bottom-[4.75rem] left-2 right-2 z-40 h-[60dvh] max-h-[calc(100dvh-7rem)]",
-                "overflow-hidden rounded-2xl border bg-background shadow-lg",
-                "transition-[opacity,transform,width] duration-200 ease-out",
-                "md:static md:h-full md:max-h-none md:shrink-0 md:rounded-none md:border-y-0 md:border-l-0 md:border-r md:shadow-none",
-                isOpened
-                    ? `translate-y-0 opacity-100 md:translate-y-0 ${widthClassName}`
-                    : "pointer-events-none translate-y-4 opacity-0 md:w-0 md:translate-y-0 md:border-r-0"
-            )}
-            aria-hidden={!isOpened}
-        >
-            <Flex
-                direction="col"
-                h="full"
-                className={cn(widthClassName, "transition-transform duration-200 ease-out", isOpened ? "translate-x-0" : "-translate-x-4")}
-            >
-                <Flex items="center" gap="2" className="shrink-0 border-b px-4 py-3" weight="semibold">
-                    <IconComponent icon={icon} size="4" />
-                    <span>{title}</span>
-                </Flex>
-                <Box className="min-h-0 flex-1">
-                    {!isOpened ? (
-                        <></>
-                    ) : isBotScope ? (
-                        <BoardBotScopeSidebar project={project} />
-                    ) : (
-                        <BoardSwitchProjectSidebar currentProjectUID={currentProjectUID} currentProject={project} onSelectProject={onSelectProject} />
-                    )}
-                </Box>
-            </Flex>
         </Box>
     );
 }
@@ -736,72 +871,6 @@ function BoardBotScopeSidebar({ project }: { project: Project.TModel }): React.J
         <Box className="h-full">
             <BoardBotScopeList target={{ target_table: "project", target: project }} className="h-full pb-3" />
         </Box>
-    );
-}
-
-function BoardSwitchProjectSidebar({
-    currentProjectUID,
-    currentProject,
-    onSelectProject,
-}: {
-    currentProjectUID: string;
-    currentProject: Project.TModel;
-    onSelectProject: (projectUID: string) => void;
-}): React.JSX.Element {
-    const { data, isFetching, isLoading } = useGetProjects();
-    const projects = useMemo(() => {
-        const projectMap = new Map<string, Project.TModel>();
-        [currentProject, ...(data?.projects ?? [])].forEach((project) => {
-            projectMap.set(project.uid, project);
-        });
-        return [...projectMap.values()];
-    }, [currentProject, data]);
-
-    return (
-        <ScrollArea.Root className="h-full min-h-0">
-            <Flex direction="col" gap="1" p="2">
-                {(isLoading || isFetching) && projects.length === 0 ? (
-                    <Box className="px-2 py-3 text-sm text-muted-foreground">Loading...</Box>
-                ) : (
-                    projects.map((project) => (
-                        <BoardSwitchProjectSidebarItem
-                            key={project.uid}
-                            project={project}
-                            active={project.uid === currentProjectUID}
-                            onClick={() => onSelectProject(project.uid)}
-                        />
-                    ))
-                )}
-            </Flex>
-        </ScrollArea.Root>
-    );
-}
-
-function BoardSwitchProjectSidebarItem({
-    project,
-    active,
-    onClick,
-}: {
-    project: Project.TModel;
-    active: bool;
-    onClick: () => void;
-}): React.JSX.Element {
-    const title = project.useField("title");
-    const projectType = project.useField("project_type");
-
-    return (
-        <Button
-            type="button"
-            variant={active ? "secondary" : "ghost"}
-            className="h-auto justify-start gap-2 rounded-lg px-3 py-2 text-left"
-            onClick={onClick}
-        >
-            <IconComponent icon="folder-kanban" size="4" />
-            <Box className="min-w-0">
-                <Box className="truncate text-sm font-medium">{title}</Box>
-                <Box className="truncate text-xs text-muted-foreground">{projectType}</Box>
-            </Box>
-        </Button>
     );
 }
 

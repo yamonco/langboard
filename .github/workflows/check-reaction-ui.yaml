@@ -1,0 +1,26 @@
+name: Check Reaction UI
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-reaction-ui.yaml
+      - src/ui/src/components/base/Dock/**
+      - src/ui/src/components/ReactionCounter/**
+      - src/ui/src/pages/BoardPage/components/card/comment/BoardCommentReaction.tsx
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: src/ui/yarn.lock
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile
+        working-directory: src/ui
+      - run: yarn eslint src/components/base/Dock/index.tsx src/components/ReactionCounter/index.tsx src/pages/BoardPage/components/card/comment/BoardCommentReaction.tsx --max-warnings 0
+        working-directory: src/ui

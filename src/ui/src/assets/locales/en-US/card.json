@@ -18,7 +18,12 @@
   "Assign members": "Assign members",
   "Select members...": "Select members...",
   "Members": "Members",
+  "Created by {{name}}": "Created by {{name}}",
   "Deadline": "Deadline",
+  "Checklist progress: {{completed}} of {{total}} complete": "Checklist progress: {{completed}} of {{total}} complete",
+  "Deadline {{date}}": "Deadline {{date}}",
+  "Due within a day": "Due within a day",
+  "Overdue": "Overdue",
   "Set deadline": "Set deadline",
   "No deadline": "No deadline",
   "Description": "Description",
@@ -83,12 +88,18 @@
   "No comments": "No comments",
   "Added {date}": "Added {{date}}",
   "Add a comment as {firstname} {lastname}": "Add a comment as {{firstname}} {{lastname}}",
+  "Comment on selection": "Comment",
+  "Open anchored comment": "Open anchored comment",
   "Show fewer attachments": "Show fewer attachments",
   "Show all attachments ({attachments} hidden)": "Show all attachments ({{attachments}} hidden)",
   "Show fewer checklists": "Show fewer checklists",
   "Show all checklists ({checklists} hidden)": "Show all checklists ({{checklists}} hidden)",
   "Parent cards": "Parent cards",
   "Child cards": "Child cards",
+  "Connect parent card": "Connect parent card",
+  "Connect child card": "Connect child card",
+  "Connect cards": "Connect cards",
+  "Choose a relationship type for {source} and {target}.": "Choose a relationship type for {{source}} and {{target}}.",
   "Select cards": "Select cards",
   "errors": {
     "File name cannot be empty.": "File name cannot be empty.",
@@ -103,5 +114,8 @@
     "You have unsaved card changes.\nLeaving now will discard them.": "You have unsaved card changes.\nLeaving now will discard them.",
     "Keep editing": "Keep editing",
     "Discard changes": "Discard changes"
-  }
+  },
+  "Mark as done": "Mark as done",
+  "Mark as not done": "Mark as not done",
+  "Fill the body to turn this into a normal card": "Fill the body to turn this into a normal card"
 }

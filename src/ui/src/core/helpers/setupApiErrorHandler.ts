@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { AxiosError, isAxiosError } from "axios";
+import { AxiosError, isAxiosError, isCancel } from "axios";
 import { t } from "i18next";
 import Toast from "@/components/base/Toast";
 import { Utils } from "@langboard/core/utils";
@@ -37,7 +37,7 @@ const DEFAULT_CONFIGS: IApiErrorHandlerMap = {
         toast: true,
     },
     code: {
-        message: (code) => t(`errors.requests.${code}`),
+        message: (code) => t(`errors.requests.${code}`, { defaultValue: t("errors.Internal server error") }),
         toast: true,
     },
     nonApi: {
@@ -113,6 +113,7 @@ const setupApiErrorHandler = (configs: IApiErrorHandlerMap, messageRef?: { messa
     };
 
     const handle = <T>(error: T) => {
+        if (isCancel(error)) return;
         const [handler, after] = getHandler(error);
         const result = handler();
         after();
@@ -120,6 +121,7 @@ const setupApiErrorHandler = (configs: IApiErrorHandlerMap, messageRef?: { messa
     };
 
     const handleAsync = async <T>(error: T) => {
+        if (isCancel(error)) return;
         const [handler, after] = getHandler(error);
         const result = await handler();
         await after();

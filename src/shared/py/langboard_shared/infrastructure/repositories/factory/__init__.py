@@ -11,6 +11,7 @@ from .CardAttachmentRepository import CardAttachmentRepository
 from .CardBotDefaultScopeRepository import CardBotDefaultScopeRepository
 from .CardBotScopeRepository import CardBotScopeRepository
 from .CardCommentRepository import CardCommentRepository
+from .CardContentBlockRepository import CardContentBlockRepository
 from .CardRelationshipRepository import CardRelationshipRepository
 from .CardRepository import CardRepository
 from .ChatHistoryRepository import ChatHistoryRepository
@@ -26,6 +27,7 @@ from .McpToolGroupRepository import McpToolGroupRepository
 from .McpToolGroupUsageRepository import McpToolGroupUsageRepository
 from .MetadataRepository import MetadataRepository
 from .NotificationScheduleRuleRepository import NotificationScheduleRuleRepository
+from .OrganizationRepository import OrganizationRepository
 from .ProjectAssignedInternalBotRepository import ProjectAssignedInternalBotRepository
 from .ProjectAssignedUserRepository import ProjectAssignedUserRepository
 from .ProjectBotDefaultScopeRepository import ProjectBotDefaultScopeRepository
@@ -46,6 +48,7 @@ from .ReactionRepository import ReactionRepository
 from .RoleRepository import RoleRepository
 from .ScimGroupMemberRepository import ScimGroupMemberRepository
 from .ScimGroupRepository import ScimGroupRepository
+from .UserCardReadStateRepository import UserCardReadStateRepository
 from .UserEmailRepository import UserEmailRepository
 from .UserGroupAssignedEmailRepository import UserGroupAssignedEmailRepository
 from .UserGroupRepository import UserGroupRepository
@@ -72,6 +75,7 @@ __all__ = [
     "CardBotDefaultScopeRepository",
     "CardBotScopeRepository",
     "CardCommentRepository",
+    "CardContentBlockRepository",
     "CardRelationshipRepository",
     "CardRepository",
     "ChatHistoryRepository",
@@ -87,6 +91,7 @@ __all__ = [
     "McpToolGroupUsageRepository",
     "MetadataRepository",
     "NotificationScheduleRuleRepository",
+    "OrganizationRepository",
     "ProjectAssignedInternalBotRepository",
     "ProjectAssignedUserRepository",
     "ProjectBotDefaultScopeRepository",
@@ -107,6 +112,7 @@ __all__ = [
     "RoleRepository",
     "ScimGroupMemberRepository",
     "ScimGroupRepository",
+    "UserCardReadStateRepository",
     "UserEmailRepository",
     "UserGroupAssignedEmailRepository",
     "UserGroupRepository",

@@ -32,18 +32,33 @@ class S3Storage(BaseStorage):
         if not filename:
             return None
 
+        return self.upload_named(file, filename, storage_name, self.get_random_filename(filename))
+
+    def upload_named(
+        self,
+        file: BinaryIO,
+        filename: str,
+        storage_name: StorageName,
+        stored_filename: str,
+    ) -> FileModel | None:
+        if not filename or not stored_filename or "/" in stored_filename:
+            return None
+
         s3_client = None
         try:
             s3_client = self._connect_client()
-            new_filename = self.get_random_filename(filename)
-            s3_client.upload_fileobj(Fileobj=file, Bucket=Env.S3_BUCKET_NAME, Key=f"{storage_name}/{new_filename}")
+            s3_client.upload_fileobj(
+                Fileobj=file,
+                Bucket=Env.S3_BUCKET_NAME,
+                Key=f"{storage_name.value}/{stored_filename}",
+            )
 
             return FileModel(
                 storage_type=S3Storage.storage_type,
                 storage_name=storage_name.value,
                 original_filename=filename,
-                filename=new_filename,
-                path=f"/file/{self._encrypt_storage_type(S3Storage.storage_type)}/{storage_name.value}/{new_filename}",
+                filename=stored_filename,
+                path=f"/file/{self._encrypt_storage_type(S3Storage.storage_type)}/{storage_name.value}/{stored_filename}",
             )
         except Exception:
             return None

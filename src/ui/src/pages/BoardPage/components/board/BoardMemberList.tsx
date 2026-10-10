@@ -11,8 +11,9 @@ import { useBoard } from "@/core/providers/BoardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import { Routing } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import BoardMemberDrag from "@/pages/BoardPage/components/board/BoardMemberDrag";
 
 export interface IBoardMemberListProps {
     isSelectCardView: bool;
@@ -20,7 +21,7 @@ export interface IBoardMemberListProps {
 
 const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
     const [t] = useTranslation();
-    const { project, currentUser, hasRoleAction } = useBoard();
+    const { project, currentUser, hasRoleAction, canDragCards } = useBoard();
     const canEdit = hasRoleAction(ProjectRole.EAction.Update);
     const ownerUID = project.useField("owner_uid");
     const allMemebers = project.useForeignFieldArray("all_members");
@@ -31,6 +32,7 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
     const [candidateSearchInput, setCandidateSearchInput] = useState("");
     const [candidateSearchQuery, setCandidateSearchQuery] = useState("");
     const [memberCandidates, setMemberCandidates] = useState<User.TModel[]>([]);
+    const directCandidateUIDsRef = useRef(new Set<string>());
     const visibleMembers = useMemo(() => allMemebers.filter((model) => !model.isDeletedUser()), [allMemebers]);
     const allSelectables = useMemo(() => {
         const userMap = new Map<string, User.TModel>();
@@ -50,7 +52,7 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
         return [...userMap.values()];
     }, [currentUserUID, memberCandidates, ownerUID, visibleMembers]);
     const showableAssignees = useMemo(
-        () => [...visibleMembers.filter((model) => model.isValidUser() && !invitedMemberUIDs.includes(model.uid))].slice(0, 6),
+        () => visibleMembers.filter((model) => model.isValidUser() && !invitedMemberUIDs.includes(model.uid)),
         [invitedMemberUIDs, visibleMembers]
     );
     const selectedAssignees = useMemo(() => visibleMembers.filter((model) => model.uid !== ownerUID), [ownerUID, visibleMembers]);
@@ -152,7 +154,9 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
         })
             .then((res) => {
                 if (!cancelled) {
-                    setMemberCandidates(User.Model.fromArray(res.data.users ?? [], true));
+                    const candidates = User.Model.fromArray(res.data.users ?? [], true);
+                    candidates.forEach((candidate) => directCandidateUIDsRef.current.add(candidate.uid));
+                    setMemberCandidates(candidates);
                 }
             })
             .catch(() => {
@@ -168,15 +172,16 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
 
     const save = (items: (string | User.TModel)[]) => {
         const mergedItems = hiddenCurrentUserAssignee ? [...items, hiddenCurrentUserAssignee] : items;
+        const directCandidateUIDs = directCandidateUIDsRef.current;
         const promise = updateProjectAssignedUsersMutateAsync({
             uid: project.uid,
             emails: mergedItems.flatMap((item) => {
                 if (Utils.Type.isString(item)) {
                     return [item];
                 }
-
-                return "email" in item && Utils.Type.isString(item.email) ? [item.email] : [];
+                return !directCandidateUIDs.has(item.uid) && "email" in item && Utils.Type.isString(item.email) ? [item.email] : [];
             }),
+            member_uids: mergedItems.flatMap((item) => (!Utils.Type.isString(item) && directCandidateUIDs.has(item.uid) ? [item.uid] : [])),
         });
 
         Toast.Add.promise(promise, {
@@ -220,6 +225,13 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
                 size: { initial: "sm", xs: "default" },
                 spacing: "3",
                 listAlign: "start",
+                renderAvatar: canDragCards
+                    ? (member, avatar) => (
+                          <BoardMemberDrag projectUID={project.uid} memberUID={member.uid}>
+                              {avatar}
+                          </BoardMemberDrag>
+                      )
+                    : undefined,
             }}
             tagContentProps={{
                 scope: {

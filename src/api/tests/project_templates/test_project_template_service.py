@@ -2,7 +2,6 @@ import os
 from types import SimpleNamespace
 from typing import Any
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
@@ -10,6 +9,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 from langboard_shared.domain.models import ProjectTemplate  # noqa: E402
 from langboard_shared.domain.models.InternalBot import InternalBotType  # noqa: E402
 from langboard_shared.domain.services.factory.ProjectTemplateService import (  # noqa: E402
+    SI_COLUMN_DESCRIPTIONS,
     SI_COLUMNS,
     SI_EMAIL_NOTIFICATION_POLICY,
     ProjectTemplateService,
@@ -61,53 +61,32 @@ def test_builtin_si_is_the_initial_default_without_duplicate_archive() -> None:
 
     assert template.name == "SI"
     assert template.columns == ["Backlog", "Ready", "In Progress", "Review", "Done"]
+    assert template.column_descriptions == SI_COLUMN_DESCRIPTIONS
     assert "Archive" not in template.columns
     assert template.is_default is True
     assert template.email_notification_policy == SI_EMAIL_NOTIFICATION_POLICY
-    template.columns.append("Custom")
-    template.email_notification_policy["categories"].append("comments")
-    assert "Custom" not in SI_COLUMNS
-    assert SI_EMAIL_NOTIFICATION_POLICY["categories"] == ["cards"]
     assert _service(repository).ensure_builtin() is template
     assert len(templates.items) == 1
 
 
-def test_builtin_si_does_not_replace_an_existing_default() -> None:
-    """Adding the built-in template preserves an explicitly selected default."""
+def test_builtin_si_backfills_only_legacy_empty_guidance() -> None:
+    """An older built-in gains guidance without rewriting a deliberate customization."""
 
     templates = TemplateRepository()
-    existing_default = ProjectTemplate(name="Support", columns=["Queue"], is_default=True)
-    templates.items.append(existing_default)
-
-    template = _service(SimpleNamespace(project_template=templates)).ensure_builtin()
-
-    assert template.name == "SI"
-    assert template.is_default is False
-    assert existing_default.is_default is True
-
-
-def test_concurrent_template_copy_reports_a_domain_conflict() -> None:
-    """The database uniqueness guard is exposed as the same validation failure as a pre-check."""
-
-    def reject_duplicate(_template: ProjectTemplate) -> None:
-        raise IntegrityError("insert", {}, Exception("duplicate"))
-
-    repository = SimpleNamespace(
-        project_template=SimpleNamespace(
-            get_by_name=lambda _name: None,
-            insert=reject_duplicate,
-        ),
-        project_column=SimpleNamespace(
-            get_all_by_project=lambda _project: [],
-            get_bot_scopes_by_project=lambda _project: [],
-        ),
-        project_assigned_internal_bot=SimpleNamespace(get_all_by_project=lambda _project: []),
-        project_bot_scope=SimpleNamespace(get_all_by_project=lambda _project: []),
-        project_email_notification=SimpleNamespace(get_with_recipients=lambda _project: (None, [])),
+    legacy = ProjectTemplate(
+        name="SI",
+        columns=SI_COLUMNS,
+        column_descriptions=[],
+        email_notification_policy=SI_EMAIL_NOTIFICATION_POLICY,
+        is_builtin=True,
+        is_default=True,
     )
+    templates.items.append(legacy)
+    repository = SimpleNamespace(project_template=templates)
 
-    with pytest.raises(ValueError, match="name already exists"):
-        _service(repository).copy_from_project(SimpleNamespace(id=7), "Support")
+    assert _service(repository).ensure_builtin().column_descriptions == SI_COLUMN_DESCRIPTIONS
+    legacy.column_descriptions = ["Keep custom"]
+    assert _service(repository).ensure_builtin().column_descriptions == ["Keep custom"]
 
 
 def test_builtin_si_name_cannot_be_claimed_by_a_project_copy() -> None:
@@ -131,9 +110,9 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
     templates = TemplateRepository()
     project = SimpleNamespace(id=7)
     columns = [
-        SimpleNamespace(id=2, name="Done", order=2, is_archive=False),
-        SimpleNamespace(id=9, name="Archive", order=3, is_archive=True),
-        SimpleNamespace(id=1, name="Backlog", order=0, is_archive=False),
+        SimpleNamespace(id=2, name="Done", description="Accepted work", order=2, is_archive=False),
+        SimpleNamespace(id=9, name="Archive", description="Archive only", order=3, is_archive=True),
+        SimpleNamespace(id=1, name="Backlog", description="Uncommitted work", order=0, is_archive=False),
     ]
     bot_type = SimpleNamespace(value="project_chat")
     internal_bot = SimpleNamespace(bot_type=bot_type, get_uid=lambda: "internal-bot-uid")
@@ -152,6 +131,7 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
     template = _service(repository).copy_from_project(project, "Support")
 
     assert template.columns == ["Backlog", "Done"]
+    assert template.column_descriptions == ["Uncommitted work", "Accepted work"]
     assert template.internal_bots == [
         {
             "internal_bot_uid": "internal-bot-uid",

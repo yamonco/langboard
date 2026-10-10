@@ -25,6 +25,10 @@ const routes: RouteObject[] = [
                 element: <></>,
             },
             {
+                path: ROUTES.DASHBOARD.MY_WORK,
+                element: <></>,
+            },
+            {
                 path: ROUTES.DASHBOARD.TRACKING,
                 element: <></>,
             },
@@ -33,6 +37,7 @@ const routes: RouteObject[] = [
                 element: <></>,
             },
             ...createModalRoutes("cards"),
+            ...createModalRoutes("my-work"),
             ...createModalRoutes("tracking"),
             ...createModalRoutes("projects", ":tabType"),
         ],

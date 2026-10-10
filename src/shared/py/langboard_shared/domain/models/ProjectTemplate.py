@@ -1,5 +1,5 @@
 from typing import Any
-from sqlalchemy import JSON
+from sqlalchemy import JSON, Index
 from ...core.db import ApiField, BaseDbModel, Field
 
 
@@ -7,7 +7,10 @@ class ProjectTemplate(BaseDbModel, table=True):
     """Reusable project structure and automation snapshot."""
 
     name: str = Field(nullable=False, unique=True, index=True, api_field=ApiField())
+    __table_args__ = (Index("ix_project_template_name", "name", unique=True),)
     columns: list[str] = Field(default_factory=list, nullable=False, sa_type=JSON, api_field=ApiField())
+    # Aligned with columns by position, preserving distinct descriptions for duplicate names.
+    column_descriptions: list[str] = Field(default_factory=list, nullable=False, sa_type=JSON, api_field=ApiField())
     internal_bots: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)
     project_bot_scopes: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)
     column_bot_scopes: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)

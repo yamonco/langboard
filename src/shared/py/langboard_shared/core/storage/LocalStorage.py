@@ -35,19 +35,30 @@ class LocalStorage(BaseStorage):
         if not filename:
             return None
 
+        return self.upload_named(file, filename, storage_name, self.get_random_filename(filename))
+
+    def upload_named(
+        self,
+        file: BinaryIO,
+        filename: str,
+        storage_name: StorageName,
+        stored_filename: str,
+    ) -> FileModel | None:
+        if not filename or not stored_filename or Path(stored_filename).name != stored_filename:
+            return None
+
         storage_path = Env.LOCAL_STORAGE_DIR / storage_name.value
         storage_path.mkdir(parents=True, exist_ok=True)
 
-        new_filename = self.get_random_filename(filename)
-        with open(storage_path / new_filename, "wb") as f:
+        with open(storage_path / stored_filename, "wb") as f:
             copyfileobj(file, f)
 
         return FileModel(
             storage_type=LocalStorage.storage_type,
             storage_name=storage_name.value,
             original_filename=Path(filename).name,
-            filename=new_filename,
-            path=f"/file/{self._encrypt_storage_type(LocalStorage.storage_type)}/{storage_name.value}/{new_filename}",
+            filename=stored_filename,
+            path=f"/file/{self._encrypt_storage_type(LocalStorage.storage_type)}/{storage_name.value}/{stored_filename}",
         )
 
     def delete(self, file_model: FileModel) -> bool:
@@ -55,9 +66,9 @@ class LocalStorage(BaseStorage):
             return False
 
         try:
-            unlink(Env.LOCAL_STORAGE_DIR / file_model.filename)
+            unlink(Env.LOCAL_STORAGE_DIR / file_model.storage_name / file_model.filename)
             return True
-        except Exception:
+        except OSError:
             return False
 
     def is_connectable(self) -> bool:

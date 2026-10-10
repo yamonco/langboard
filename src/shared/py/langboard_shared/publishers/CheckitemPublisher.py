@@ -17,6 +17,20 @@ from ..domain.models.Checkitem import CheckitemStatus
 @staticclass
 class CheckitemPublisher(BaseSocketPublisher):
     @staticmethod
+    def board_progress_changed(project: Project, card: Card) -> None:
+        project_uid = project.get_uid()
+        model = {"card_uid": card.get_uid()}
+        CheckitemPublisher.put_dispather(
+            model,
+            SocketPublishModel(
+                topic=SocketTopic.Board,
+                topic_id=project_uid,
+                event=f"board:card:checklist:progress:changed:{project_uid}",
+                data_keys=["card_uid"],
+            ),
+        )
+
+    @staticmethod
     def created(card: Card, checklist: Checklist, checkitem: Checkitem):
         topic_id = card.get_uid()
         model = {

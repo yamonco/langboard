@@ -1,4 +1,4 @@
-import { memo, useMemo, useReducer } from "react";
+import { memo, useMemo, useReducer, useState } from "react";
 import { IHeaderNavItem } from "@/components/Header/types";
 import { DashboardStyledLayout } from "@/components/Layout";
 import { ISidebarNavItem } from "@/components/Sidebar/types";
@@ -7,16 +7,27 @@ import { ROUTES } from "@/core/routing/constants";
 import ProjectPage from "@/pages/DashboardPage/ProjectPage";
 import CardsPage, { SkeletonCardsPage } from "@/pages/DashboardPage/CardsPage";
 import TrackingPage, { SkeletonTrackingPage } from "@/pages/DashboardPage/TrackingPage";
+import MyWorkPage from "@/pages/DashboardPage/MyWorkPage";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { Navigate } from "react-router";
 import { DashboardProvider } from "@/core/providers/DashboardProvider";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { Project } from "@/core/models";
 import { useTranslation } from "react-i18next";
-import { SkeletonProjecTabs } from "@/pages/DashboardPage/components/ProjectTabs";
+import { SkeletonProjectDiscoveryPage } from "@/pages/DashboardPage/components/ProjectDiscoveryPage";
+import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
+import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
+import { WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
+import { useEffect } from "react";
 
 const DashboardProxy = memo((): React.JSX.Element => {
     const [t] = useTranslation();
+    const [isExplorerOpen, setIsExplorerOpen] = useState(true);
+    useEffect(() => {
+        const toggle = () => setIsExplorerOpen((open) => !open);
+        window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
+        return () => window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
+    }, []);
     const navigate = usePageNavigateRef();
     const [pageType, tabName] = location.pathname.split("/").slice(2);
     const { data, isFetching } = useGetAllStarredProjects();
@@ -87,6 +98,11 @@ const DashboardProxy = memo((): React.JSX.Element => {
                 navigate(`${location.pathname}/my-activity`);
             },
         },
+        {
+            icon: "search",
+            name: t("dashboard.Quick switcher"),
+            onClick: () => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT)),
+        },
     ];
 
     let pageContent;
@@ -100,27 +116,58 @@ const DashboardProxy = memo((): React.JSX.Element => {
             pageContent = <TrackingPage />;
             skeletonContent = <SkeletonTrackingPage />;
             break;
+        case "my-work":
+            pageContent = <MyWorkPage />;
+            skeletonContent = <SkeletonCardsPage />;
+            break;
         case "projects":
             switch (tabName) {
                 case "all":
                 case "starred":
                 case "recent":
                 case "unstarred":
-                    pageContent = (
-                        <ProjectPage updateStarredProjects={updateStarredProjects} currentTab={tabName} scrollAreaUpdater={scrollAreaUpdater} />
-                    );
-                    skeletonContent = <SkeletonProjecTabs />;
+                    pageContent = <ProjectPage updateStarredProjects={updateStarredProjects} scrollAreaUpdater={scrollAreaUpdater} />;
+                    skeletonContent = <SkeletonProjectDiscoveryPage />;
                     break;
                 default:
-                    return <Navigate to={ROUTES.DASHBOARD.PROJECTS.STARRED} />;
+                    return <Navigate to={ROUTES.DASHBOARD.PROJECTS.ALL} />;
             }
             break;
         default:
-            return <Navigate to={ROUTES.DASHBOARD.PROJECTS.STARRED} />;
+            return <Navigate to={ROUTES.DASHBOARD.PROJECTS.ALL} />;
     }
 
     return (
-        <DashboardStyledLayout headerNavs={headerNavs} sidebarNavs={sidebarNavs} scrollAreaMutable={scrollAreaMutable} className="overflow-x-hidden">
+        <DashboardStyledLayout
+            headerNavs={headerNavs}
+            headerTitle={
+                pageType === "cards"
+                    ? t("dashboard.Cards")
+                    : pageType === "tracking"
+                      ? t("dashboard.Tracking")
+                      : pageType === "my-work"
+                        ? t("dashboard.My Work")
+                        : t("dashboard.Projects")
+            }
+            activityRailItems={[
+                { icon: "panel-left", label: "Explorer", onClick: () => setIsExplorerOpen((open) => !open), active: isExplorerOpen },
+                { icon: "folder-kanban", label: t("dashboard.Projects"), onClick: headerNavs[0].onClick!, active: pageType === "projects" },
+                { icon: "layout-dashboard", label: t("dashboard.Cards"), onClick: headerNavs[1].onClick!, active: pageType === "cards" },
+                {
+                    icon: "list-checks",
+                    label: t("dashboard.My Work"),
+                    onClick: () => navigate(ROUTES.DASHBOARD.MY_WORK),
+                    active: pageType === "my-work",
+                },
+                { icon: "star", label: t("dashboard.Starred"), onClick: () => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT)) },
+                { icon: "clock", label: t("dashboard.Tracking"), onClick: headerNavs[3].onClick!, active: pageType === "tracking" },
+                ...sidebarNavs.map((item) => ({ icon: item.icon, label: item.name, onClick: item.onClick! })),
+            ]}
+            workbenchContext={<ProjectExplorerSidebar />}
+            workbenchContextHidden={!isExplorerOpen}
+            scrollAreaMutable={scrollAreaMutable}
+            className="overflow-x-hidden"
+        >
             {currentUser ? <DashboardProvider currentUser={currentUser}>{pageContent}</DashboardProvider> : skeletonContent}
         </DashboardStyledLayout>
     );

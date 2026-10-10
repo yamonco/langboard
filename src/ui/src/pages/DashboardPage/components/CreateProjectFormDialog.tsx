@@ -14,7 +14,7 @@ import { IProjectTemplate, useGetProjectTemplates } from "@/controllers/api/sett
 import useForm from "@/core/hooks/form/useForm";
 import { Project } from "@/core/models";
 import { ROUTES } from "@/core/routing/constants";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 
 export interface ICreateProjectFormDialogProps {
@@ -29,7 +29,8 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
     const { mutateAsync: getTemplates } = useGetProjectTemplates({ interceptToast: true });
     const [templates, setTemplates] = useState<IProjectTemplate[]>([]);
     const [templateName, setTemplateName] = useState<string>();
-    const [projectType, setProjectType] = useState("");
+    const projectTypeRef = useRef("");
+    const projectTypeInputRef = useRef<HTMLInputElement>(null);
     const { errors, isValidating, handleSubmit, formRef } = useForm({
         errorLangPrefix: "project.errors",
         schema: {
@@ -44,25 +45,21 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
         },
         useDefaultBadRequestHandler: true,
     });
+
     useEffect(() => {
-        if (!opened) {
-            setProjectType("");
-            return;
-        }
-        let isActive = true;
+        if (!opened || templates.length) return;
         getTemplates({})
             .then((items) => {
-                if (!isActive) return;
                 setTemplates(items);
                 setTemplateName(items.find((item) => item.is_default)?.name ?? items[0]?.name);
             })
-            .catch(() => {
-                if (isActive) Toast.Add.error(t("errors.Internal server error"));
-            });
-        return () => {
-            isActive = false;
-        };
+            .catch(() => Toast.Add.error(t("errors.Internal server error")));
     }, [opened]);
+
+    const setProjectType = (value: string) => {
+        projectTypeRef.current = value;
+        projectTypeInputRef.current!.value = value;
+    };
 
     return (
         <Dialog.Root open={opened} onOpenChange={setOpened}>
@@ -94,15 +91,15 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
                         />
                     </Form.Field>
                     <Form.Field name="project_type">
-                        <Input type="hidden" name="project_type" value={projectType} />
+                        <Input type="hidden" name="project_type" value={projectTypeRef.current} ref={projectTypeInputRef} />
                         <AutoComplete
-                            selectedValue={projectType}
+                            selectedValue=""
                             onValueChange={setProjectType}
                             items={Project.TYPES.map((project_type) => ({
                                 value: project_type,
                                 label: t(project_type === "Other" ? "common.Other" : `project.types.${project_type}`),
                             }))}
-                            emptyMessage={projectType}
+                            emptyMessage={projectTypeRef.current ?? ""}
                             placeholder={t("project.Project type")}
                             disabled={isValidating}
                             required
@@ -112,14 +109,14 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
                     </Form.Field>
                     <Form.Field name="template_name">
                         {templateName && <Input type="hidden" name="template_name" value={templateName} />}
-                        <Select.Root value={templateName ?? ""} onValueChange={setTemplateName} disabled={isValidating || !templates.length}>
+                        <Select.Root value={templateName} onValueChange={setTemplateName} disabled={isValidating || !templates.length}>
                             <Select.Trigger className="mt-4">
                                 <Select.Value placeholder={t("settings.Select a template")} />
                             </Select.Trigger>
                             <Select.Content>
                                 {templates.map((template) => (
                                     <Select.Item key={template.uid} value={template.name}>
-                                        {template.name}: {template.columns.join(" -> ")}
+                                        {template.name} · {template.columns.join(" → ")}
                                     </Select.Item>
                                 ))}
                             </Select.Content>

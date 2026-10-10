@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 from ..core.publisher import BaseSocketPublisher, SocketPublishModel
 from ..core.routing import SocketTopic
 from ..core.types import SafeDateTime
@@ -8,6 +8,21 @@ from ..domain.models import Project, ProjectColumn
 
 @staticclass
 class ProjectColumnPublisher(BaseSocketPublisher):
+    @staticmethod
+    def dock_changed(project: Project, dock: dict[str, Any]):
+        topic_id = project.get_uid()
+        ProjectColumnPublisher.put_dispather(
+            dock,
+            [
+                SocketPublishModel(
+                    topic=SocketTopic.Board,
+                    topic_id=topic_id,
+                    event=f"board:column:dock:changed:{topic_id}",
+                    data_keys=list(dock.keys()),
+                )
+            ],
+        )
+
     @staticmethod
     def created(project: Project, column: ProjectColumn):
         model = {
@@ -59,6 +74,29 @@ class ProjectColumnPublisher(BaseSocketPublisher):
         ]
 
         ProjectColumnPublisher.put_dispather(model, publish_models)
+
+    @staticmethod
+    def description_changed(project: Project, column: ProjectColumn) -> None:
+        """Publish guidance changes without impersonating a rename or moving cards."""
+        model = {"uid": column.get_uid(), "description": column.description}
+        topic_id = project.get_uid()
+        ProjectColumnPublisher.put_dispather(
+            model,
+            [
+                SocketPublishModel(
+                    topic=SocketTopic.Board,
+                    topic_id=topic_id,
+                    event=f"board:column:description:changed:{topic_id}",
+                    data_keys=list(model.keys()),
+                ),
+                SocketPublishModel(
+                    topic=SocketTopic.Dashboard,
+                    topic_id=topic_id,
+                    event=f"dashboard:project:column:description:changed:{topic_id}",
+                    data_keys=list(model.keys()),
+                ),
+            ],
+        )
 
     @staticmethod
     def order_changed(project: Project, column: ProjectColumn):

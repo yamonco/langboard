@@ -20,6 +20,10 @@ export interface IResizableSidebarProps {
     floatingHidden?: bool;
     hidden?: bool;
     widthCssVariable?: string;
+    compactHeight?: bool;
+    minWidth?: number;
+    maxWidth?: number;
+    showCollapseButton?: bool;
 }
 
 function ResizableSidebar({
@@ -34,6 +38,10 @@ function ResizableSidebar({
     floatingHidden,
     hidden,
     widthCssVariable,
+    compactHeight,
+    minWidth,
+    maxWidth,
+    showCollapseButton = true,
 }: IResizableSidebarProps) {
     const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
@@ -98,6 +106,10 @@ function ResizableSidebar({
 
         const handleResizing = (event: MouseEvent) => {
             const width = originalWidth + (event.pageX - originalMouseX);
+            if (minWidth) {
+                setCollapsedAttr(false, sidebar, Math.max(minWidth, Math.min(maxWidth ?? width, width)));
+                return;
+            }
             if (width > collapsableWidth) {
                 setCollapsedAttr(false, sidebar, width);
             } else if (width <= collapsableWidth && width >= (collapsableWidth + collapsedWidth) / 2) {
@@ -126,7 +138,10 @@ function ResizableSidebar({
             <Box
                 display={{ initial: "block", md: "flex" }}
                 w="full"
-                className="h-[calc(100vh_-_theme(spacing.16))] transition-all duration-200 ease-in-out"
+                className={cn(
+                    compactHeight ? "h-[calc(100dvh-2.75rem)]" : "h-[calc(100vh_-_theme(spacing.16))]",
+                    "transition-all duration-200 ease-in-out"
+                )}
             >
                 <Box
                     position="relative"
@@ -159,19 +174,21 @@ function ResizableSidebar({
                         onMouseDown={startResizing}
                     />
 
-                    <Button
-                        variant="secondary"
-                        onClick={() => {
-                            setCollapsedAttr(!isCollapsed, undefined, isCollapsed ? initialWidth : undefined);
-                            setIsCollapsed(!isCollapsed);
-                        }}
-                        className={cn(
-                            "absolute right-[-1.2rem] top-1/2 z-50 size-10 -translate-y-1/2 transform rounded-full p-0",
-                            "group-data-[resizing=true]/sidebar:hidden"
-                        )}
-                    >
-                        <IconComponent icon={isCollapsed ? "chevron-right" : "chevron-left"} size="8" />
-                    </Button>
+                    {showCollapseButton && (
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setCollapsedAttr(!isCollapsed, undefined, isCollapsed ? initialWidth : undefined);
+                                setIsCollapsed(!isCollapsed);
+                            }}
+                            className={cn(
+                                "absolute right-[-1.2rem] top-1/2 z-50 size-10 -translate-y-1/2 transform rounded-full p-0",
+                                "group-data-[resizing=true]/sidebar:hidden"
+                            )}
+                        >
+                            <IconComponent icon={isCollapsed ? "chevron-right" : "chevron-left"} size="8" />
+                        </Button>
+                    )}
                 </Box>
                 {main}
             </Box>

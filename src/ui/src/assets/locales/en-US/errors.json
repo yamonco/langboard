@@ -14,15 +14,14 @@
     "AU1002": "Your email is not verified yet. Please check your inbox.",
     "AU1003": "Your account is not activated yet. Please contact support.",
     "AU1004": "Your session has expired or is invalid. Please log in again.",
-
     "EX1001": "This email is already verified.",
     "EX1002": "This email is already set as primary.",
     "EX1003": "This email is already in use.",
     "EX1004": "Your account is already activated.",
+    "EX2001": "The dock changed elsewhere. Your changes were not saved. Reload it before saving again.",
     "EX3001": "This bot unique name is already taken.",
     "EX3002": "Default internal bot cannot be deleted.",
     "EX3003": "This MCP tool name is already taken.",
-
     "PE1001": "You don't have enough permissions to perform this action.",
     "PE1002": "You cannot delete your primary email.",
     "PE2001": "You do not have permission to access this project.",
@@ -30,7 +29,6 @@
     "PE2003": "You do not have permission to access this check item.",
     "PE2004": "You do not have permission to access this comment.",
     "PE2005": "You do not have permission to access this wiki.",
-
     "NF1001": "We couldn't find the email.",
     "NF1002": "We couldn't find the sub-email.",
     "NF1003": "We couldn't find user group.",
@@ -65,7 +63,6 @@
     "NF3007": "The bot default scope branch couldn't be found.",
     "NF9000": "Ollama server is not reachable. Please check the server address and your network connection.",
     "NF9001": "The specified model could not be found on the Ollama server.",
-
     "VA0000": "Invalid request.",
     "VA1001": "Couldn't find your {{app}} Account.",
     "VA1002": "Incorrect email or password.",
@@ -78,10 +75,10 @@
     "VA3006": "API key has expired and cannot be modified.",
     "Failed to create default scope branch.": "Failed to create default scope branch.",
     "Failed to delete default scope branch.": "Failed to delete default scope branch.",
-
     "OP0000": "Internal server error.",
     "OP1001": "We couldn't send the email. Please try again later.",
     "OP1002": "Upload failed. Please try again.",
     "OP1003": "You can't delete yourself."
-  }
+  },
+  "This section failed to render.": "This section failed to render."
 }

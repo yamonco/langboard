@@ -1,7 +1,7 @@
 from ...core.broker import Broker
 from ...domain.models import Bot, Project, ProjectActivity, ProjectColumn, User
 from ...domain.models.ProjectActivity import ProjectActivityType
-from . import UserActivityTask
+from .UserActivityTask import record_project_activity
 from .utils import ActivityHistoryHelper, ActivityTaskHelper
 
 
@@ -12,7 +12,7 @@ async def project_column_created(user_or_bot: User | Bot, project: Project, colu
     activity = helper.record(
         user_or_bot, activity_history, **_get_activity_params(ProjectActivityType.ProjectColumnCreated, project, column)
     )
-    UserActivityTask.record_project_activity(user_or_bot, activity)
+    record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -27,7 +27,7 @@ async def project_column_name_changed(user_or_bot: User | Bot, project: Project,
         activity_history,
         **_get_activity_params(ProjectActivityType.ProjectColumnNameChanged, project, column),
     )
-    UserActivityTask.record_project_activity(user_or_bot, activity)
+    record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -37,7 +37,7 @@ async def project_column_deleted(user_or_bot: User | Bot, project: Project, colu
     activity = helper.record(
         user_or_bot, activity_history, **_get_activity_params(ProjectActivityType.ProjectColumnDeleted, project, column)
     )
-    UserActivityTask.record_project_activity(user_or_bot, activity)
+    record_project_activity(user_or_bot, activity)
 
 
 def _get_default_history(helper: ActivityTaskHelper, project: Project, column: ProjectColumn):

@@ -162,17 +162,15 @@ function ChatInputDisplay() {
 
             const [scopeTable, scopeUID] = lockedScope || selectedScope || [undefined, undefined];
 
-            return (
-                sendChat({
-                    message: chatMessage,
-                    file_path: filePath,
-                    task_id: chatTaskIdRef.current,
-                    session_uid: currentSessionUID,
-                    scope_table: scopeTable,
-                    scope_uid: scopeUID,
-                    api_permission_level: agentPermissionLevel,
-                })?.isConnected ?? false
-            );
+            return sendChat({
+                message: chatMessage,
+                file_path: filePath,
+                task_id: chatTaskIdRef.current,
+                session_uid: currentSessionUID,
+                scope_table: scopeTable,
+                scope_uid: scopeUID,
+                api_permission_level: agentPermissionLevel,
+            }).isConnected;
         };
 
         const trySendChatWrapper = () => {

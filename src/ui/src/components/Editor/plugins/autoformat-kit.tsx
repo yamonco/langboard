@@ -14,6 +14,7 @@ import { insertEmptyCodeBlock } from "@platejs/code-block";
 import { CODE_DRAWING_TYPE_ARRAY, CodeDrawingType, VIEW_MODE } from "@platejs/code-drawing";
 import { toggleList } from "@platejs/list";
 import { KEYS } from "platejs";
+import { formatOrderedList } from "./markdown/list-number";
 
 const autoformatMarks: AutoformatRule[] = [
     {
@@ -196,12 +197,7 @@ const autoformatLists: AutoformatRule[] = [
         matchByRegex: true,
         mode: "block",
         type: "list",
-        format: (editor, { matchString }) => {
-            toggleList(editor, {
-                listRestartPolite: Number(matchString) || 1,
-                listStyleType: KEYS.ol,
-            });
-        },
+        format: formatOrderedList,
     },
     {
         match: ["[] "],
