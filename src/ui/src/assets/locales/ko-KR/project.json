@@ -349,6 +349,8 @@
     "Review App panel": "앱 패널 검토",
     "Confirm App panel": "앱 패널 허용 확인",
     "Disable App panel": "앱 패널 비활성화",
+    "Allow App signal reads": "앱 신호 읽기 허용",
+    "App signal read consent help": "이 패널이 보드에서 선택한 리소스의 신호를 읽도록 허용합니다. 패널 열기와 별도의 권한이며 변경은 허용하지 않습니다.",
     "App panel consent help": "이 보드에서 {{name}}의 격리된 패널을 열도록 허용합니다. 외부 앱에는 보드 식별자와 언어가 전달되며, 이번 세션 동안 작은 임시 초안을 보관할 수 있습니다. 이 권한은 워크플로 단계 전환이나 카드 변경을 허용하지 않습니다."
   },
   "App panel": "앱 패널",

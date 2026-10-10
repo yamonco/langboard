@@ -1,4 +1,4 @@
-import { PanelStateCache } from "../../../../sdk/js/index.mjs";
+import { PanelStateCache } from "@langboard/app-panel";
 import useAuthStore from "@/core/stores/AuthStore";
 
 export const panelStateCache = new PanelStateCache();

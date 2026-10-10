@@ -13,8 +13,8 @@ from langboard_shared.domain.contracts.project_search import (  # noqa: E402
 PROJECTS = [
     {"uid": "p1", "title": "Langboard"},
     {"uid": "p2", "title": "ChatGPT Plugin"},
-    {"uid": "p3", "title": "Sanmopia Migration"},
-    {"uid": "p4", "title": "Brown F&B"},
+    {"uid": "p3", "title": "Example Migration"},
+    {"uid": "p4", "title": "Example Catering"},
     {"uid": "p5", "title": "랭보드 개선"},
 ]
 

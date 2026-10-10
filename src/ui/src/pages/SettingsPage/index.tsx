@@ -30,6 +30,7 @@ import WorkflowStagesPage from "@/pages/SettingsPage/WorkflowStagesPage";
 import GlobalLabelsPage from "@/pages/SettingsPage/GlobalLabelsPage";
 import ProjectTemplatesPage from "@/pages/SettingsPage/ProjectTemplatesPage";
 import SettingsLoadState from "./SettingsLoadState";
+import AppGovernancePage from "./AppGovernancePage";
 import { settingsRedirect } from "@/pages/SettingsPage/SettingsNavigation";
 
 function SettingsProxy(): React.JSX.Element {
@@ -142,6 +143,12 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     const { hasRoleAction: hasMcpRoleAction } = useRoleActionFilter(mcpRoleActions);
 
     const settingsNavs: Record<string, IActivityRailItem> = {
+        [ROUTES.SETTINGS.APPS]: {
+            icon: "app-window",
+            label: t("settings.Apps"),
+            onClick: () => navigate(ROUTES.SETTINGS.APPS),
+            hidden: !currentUser.is_admin,
+        },
         [ROUTES.SETTINGS.WORKFLOW_STAGES]: {
             icon: "list-tree",
             label: t("settings.Workflow stages"),
@@ -251,6 +258,9 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
 
     let pageContent;
     switch (pathname) {
+        case ROUTES.SETTINGS.APPS:
+            pageContent = <AppGovernancePage currentUser={currentUser} />;
+            break;
         case ROUTES.SETTINGS.WORKFLOW_STAGES:
             pageContent = <WorkflowStagesPage currentUser={currentUser} />;
             break;

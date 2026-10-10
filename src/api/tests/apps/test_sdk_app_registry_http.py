@@ -2,6 +2,7 @@
 """Independent external app registration using authenticated SDK HTTP, no registry patch."""
 
 from types import SimpleNamespace
+import langboard.routes.board.AppPanelDataApi  # noqa: F401
 import langboard.routes.board.BoardSettingApi  # noqa: F401
 import langboard.routes.settings.AppRegistrySettingsApi  # noqa: F401
 import pytest
@@ -40,6 +41,8 @@ async def test_registration_workflow_update_disable_and_admin_revocation(board, 
     from langboard_shared.domain.models import BoardAppBinding
 
     monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    from langboard_shared.domain.models import AppGovernancePolicy
+    AppGovernancePolicy.__table__.create(DbEngine.get_main_engine(), checkfirst=True)
     actor = board[1]
     with DbSession.use(readonly=False) as db:
         actor.is_admin = True
@@ -84,7 +87,7 @@ async def test_registration_workflow_update_disable_and_admin_revocation(board, 
         updated = await registry.approve({**DECLARATION, "version": "1.1.0"}, expected_revision=saved["revision"])
         assert updated["generation"] == 2
         snapshot = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")["binding"]
-        assert snapshot["state"] == "disabled" and snapshot["granted_capabilities"] == []
+        assert snapshot["state"] == "enabled" and snapshot["granted_capabilities"] == ["cards.create"]
         assert not snapshot["stage_transitions_enabled"]
         with pytest.raises(NativeApiError) as stale:
             await registry.disable("example-erp", saved["revision"])
@@ -139,6 +142,8 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
     from langboard_shared.domain.models import BoardAppBinding
 
     monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    from langboard_shared.domain.models import AppGovernancePolicy
+    AppGovernancePolicy.__table__.create(DbEngine.get_main_engine(), checkfirst=True)
     actor = board[1]
     with DbSession.use(readonly=False) as db:
         actor.is_admin = True
@@ -166,6 +171,14 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
         snapshot = await manager.panel("example-erp")
         assert snapshot["panel"] == declaration["panel"]
         assert snapshot["app_revision"] == approved["revision"]
+        from langboard_shared.domain.services.AppGovernance import get_policy, save_policy
+        policy = get_policy(actor)
+        policy = save_policy(actor, "disabled", policy["revision"])
+        with pytest.raises(NativeApiError) as forbidden_panel:
+            await manager.panel("example-erp")
+        assert forbidden_panel.value.status_code in (403, 404)
+        save_policy(actor, "approved_only", policy["revision"])
+        assert (await manager.panel("example-erp"))["panel"] == declaration["panel"]
         with DbSession.use(readonly=False) as db:
             binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.app_key == "example-erp")).first()
             assert binding.workflow_mapping == {} and not binding.stage_transitions_enabled
@@ -198,8 +211,7 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
             actor.is_admin = True
             db.update(actor)
         newer = await registry.approve({**declaration, "version": "1.1.0"}, expected_revision=approved["revision"])
-        with pytest.raises(NativeApiError):
-            await manager.panel("example-erp")
+        assert (await manager.panel("example-erp"))["app_revision"] == newer["revision"]
         entry = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")
         assert entry["app_revision"] == newer["revision"]
         restored = (await manager.set_panel_consent("example-erp", newer["revision"], enabled=True,
@@ -207,3 +219,97 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
         await registry.disable("example-erp", newer["revision"])
         with pytest.raises(NativeApiError):
             await manager.panel("example-erp")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
+async def test_external_panel_read_needs_independent_consent_and_current_revision(board, monkeypatch):
+    from langboard_shared.core.db import BaseDbModel
+    BaseDbModel.metadata.create_all(DbEngine.get_main_engine())
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    from langboard_shared.domain.models import AppGovernancePolicy
+    AppGovernancePolicy.__table__.create(DbEngine.get_main_engine(), checkfirst=True)
+    actor = board[1]
+    with DbSession.use(readonly=False) as db:
+        actor.is_admin = True
+        db.update(actor)
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    access, refresh = AuthSecurity.authenticate(actor.id)
+    with TestClient(app) as session:
+        session.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
+        async def request(method, path, **kwargs):
+            return session.request(method, path, headers={"Authorization": f"Bearer {access}"}, **kwargs)
+        transport = HttpTransport(SimpleNamespace(request=request))
+        registry = AppRegistry(transport)
+        manager = AppManager(transport, board[2].get_uid())
+        declaration = {**DECLARATION, "capabilities": ["panels.render", "signals.read"], "workflow_requirements": None}
+        approved = await registry.approve(declaration)
+        saved = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=True))["binding"]
+        path = f"/board/{board[2].get_uid()}/apps/example-erp/panel/signals"
+        form = {"app_revision": approved["revision"], "binding_revision": saved["revision"], "provider": "github"}
+        denied = await request("POST", path, json=form)
+        assert denied.status_code == 404
+        saved = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=True, read_signals=True,
+            binding_uid=saved["uid"], expected_revision=saved["revision"]))["binding"]
+        assert saved["granted_capabilities"] == ["panels.render", "signals.read"]
+        form["binding_revision"] = saved["revision"]
+        for provider in ("github", "glitchtip", "dokploy"):
+            result = await request("POST", path, json={**form, "provider": provider})
+            assert result.status_code == 200 and result.json() == {"items": [], "next_cursor": None}
+        assert (await request("POST", path, json={**form, "provider": "unsupported"})).status_code == 400
+        assert (await request("POST", path, json={**form, "binding_revision": "0" * 64})).status_code == 409
+        disabled = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=False,
+            binding_uid=saved["uid"], expected_revision=saved["revision"]))["binding"]
+        assert disabled["granted_capabilities"] == []
+        assert (await request("POST", path, json=form)).status_code == 404
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
+async def test_update_keeps_only_same_trust_grants_and_revokes_changed_connections(board, monkeypatch):
+    from langboard_shared.domain.models import AppConnection, BoardAppBinding
+
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    from langboard_shared.domain.models import AppGovernancePolicy
+    AppGovernancePolicy.__table__.create(DbEngine.get_main_engine(), checkfirst=True)
+    actor, project = board[1], board[2]
+    with DbSession.use(readonly=False) as db:
+        actor.is_admin = True
+        db.update(actor)
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    access, refresh = AuthSecurity.authenticate(actor.id)
+    with TestClient(app) as session:
+        session.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
+
+        async def request(method, path, **kwargs):
+            return session.request(method, path, headers={"Authorization": f"Bearer {access}"}, **kwargs)
+
+        registry = AppRegistry(HttpTransport(SimpleNamespace(request=request)))
+        previous = {**DECLARATION, "publisher": "Example Publisher", "capabilities": ["cards.create", "panels.render"]}
+        saved = await registry.approve(previous)
+        with DbSession.use(readonly=False) as db:
+            binding = BoardAppBinding(project_id=project.id, app_key="example-erp", state="enabled",
+                                      granted_capabilities=["cards.create", "panels.render"])
+            connection = AppConnection(app_key="example-erp", owner_id=actor.id, state="connected")
+            db.insert(binding)
+            db.insert(connection)
+            binding_id, connection_id = binding.id, connection.id
+        ordinary = {**previous, "version": "1.1.0", "capabilities": ["panels.render", "signals.read"]}
+        saved = await registry.approve(ordinary, expected_revision=saved["revision"])
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.id == binding_id)).first()
+            assert current.state == "enabled" and current.granted_capabilities == ["panels.render"]
+            assert db.exec(SqlBuilder.select.table(AppConnection).where(AppConnection.id == connection_id)).first().state == "connected"
+        changed = {**ordinary, "version": "1.2.0", "publisher": "New Publisher"}
+        with pytest.raises(NativeApiError) as stale:
+            await registry.approve(changed, expected_revision="0" * 64)
+        assert stale.value.status_code == 409
+        await registry.approve(changed, expected_revision=saved["revision"])
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.id == binding_id)).first()
+            assert current.state == "needs_attention" and current.granted_capabilities == []
+            assert not current.stage_transitions_enabled
+            assert db.exec(SqlBuilder.select.table(AppConnection).where(AppConnection.id == connection_id)).first().state == "revoked"

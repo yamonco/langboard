@@ -182,7 +182,8 @@
     "y-webrtc": "^10.3.0",
     "yarn": "^1.22.22",
     "zod": "^4.3.6",
-    "zustand": "^5.0.11"
+    "zustand": "^5.0.11",
+    "@langboard/app-panel": "file:../sdk/vendor/langboard-app-panel-0.2.0.tgz"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

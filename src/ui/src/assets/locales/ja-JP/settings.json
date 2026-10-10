@@ -293,5 +293,22 @@
   "Membership settings saved": "従業員メンバーシップを保存しました。",
   "Membership settings failed": "従業員メンバーシップの読み込みまたは保存に失敗しました。",
   "Title aliases": "タイトルの別名",
-  "One exact alias per line, up to 30. Used for leading title label tokens.": "1行に完全一致の別名を1つ、最大30個。タイトル先頭のラベルトークンに使用します。"
+  "One exact alias per line, up to 30. Used for leading title label tokens.": "1行に完全一致の別名を1つ、最大30個。タイトル先頭のラベルトークンに使用します。",
+  "Apps": "アプリ",
+  "App governance ceiling": "このグローバル設定は、許可するアプリアクセスの上限です。組織はさらに厳しい制限を適用できます。",
+  "App personal token privacy": "個人接続のトークンは所有者のみが利用でき、他のメンバーには共有されません。",
+  "App organization automation": "組織の自動化には組織の共有接続が必要です。個人接続は組織の自動化には使用できません。",
+  "App access mode": "アプリアクセスモード",
+  "App mode disabled": "無効",
+  "App mode disabled description": "すべての組織でアプリアクセスを無効にします。",
+  "App mode approved_only": "承認済みアプリのみ",
+  "App mode approved_only description": "承認済みアプリと組織の共有接続のみを許可します。個人接続は無効です。",
+  "App mode personal_allowed": "個人接続を許可",
+  "App mode personal_allowed description": "組織の制限内で承認済みアプリと個人接続を許可します。",
+  "App effective mode": "適用中のグローバルモード",
+  "App conflict failed": "別の場所で設定が変更されました。編集中の内容は保持されています。保存前に最新の設定を再読み込みしてください。再読み込みすると編集中の内容は破棄されます。",
+  "App save failed": "アプリのアクセス設定を保存できませんでした。編集中の内容は保持されています。もう一度保存してください。",
+  "App refresh failed": "アプリのアクセス設定を再読み込みできませんでした。編集中の内容は保持されています。もう一度再読み込みしてください。",
+  "App discard and refresh": "編集中の内容を破棄して再読み込み",
+  "App governance saved": "アプリのアクセス設定を保存しました。リビジョン: {{revision}}"
 }

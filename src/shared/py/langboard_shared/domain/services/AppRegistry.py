@@ -1,10 +1,11 @@
 """Persistent external app approval. Current primary admin authority on every edit."""
 
 from langboard_sdk.definition import validate_app_definition
+from langboard_sdk.governance import update_consent
 from langboard_sdk.workflow import WorkflowRequirements
 from ...core.db import DbSession, SqlBuilder
 from ...publishers import AppSettingPublisher
-from ..models import AppDefinition, BoardAppBinding, User
+from ..models import AppConnection, AppDefinition, BoardAppBinding, User
 from .AppManifest import APP_MANIFESTS, AppManifest
 
 
@@ -46,7 +47,7 @@ def save_definition(actor, declaration, expected_revision=None):
                 raise AppRegistryConflict()
             if tuple(map(int, declaration["version"].split("."))) <= tuple(map(int, row.declaration["version"].split("."))):
                 raise ValueError("An app update needs a newer version")
-            _disable_bindings(db, key)
+            _update_bindings(db, key, row.declaration, declaration)
             row.declaration = declaration
             row.is_enabled = True
             row.generation += 1
@@ -71,6 +72,24 @@ def disable_definition(actor, key, expected_revision):
         db.update(row)
         db.after_commit(AppSettingPublisher.apps_changed)
         return row.registry_response()
+
+
+def _update_bindings(db, key, previous, current):
+    """Keep existing consent only across updates to the same trust targets."""
+    trust_changed = update_consent(previous, current, [])["trust_changed"]
+    if trust_changed:
+        for connection in db.exec(SqlBuilder.select.table(AppConnection).where(AppConnection.app_key == key).with_for_update()).all():
+            connection.state = "revoked"
+            db.update(connection)
+    for binding in db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.app_key == key).with_for_update()).all():
+        decision = update_consent(previous, current, binding.granted_capabilities)
+        binding.granted_capabilities = sorted(decision["retained"])
+        if decision["trust_changed"] or not binding.granted_capabilities:
+            binding.state = "needs_attention" if decision["trust_changed"] else "disabled"
+            binding.stage_transitions_enabled = False
+        if "workflow.transition" not in binding.granted_capabilities:
+            binding.stage_transitions_enabled = False
+        db.update(binding)
 
 
 def _disable_bindings(db, key):

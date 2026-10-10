@@ -2,10 +2,11 @@ import * as React from "react";
 import { createRoot } from "react-dom/client";
 import Button from "@/components/base/Button";
 import Textarea from "@/components/base/Textarea";
+import Input from "@/components/base/Input";
 import Badge from "@/components/base/Badge";
 
 // Apps use these exports together so widgets and hooks share one React runtime.
-export { React, createRoot, Button, Textarea, Badge };
+export { React, createRoot, Button, Textarea, Badge, Input };
 export type { ButtonProps } from "@/components/base/Button";
 export type { TextareaProps } from "@/components/base/Textarea";
 export type { BadgeProps } from "@/components/base/Badge";

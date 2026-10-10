@@ -1,4 +1,4 @@
-import { PANEL_DESIGN_TOKENS, type PanelDesign } from "../../../../sdk/js/index.mjs";
+import { PANEL_DESIGN_TOKENS, type PanelDesign } from "@langboard/app-panel";
 
 interface ResourceManifest {
     version: number;

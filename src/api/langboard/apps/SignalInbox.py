@@ -30,7 +30,7 @@ from .GitHubManifest import GitHubManifestUnavailable
 _resource_name = signal_resource_name
 
 
-def list_board_signals(service, actor, project_uid, after=None, *, channel=CollaborationChannel.Api):
+def list_board_signals(service, actor, project_uid, after=None, *, channel=CollaborationChannel.Api, provider=None, page_size=25):
     if service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.Read) is None:
         raise GitHubManifestUnavailable()
     resolved = service.card.resolve_visibility_context(project_uid, actor, channel)
@@ -38,6 +38,10 @@ def list_board_signals(service, actor, project_uid, after=None, *, channel=Colla
         raise GitHubManifestUnavailable()
     if after is not None and not re.fullmatch(r"[A-Za-z0-9]{1,11}", after):
         raise ValueError("Invalid inbox cursor")
+    if provider is not None and provider not in APP_MANIFESTS:
+        raise ValueError("Unsupported signal provider")
+    if type(page_size) is not int or not 1 <= page_size <= 25:
+        raise ValueError("Invalid inbox page size")
     project, context = resolved
     supported_occurrence = supported_signal_condition()
     eligibility = provider_resource_condition()
@@ -105,17 +109,19 @@ def list_board_signals(service, actor, project_uid, after=None, *, channel=Colla
         .join(User, User.id == AppConnection.owner_id)
         .where(Project.id == project.id, eligibility, AppSignal.provider == AppConnection.app_key, ~linked)
     )
+    if provider is not None:
+        query = query.where(AppSignal.provider == provider)
     with DbSession.use(readonly=False) as db:
         if after is not None:
             cursor_id = InfraHelper.convert_id(after)
             if db.exec(query.where(AppSignal.id == cursor_id).limit(1)).first() is None:
                 raise ValueError("Invalid inbox cursor")
             query = query.where(AppSignal.id < cursor_id)
-        rows = db.exec(query.order_by(AppSignal.id.desc()).limit(26)).all()
+        rows = db.exec(query.order_by(AppSignal.id.desc()).limit(page_size + 1)).all()
         allowed = {
             row.id
             for row in authorized_signal_rows(
-                db, [(resource, connection, None) for _, resource, connection, _, _ in rows[:25]]
+                db, [(resource, connection, None) for _, resource, connection, _, _ in rows[:page_size]]
             )
         }
         return {
@@ -136,10 +142,10 @@ def list_board_signals(service, actor, project_uid, after=None, *, channel=Colla
                     "can_bind_card": APP_MANIFESTS[signal.provider].signal_policy is not None,
                     "time_basis": APP_MANIFESTS[signal.provider].signal_policy.time_basis,
                 }
-                for signal, resource, connection, minimum, maximum in rows[:25]
+                for signal, resource, connection, minimum, maximum in rows[:page_size]
                 if resource.id in allowed
             ],
-            "next_cursor": rows[24][0].get_uid() if len(rows) > 25 else None,
+            "next_cursor": rows[page_size - 1][0].get_uid() if len(rows) > page_size else None,
         }
 
 

@@ -8727,3 +8727,7 @@ zwitch@^2.0.0:
   version "2.0.4"
   resolved "https://registry.npmjs.org/zwitch/-/zwitch-2.0.4.tgz"
   integrity sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==
+
+"@langboard/app-panel@file:../sdk/vendor/langboard-app-panel-0.2.0.tgz":
+  version "0.2.0"
+  resolved "file:../sdk/vendor/langboard-app-panel-0.2.0.tgz#ff5ca9179f9d1deb43a0ade1b997d74b85957521"

@@ -4,7 +4,7 @@ version = "0.2.0"
 description = ""
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    "langboard-sdk==0.1.0",
+    "langboard-sdk==0.2.0",
     "aiosmtplib>=3.0.2,<4",
     "alembic>=1.16.2",
     "anyio>=4.11.0",
@@ -74,7 +74,7 @@ link-mode = "copy"
 
 [tool.uv.sources]
 langboard-shared = { workspace = true }
-langboard-sdk = { path = "../../sdk/py", editable = true }
+langboard-sdk = { path = "../../sdk/vendor/langboard_sdk-0.2.0-py3-none-any.whl" }
 
 
 [tool.uv.workspace]

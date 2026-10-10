@@ -6,9 +6,9 @@ RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd src/shared/ts && y
 COPY src/shared/ts ./src/shared/ts
 RUN cd src/shared/ts && yarn build
 
+COPY src/sdk/vendor ./src/sdk/vendor
 COPY src/ui/package.json src/ui/yarn.lock ./src/ui/
 RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd src/ui && yarn install --frozen-lockfile --network-concurrency 4 --network-timeout 120000
-COPY src/sdk/js ./src/sdk/js
 COPY src/ui ./src/ui
 WORKDIR /work/src/ui
 ARG PROJECT_NAME=Langboard
