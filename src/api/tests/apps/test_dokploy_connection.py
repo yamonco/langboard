@@ -486,7 +486,7 @@ def test_binding_audit_is_atomic_with_connection_and_resource(setup, monkeypatch
     assert service.secret_reference.list_audit(board[1], reference["uri"])["items"][0]["action"] == "bound"
 
 
-@pytest.mark.parametrize("state", ["connected", "revoked"])
+@pytest.mark.parametrize("state", ["connected", "pending", "revoked", "disconnected"])
 def test_policy_disabled_connection_can_only_remove_authority(setup, state):
     from langboard_shared.domain.models import AppGovernancePolicy
 
@@ -507,17 +507,27 @@ def test_policy_disabled_connection_can_only_remove_authority(setup, state):
     before = len(calls)
     with pytest.raises(dk.DokployUnavailable):
         dk.disconnect(*args, revision)
+    with pytest.raises(dk.DokployUnavailable):
+        dk.list_connections(*args[:3])
+    with pytest.raises(dk.DokployUnavailable):
+        dk.selected_resources(*args)
     with DbSession.use(readonly=False) as db:
         board[4].actions = ["read", "update"]
         db.update(board[4])
     with pytest.raises(dk.DokployUnavailable):
         dk.discover_resources(*args)
+    listed = dk.list_connections(*args[:3])["items"]
+    assert listed[0]["state"] == state and listed[0]["revision"] == revision
+    resources = dk.selected_resources(*args)["items"]
+    assert resources[0]["resource_uid"] == selected["resource_uid"]
+    assert resources[0]["access_revision"] == selected["access_revision"]
     with pytest.raises(dk.DokployConflict):
         dk.disconnect(*args, "0" * 64)
     removed = dk.remove_resource(*args, selected["resource_uid"], selected["access_revision"])
     assert removed["selected"] is False
     result = dk.disconnect(*args, revision)
     assert result["state"] == "disconnected"
+    assert dk.list_connections(*args[:3])["items"][0]["revision"] == result["revision"]
     assert len(calls) == before
     with DbSession.use(readonly=False) as db:
         resource = db.exec(SqlBuilder.select.table(AppResourceBinding)).first()
