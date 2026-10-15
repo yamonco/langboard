@@ -194,9 +194,7 @@ class ProjectService(BaseDomainService):
     def __convert_project_list(
         self,
         user: User,
-        raw_projects: list[
-            tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool, SafeDateTime | None]
-        ],
+        raw_projects: list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool, SafeDateTime | None]],
         board_change: dict[int, int] | None = None,
     ) -> tuple[list[dict[str, Any]], list[SnowflakeID]]:
         projects = []
@@ -225,7 +223,9 @@ class ProjectService(BaseDomainService):
             api_project["related_activity_at"] = related_activity_at
             api_project["current_auth_role_actions"] = roles_dict[project.id] if not user.is_admin else [ALL_GRANTED]
             if board_change is not None:
-                api_project["board_has_unread_change"] = board_change.get(project.id, 0) > (assigned_user.board_seen_seq or 0)
+                api_project["board_has_unread_change"] = board_change.get(project.id, 0) > (
+                    assigned_user.board_seen_seq or 0
+                )
             projects.append(api_project)
 
         return projects, project_ids
@@ -259,7 +259,8 @@ class ProjectService(BaseDomainService):
             all_members.append(member)
 
         member_classification = self._get_service(ScimProvisioningService).classify_members(
-            [InfraHelper.convert_id(member["uid"]) for member in all_members])
+            [InfraHelper.convert_id(member["uid"]) for member in all_members]
+        )
         for member in all_members:
             member["membership_classification"] = member_classification.get(member["uid"], "unknown")
         response["all_members"] = all_members

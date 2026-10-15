@@ -45,18 +45,20 @@ _EDITOR_SETTINGS_WRITE_ACTIONS = {
 
 
 def authorized_subscription_items(
-    service: DomainService, user: User, subscriptions: Sequence[SocketSubscriptionAuthorizationItem],
+    service: DomainService,
+    user: User,
+    subscriptions: Sequence[SocketSubscriptionAuthorizationItem],
 ) -> list[dict[str, str]]:
     """Batch the common board/card admission path; preserve per-topic policy."""
     board_topics = {SocketTopic.Board, SocketTopic.BoardWiki, SocketTopic.Dashboard}
     board_uids = [item.topic_id for item in subscriptions if item.topic in board_topics]
     card_uids = [item.topic_id for item in subscriptions if item.topic == SocketTopic.BoardCard]
-    cards = service.card.get_readable_card_project_uids(card_uids, user, CollaborationChannel.HumanUI) if card_uids else {}
+    cards = (
+        service.card.get_readable_card_project_uids(card_uids, user, CollaborationChannel.HumanUI) if card_uids else {}
+    )
     board_uids.extend(cards.values())
     assigned = service.project.get_assigned_project_uids(user, board_uids) if board_uids else set()
-    readable_cards = {
-        card_uid for card_uid, project_uid in cards.items() if user.is_admin or project_uid in assigned
-    }
+    readable_cards = {card_uid for card_uid, project_uid in cards.items() if user.is_admin or project_uid in assigned}
     authorized = []
     for item in subscriptions:
         if item.topic in board_topics:

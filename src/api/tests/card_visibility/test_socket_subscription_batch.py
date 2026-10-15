@@ -28,8 +28,10 @@ def service_for(card_service):
 def query_count(call):
     engine = DbEngine.get_main_engine()
     queries = []
+
     def observe(*args):
         queries.append(args[2])
+
     event.listen(engine, "before_cursor_execute", observe)
     try:
         result = call()
@@ -54,7 +56,8 @@ def test_project_batch_matches_individual_admission_and_current_membership(curre
         db.update(projects[0])
     items = [SocketSubscriptionAuthorizationItem(topic=topic, topic_id=p.get_uid()) for p in projects]
     expected = [
-        {"topic": item.topic.value, "topic_id": item.topic_id} for item in items
+        {"topic": item.topic.value, "topic_id": item.topic_id}
+        for item in items
         if is_subscription_authorized(service, user, item.topic, item.topic_id)
     ]
     result, queries = query_count(lambda: authorized_subscription_items(service, user, items))
@@ -80,23 +83,33 @@ def test_card_batch_matches_policy_with_constant_queries_and_revocation(current_
         user.is_admin = admin
         db.update(user)
         db.insert(ProjectAssignedUser(project_id=project.id, user_id=user.id))
-        other = User(firstname="Other", lastname="Owner", email="other@example.invalid",
-                     password="test-only", activated_at=SafeDateTime.now())
+        other = User(
+            firstname="Other",
+            lastname="Owner",
+            email="other@example.invalid",
+            password="test-only",
+            activated_at=SafeDateTime.now(),
+        )
         db.insert(other)
         cards = []
         for i in range(64):
             visibility = ["SHARED", "INTERNAL", "PRIVATE", "PRIVATE"][i % 4]
             owner_id = (user.id if i % 4 == 2 else other.id) if visibility == "PRIVATE" else None
-            card = Card(project_id=project.id, title=f"Card {i}",
-                        visibility=visibility,
-                        owner_user_id=owner_id, created_by_user_id=owner_id or user.id)
+            card = Card(
+                project_id=project.id,
+                title=f"Card {i}",
+                visibility=visibility,
+                owner_user_id=owner_id,
+                created_by_user_id=owner_id or user.id,
+            )
             db.insert(card)
             cards.append(card)
         cards[0].deleted_at = SafeDateTime.now()
         db.update(cards[0])
     items = [SocketSubscriptionAuthorizationItem(topic=SocketTopic.BoardCard, topic_id=c.get_uid()) for c in cards]
     expected = [
-        {"topic": item.topic.value, "topic_id": item.topic_id} for item in items
+        {"topic": item.topic.value, "topic_id": item.topic_id}
+        for item in items
         if is_subscription_authorized(service, user, item.topic, item.topic_id)
     ]
     result, queries = query_count(lambda: authorized_subscription_items(service, user, items))
@@ -120,14 +133,24 @@ def test_mixed_batch_keeps_order_duplicates_and_fail_closed_ids(current_card):
     service = service_for(card_service)
     with DbSession.atomic() as db:
         db.insert(ProjectAssignedUser(project_id=project.id, user_id=user.id))
-    items = [SocketSubscriptionAuthorizationItem(topic=topic, topic_id=uid) for topic, uid in [
-        (SocketTopic.UserPrivate, user.get_uid()), (SocketTopic.BoardCard, card.get_uid()),
-        (SocketTopic.Board, project.get_uid()), (SocketTopic.BoardCard, "invalid-code!"),
-        (SocketTopic.Dashboard, "invalid-code!"), (SocketTopic.Board, project.get_uid()),
-    ]]
+    items = [
+        SocketSubscriptionAuthorizationItem(topic=topic, topic_id=uid)
+        for topic, uid in [
+            (SocketTopic.UserPrivate, user.get_uid()),
+            (SocketTopic.BoardCard, card.get_uid()),
+            (SocketTopic.Board, project.get_uid()),
+            (SocketTopic.BoardCard, "invalid-code!"),
+            (SocketTopic.Dashboard, "invalid-code!"),
+            (SocketTopic.Board, project.get_uid()),
+        ]
+    ]
     result = authorized_subscription_items(service, user, items)
-    assert result == [{"topic": i.topic.value, "topic_id": i.topic_id} for i in (items[0], items[1], items[2], items[5])]
+    assert result == [
+        {"topic": i.topic.value, "topic_id": i.topic_id} for i in (items[0], items[1], items[2], items[5])
+    ]
     with DbSession.atomic() as db:
         project.deleted_at = SafeDateTime.now()
         db.update(project)
-    assert authorized_subscription_items(service, user, items) == [{"topic": items[0].topic.value, "topic_id": items[0].topic_id}]
+    assert authorized_subscription_items(service, user, items) == [
+        {"topic": items[0].topic.value, "topic_id": items[0].topic_id}
+    ]

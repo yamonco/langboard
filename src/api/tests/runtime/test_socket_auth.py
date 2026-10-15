@@ -1129,10 +1129,16 @@ def test_app_settings_accepts_all_granted_setting_role_categories() -> None:
     service = create_authorization_service()
     service.user.get_setting_role.return_value = SettingRole.model_construct(actions=["*"])
 
-    for topic_id in (SettingSocketTopicID.User.value, SettingSocketTopicID.Bot.value, SettingSocketTopicID.Webhook.value):
+    for topic_id in (
+        SettingSocketTopicID.User.value,
+        SettingSocketTopicID.Bot.value,
+        SettingSocketTopicID.Webhook.value,
+    ):
         assert _is_subscription_authorized(service, admin, SocketTopic.AppSettings, topic_id)
 
-    assert not _is_subscription_authorized(service, create_user(), SocketTopic.AppSettings, SettingSocketTopicID.Bot.value)
+    assert not _is_subscription_authorized(
+        service, create_user(), SocketTopic.AppSettings, SettingSocketTopicID.Bot.value
+    )
 
 
 def test_fixed_scope_topics_reject_forged_topic_ids() -> None:
