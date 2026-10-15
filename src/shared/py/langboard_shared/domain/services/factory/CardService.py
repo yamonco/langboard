@@ -344,7 +344,10 @@ class CardService(BaseDomainService):
         return project, current, context
 
     def get_readable_card_project_uids(
-        self, card_uids: Sequence[str], user: User, channel: CollaborationChannel,
+        self,
+        card_uids: Sequence[str],
+        user: User,
+        channel: CollaborationChannel,
     ) -> dict[str, str]:
         """Apply current card policy in bulk without loading card bodies."""
         if len(card_uids) > 200:
@@ -363,16 +366,27 @@ class CardService(BaseDomainService):
             current = db.exec(SqlBuilder.select.table(User).where(User.id == user.id)).first()
             if current is None or current.deleted_at is not None or not current.activated_at:
                 return {}
-            membership = select(ProjectAssignedUser.id).where(
-                ProjectAssignedUser.project_id == Project.id, ProjectAssignedUser.user_id == current.id,
-            ).exists()
+            membership = (
+                select(ProjectAssignedUser.id)
+                .where(
+                    ProjectAssignedUser.project_id == Project.id,
+                    ProjectAssignedUser.user_id == current.id,
+                )
+                .exists()
+            )
             rows = db.exec(
                 SqlBuilder.select.columns(Card.id, Card.project_id, Card.visibility, Card.owner_user_id)
                 .join(Project, Project.id == Card.project_id)
-                .where(Card.id.in_(card_ids), Project.deleted_at.is_(None), or_(Project.owner_id == current.id, membership))
+                .where(
+                    Card.id.in_(card_ids), Project.deleted_at.is_(None), or_(Project.owner_id == current.id, membership)
+                )
             ).all()
         context = CardVisibilityContext(
-            channel, True, True, self._resolve_internal_access(current), actor_user_id=int(current.id),
+            channel,
+            True,
+            True,
+            self._resolve_internal_access(current),
+            actor_user_id=int(current.id),
         )
         return {
             card_id.to_short_code(): project_id.to_short_code()
