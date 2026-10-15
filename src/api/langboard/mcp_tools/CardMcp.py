@@ -499,7 +499,7 @@ def _create_card_in_project(
 @McpTool.add(
     description="Create a card in an active project column; use column_uid='leftmost' for the first active column."
 )
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardWrite], RoleFinder.project)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def create_card(
     project_uid: str,
     column_uid: str,
@@ -516,7 +516,7 @@ def create_card(
 
 
 @McpTool.add(description="Compatibility entry for creating in the leftmost active column.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardWrite], RoleFinder.project)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def create_card_in_leftmost_column(
     project_uid: str,
     title: str,
