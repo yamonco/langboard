@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, Literal, Sequence, cast
 from ....ai import BotScheduleHelper, BotScopeHelper
-from ....core.db import DbSession
+from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.schema import TimeBasedPagination
@@ -283,6 +283,26 @@ class ProjectService(BaseDomainService):
 
         assignee = self.repo.project_assigned_user.find_by_user_and_project(user, project)
         return bool(assignee), assignee
+
+    def get_assigned_project_uids(self, user: User, project_uids: Sequence[str]) -> set[str]:
+        """Resolve a bounded subscription batch in one current membership query."""
+        if len(project_uids) > 200:
+            raise ValueError("At most 200 projects may be checked")
+        project_ids = []
+        for uid in set(project_uids):
+            try:
+                project_ids.append(InfraHelper.convert_id(uid))
+            except (TypeError, ValueError):
+                continue
+        if not project_ids:
+            return set()
+        with DbSession.use(readonly=False) as db:
+            rows = db.exec(
+                SqlBuilder.select.column(Project.id)
+                .join(ProjectAssignedUser, ProjectAssignedUser.project_id == Project.id)
+                .where(ProjectAssignedUser.user_id == user.id, Project.id.in_(project_ids))
+            ).all()
+        return {project_id.to_short_code() for project_id in rows}
 
     def are_users_related(self, user: User, target_user: User, project: TProjectParam | None = None) -> bool:
         return bool(self.repo.project.are_users_related(user, target_user, project))

@@ -124,6 +124,9 @@ def test_phoenix_card_authorization_uses_current_user_and_visibility(current_car
     # Topic authentication has separate regressions. Keep its result fixed to
     # prove that board subscription alone never admits protected card content.
     monkeypatch.setattr(SocketAuthApi, "is_subscription_authorized", lambda *args: True)
+    monkeypatch.setattr(SocketAuthApi, "authorized_subscription_items", lambda service, user, items: [
+        {"topic": item.topic.value, "topic_id": item.topic_id} for item in items
+    ])
     current_user = [external]
     monkeypatch.setattr(SocketAuthApi, "_authenticate_socket_user", lambda _: current_user[0])
     form = SocketSubscriptionAuthorizationForm(

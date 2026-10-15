@@ -66,6 +66,7 @@ from .forms import (
 )
 from .SocketAuthorization import (
     authorized_editor_document_subscription,
+    authorized_subscription_items,
     is_editor_document_write_authorized,
     is_subscription_authorized,
 )
@@ -158,11 +159,7 @@ def authorize_socket_subscriptions(
         can_receive_card_event(service, user, uid, form.card_operation) for uid in form.card_uids
     ):
         return JsonResponse({"authorized": [], "card_authorization_applied": True})
-    authorized = [
-        {"topic": item.topic.value, "topic_id": item.topic_id}
-        for item in form.subscriptions
-        if is_subscription_authorized(service, user, item.topic, item.topic_id)
-    ]
+    authorized = authorized_subscription_items(service, user, form.subscriptions)
     result = {"authorized": authorized}
     if form.card_uids is not None:
         result["card_authorization_applied"] = True

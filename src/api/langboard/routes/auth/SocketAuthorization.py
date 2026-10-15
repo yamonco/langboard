@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from langboard_shared.core.routing import (
     GLOBAL_TOPIC_ID,
     NONE_TOPIC_ID,
@@ -5,6 +6,7 @@ from langboard_shared.core.routing import (
     SettingSocketTopicID,
     SocketTopic,
 )
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import Project, User
 from langboard_shared.domain.models.ApiKeyRole import ApiKeyRoleAction
 from langboard_shared.domain.models.bases import ALL_GRANTED
@@ -14,6 +16,7 @@ from langboard_shared.domain.models.SettingRole import SettingRoleAction, Settin
 from langboard_shared.domain.services import DomainService
 from langboard_shared.domain.services.SocketCardAudience import can_receive_card_event
 from langboard_shared.Env import Env
+from .forms.Socket import SocketSubscriptionAuthorizationItem
 
 
 _EDITOR_SETTINGS_TOPICS = {
@@ -39,6 +42,32 @@ _EDITOR_SETTINGS_WRITE_ACTIONS = {
     SettingSocketTopicID.NotificationSchedule: SettingRoleAction.NotificationScheduleUpdate,
     SettingSocketTopicID.ApiComfortTool: SettingRoleAction.ApiComfortToolUpdate,
 }
+
+
+def authorized_subscription_items(
+    service: DomainService, user: User, subscriptions: Sequence[SocketSubscriptionAuthorizationItem],
+) -> list[dict[str, str]]:
+    """Batch the common board/card admission path; preserve per-topic policy."""
+    board_topics = {SocketTopic.Board, SocketTopic.BoardWiki, SocketTopic.Dashboard}
+    board_uids = [item.topic_id for item in subscriptions if item.topic in board_topics]
+    card_uids = [item.topic_id for item in subscriptions if item.topic == SocketTopic.BoardCard]
+    cards = service.card.get_readable_card_project_uids(card_uids, user, CollaborationChannel.HumanUI) if card_uids else {}
+    board_uids.extend(cards.values())
+    assigned = service.project.get_assigned_project_uids(user, board_uids) if board_uids else set()
+    readable_cards = {
+        card_uid for card_uid, project_uid in cards.items() if user.is_admin or project_uid in assigned
+    }
+    authorized = []
+    for item in subscriptions:
+        if item.topic in board_topics:
+            allowed = item.topic_id in assigned
+        elif item.topic == SocketTopic.BoardCard:
+            allowed = item.topic_id in readable_cards
+        else:
+            allowed = is_subscription_authorized(service, user, item.topic, item.topic_id)
+        if allowed:
+            authorized.append({"topic": item.topic.value, "topic_id": item.topic_id})
+    return authorized
 
 
 def _has_project_action(

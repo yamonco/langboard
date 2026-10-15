@@ -254,9 +254,9 @@ def test_socket_subscription_authorization_returns_only_allowed_items(monkeypatc
         lambda service, current_user, topic, topic_id: topic_id == "allowed",
     )
 
-    response = authorize_socket_subscriptions(
-        create_request("Bearer access-token"), form, create_authorization_service()
-    )
+    service = create_authorization_service()
+    service.project.get_assigned_project_uids.return_value = {"allowed"}
+    response = authorize_socket_subscriptions(create_request("Bearer access-token"), form, service)
 
     assert orjson.loads(response.body) == {"authorized": [{"topic": SocketTopic.Board.value, "topic_id": "allowed"}]}
 
