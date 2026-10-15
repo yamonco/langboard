@@ -45,7 +45,7 @@
     "test:i18n-initialization": "node --test scripts/i18n-initialization.test.mjs",
     "test:plate-upgrade": "node --experimental-strip-types --test src/components/Editor/plate-upgrade.test.ts src/components/Editor/plugins/markdown/list-number.test.ts",
     "test:board-chat-store": "node --experimental-strip-types src/core/stores/BoardChatStore.test.ts",
-    "test:socket-runtime": "esbuild src/core/providers/socket/streamErrorCallbacks.test.ts --bundle --platform=node --format=esm --packages=external --tsconfig=tsconfig.app.json --outfile=test-results/socket-runtime.mjs && node --test test-results/socket-runtime.mjs",
+    "test:socket-runtime": "esbuild src/core/providers/socket/streamErrorCallbacks.test.ts src/core/stores/socket/transport.test.ts --bundle --platform=node --format=esm --packages=external --tsconfig=tsconfig.app.json --outdir=test-results/socket-runtime --entry-names=[name] && node --test test-results/socket-runtime/*.js",
     "test:ollama-model-store": "esbuild src/core/stores/OllamaModelStore.test.ts --bundle --platform=node --format=esm --packages=external --tsconfig=tsconfig.app.json --outfile=test-results/ollama-model-store.mjs && node --test test-results/ollama-model-store.mjs"
   },
   "dependencies": {

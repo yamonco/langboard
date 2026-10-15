@@ -1,5 +1,5 @@
 import { SOCKET_URL } from "@/constants";
-import { ESocketTopic } from "@langboard/core/enums";
+import { ESocketTopic, SOCKET_MAX_TOPIC_IDS } from "@langboard/core/enums";
 import { Utils } from "@langboard/core/utils";
 import {
     canCloseSocket,
@@ -44,13 +44,15 @@ const sendTopicMessage = (
     topic: Exclude<ESocketTopic, ESocketTopic.None | ESocketTopic.Global>,
     topicIds: string[]
 ) => {
-    send(
-        JSON.stringify({
-            event,
-            topic,
-            topic_id: topicIds,
-        })
-    );
+    for (let offset = 0; offset < Math.max(1, topicIds.length); offset += SOCKET_MAX_TOPIC_IDS) {
+        send(
+            JSON.stringify({
+                event,
+                topic,
+                topic_id: topicIds.slice(offset, offset + SOCKET_MAX_TOPIC_IDS),
+            })
+        );
+    }
 };
 
 const restoreTopicSubscriptions = (subscribe: ISocketStore["subscribe"], restorableTopics: ReturnType<typeof getSocketMap>["restorableTopics"]) => {

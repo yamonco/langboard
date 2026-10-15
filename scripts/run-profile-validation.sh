@@ -20,7 +20,7 @@ case "$profile" in
       src/shared/py/langboard_shared/tasks/docling/DocumentKeywords_test.py)
     ;;
   ui)
-    command=(yarn test:asset-retention)
+    command=(bash -c 'yarn test:socket-runtime && yarn test:asset-retention')
     ;;
   *)
     echo "Unsupported validation profile: $profile" >&2
