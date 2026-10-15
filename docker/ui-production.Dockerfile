@@ -26,7 +26,7 @@ ARG NODE_BUILD_HEAP_MB=3072
 RUN NODE_OPTIONS="--max-old-space-size=${NODE_BUILD_HEAP_MB}" yarn build
 
 FROM build AS validation-ui-source
-RUN mkdir -p /result && chown node:node /result
+RUN mkdir -p /result /work/src/ui/test-results && chown node:node /result /work/src/ui/test-results
 USER node
 
 FROM validation-ui-source AS validation-ui
