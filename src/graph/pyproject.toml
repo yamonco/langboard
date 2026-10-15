@@ -22,7 +22,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "redis>=5.2.1,<6.0.0",
     "rich<=14.2.0",
-    "sentry-sdk[fastapi]>=2.43.0",
+    "sentry-sdk[fastapi]>=2.68.1",
     "uvicorn[standard]>=0.38.0",
 ]
 

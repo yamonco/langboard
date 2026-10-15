@@ -2,8 +2,11 @@
 
 from importlib import import_module
 import pytest
+import sentry_sdk
 from fastapi.testclient import TestClient
 from langboard_shared.FastAPIAppConfig import FastAPIAppConfig
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from langboard_graph.core.graph import checkpoint
 
 
@@ -55,3 +58,20 @@ def test_actual_app_boots_and_serves_health(graph_app):
         response = client.get("/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok", "runtime": "graph"}
+
+
+def test_health_survives_repeated_sentry_instrumentation(graph_app):
+    # FastAPI >=0.137 resolves sync handlers per request. Old Sentry releases
+    # accumulated wrappers until ordinary health probes exhausted recursion.
+    # No DSN means no telemetry leaves this test; the real integrations run.
+    with sentry_sdk.init(
+        dsn=None,
+        default_integrations=False,
+        integrations=[StarletteIntegration(), FastApiIntegration()],
+    ):
+        assert sentry_sdk.get_client().get_integration(FastApiIntegration) is not None
+        with TestClient(graph_app) as client:
+            for request_number in range(1200):
+                response = client.get("/health")
+                assert response.status_code == 200, request_number
+                assert response.json() == {"status": "ok", "runtime": "graph"}
