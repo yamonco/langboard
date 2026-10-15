@@ -26,3 +26,25 @@ Creation and private-policy regression tests pass locally (15 tests). Ruff passe
 This source fix has not yet been deployed. Creation→detail→body save→board re-entry after deployment remains required. The affected preexisting customer drafts need a narrowly scoped recovery, preserving their authors, content, and history. Actual external browser validation remains outstanding.
 
 Test credentials are kept only in a protected runtime file and are excluded from Git, comments, and PRs.
+
+## Follow-up: creation authority (2026-10-15)
+
+The reproduction above describes the previous deployment contract. A later
+external browser check found that the add-card UI requires `card_write`, while
+the REST creation route and both MCP creation entries required `card_update`.
+That mismatch rejected a create-only member and allowed an edit-only member to
+create through the API even though the UI hid creation.
+
+Creation now requires `card_write` in REST, `create_card`, and the legacy
+`create_card_in_leftmost_column` MCP entry. Editing an existing card still
+requires `card_update`; board membership and visibility rules are unchanged.
+An existing account with only `read` and `card_update` is intentionally not a
+creation test account under this contract. No automatic role migration or
+permission expansion is performed.
+
+The actual HTTP role middleware and MCP permission checker cover create-only,
+edit-only, read-only, wildcard, and unauthenticated cases. The new regression is
+included in the existing API image validation profile. Local verification passed
+99 tests in that profile and 52 focused permission, dock, creation-result, and
+route tests. Earlier failing reports are retained separately. Central image
+validation, deployment, and normal external browser creation remain outstanding.

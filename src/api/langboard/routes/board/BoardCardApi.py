@@ -335,7 +335,7 @@ def get_card_comments(project_uid: str, card_uid: str, request: Request, user_or
         .get()
     ),
 )
-@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardWrite], RoleFinder.project)
 @AuthFilter.add()
 def create_card(
     project_uid: str,

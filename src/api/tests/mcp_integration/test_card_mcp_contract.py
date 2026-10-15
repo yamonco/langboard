@@ -125,7 +125,7 @@ def test_plugin_compatibility_tools_preserve_native_contracts(monkeypatch: pytes
 
     for name in ("create_project_board", "create_card_in_leftmost_column", "get_card", "get_card_attachments"):
         assert McpTool.get_tool(name) is not None
-    assert McpRoleFilter.get_filtered(CardMcp.create_card_in_leftmost_column)[1] == [ProjectRoleAction.CardUpdate.value]
+    assert McpRoleFilter.get_filtered(CardMcp.create_card_in_leftmost_column)[1] == [ProjectRoleAction.CardWrite.value]
     for read in (CardMcp.get_card, CardMcp.get_card_attachments):
         assert McpRoleFilter.get_filtered(read)[1] == [ProjectRoleAction.Read.value]
 
