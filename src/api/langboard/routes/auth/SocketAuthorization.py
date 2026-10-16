@@ -221,10 +221,32 @@ def authorized_editor_document_subscription(
     return None
 
 
+_CARD_COMMENT_SECTION_PREFIX = "comment-"
+
+
+def is_card_comment_author(service: DomainService, user: User, document_name: str | None) -> bool:
+    """Return whether the document names a card comment the user may mutate (REST can_mutate parity)."""
+
+    if not document_name:
+        return False
+    parts = document_name.split(":")
+    if len(parts) != 3 or parts[0] != EEditorCollaborationType.Card.value:
+        return False
+    section = parts[2]
+    if not section.startswith(_CARD_COMMENT_SECTION_PREFIX):
+        return False
+    comment_uid = section[len(_CARD_COMMENT_SECTION_PREFIX) :]
+    if not comment_uid:
+        return False
+    comment = service.card_comment.get_by_id_like(comment_uid)
+    return bool(comment and service.card_comment.can_mutate(user, comment))
+
+
 def is_editor_document_write_authorized(
     service: DomainService,
     user: User,
     subscription: tuple[SocketTopic, str],
+    document_name: str | None = None,
 ) -> bool:
     topic, topic_id = subscription
 
@@ -238,6 +260,8 @@ def is_editor_document_write_authorized(
         if not project:
             return False
         if user.is_admin:
+            return True
+        if is_card_comment_author(service, user, document_name):
             return True
         return bool(
             service.project.is_assigned(user, project)[0]

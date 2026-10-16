@@ -962,7 +962,9 @@ def authorize_socket_editor_document(
     user = _authenticate_socket_user(request)
     subscription = authorized_editor_document_subscription(service, user, form.document_name)
     authorized = subscription is not None
-    writable = bool(subscription and is_editor_document_write_authorized(service, user, subscription))
+    writable = bool(
+        subscription and is_editor_document_write_authorized(service, user, subscription, form.document_name)
+    )
     return JsonResponse(
         {
             "authorized": authorized,
@@ -1382,7 +1384,7 @@ def authorize_socket_editor_http_document(
     user = _authenticate_editor_http_user(request)
     subscription = authorized_editor_document_subscription(service, user, form.document_name)
     authorized = subscription is not None and (
-        not form.write or is_editor_document_write_authorized(service, user, subscription)
+        not form.write or is_editor_document_write_authorized(service, user, subscription, form.document_name)
     )
     return JsonResponse({"authorized": authorized})
 
@@ -1398,7 +1400,7 @@ def authorize_socket_editor_http_documents(
     for name in dict.fromkeys(form.document_names):
         subscription = authorized_editor_document_subscription(service, user, name)
         if subscription is None or (
-            form.write and not is_editor_document_write_authorized(service, user, subscription)
+            form.write and not is_editor_document_write_authorized(service, user, subscription, name)
         ):
             authorized = False
             break

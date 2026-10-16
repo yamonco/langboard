@@ -662,6 +662,33 @@ def test_editor_document_write_authorization_tracks_current_card_role() -> None:
     assert _is_editor_document_write_authorized(service, user, subscription)
 
 
+def test_editor_document_write_authorization_allows_own_comment_document() -> None:
+    user = create_user()
+    project = Project.model_construct(id=SnowflakeID(2))
+    card = Card.model_construct(id=SnowflakeID(3), project_id=project.id)
+    service = create_authorization_service()
+    service.card.get_by_id_like.return_value = card
+    service.project.get_by_id_like.return_value = project
+    service.project.is_assigned.return_value = (True, object())
+    service.project.get_user_role_actions_by_project.return_value = [ProjectRoleAction.CardWrite.value]
+    service.card_comment.get_by_id_like.return_value = Mock()
+    service.card_comment.can_mutate.return_value = True
+    subscription = (SocketTopic.BoardCard, card.get_uid())
+    comment_document = f"card:{card.get_uid()}:comment-comment-id"
+
+    assert _is_editor_document_write_authorized(service, user, subscription, comment_document)
+
+    service.card_comment.can_mutate.return_value = False
+    assert not _is_editor_document_write_authorized(service, user, subscription, comment_document)
+
+    assert not _is_editor_document_write_authorized(service, user, subscription, f"card:{card.get_uid()}:description")
+    assert not _is_editor_document_write_authorized(service, user, subscription)
+
+    service.card_comment.get_by_id_like.return_value = None
+    service.card_comment.can_mutate.return_value = True
+    assert not _is_editor_document_write_authorized(service, user, subscription, comment_document)
+
+
 def test_editor_document_write_authorization_uses_existing_settings_roles() -> None:
     admin = create_user(is_admin=True)
     service = create_authorization_service()
@@ -831,7 +858,7 @@ def test_editor_http_document_authorization_requires_write_permission_for_mutati
     monkeypatch.setitem(
         authorize_socket_editor_http_document.__globals__,
         "is_editor_document_write_authorized",
-        lambda current_service, current_user, current_subscription: False,
+        lambda *args: False,
     )
 
     response = authorize_socket_editor_http_document(
@@ -917,6 +944,7 @@ def test_editor_http_documents_authorization_applies_write_permission_to_each_do
         service: DomainService,
         current_user: User,
         subscription: tuple[SocketTopic, str],
+        *args: object,
     ) -> bool:
         checked.append(subscription[1])
         return subscription[1] != "card:denied"
