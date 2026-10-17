@@ -1,9 +1,11 @@
 import importlib
 import os
+from inspect import signature
 from types import SimpleNamespace
 from typing import Any
 import pytest
 from langboard_shared.core.security import AuthSecurity
+from pydantic import TypeAdapter, ValidationError
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
@@ -821,9 +823,6 @@ async def test_missing_card_bundle_http_response_is_bad_request(monkeypatch):
 
 @pytest.mark.parametrize("limit", [0, 26, 50, True])
 def test_project_card_page_rejects_invalid_limit_before_native_dispatch(limit) -> None:
-    from inspect import signature
-    from pydantic import TypeAdapter, ValidationError
-
     schema = McpTool.get_tool("list_project_cards")["input_schema"]
     field = schema["properties"]["limit"]
     assert (field["minimum"], field["maximum"], field["default"]) == (1, 25, 20)
