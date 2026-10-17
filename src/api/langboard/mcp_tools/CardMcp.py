@@ -974,7 +974,7 @@ def list_project_cards(
     project_uid: str,
     user_or_bot: User | Bot,
     service: DomainService,
-    limit: int = 20,
+    limit: Annotated[int, Field(strict=True, ge=1, le=25)] = 20,
     cursor: str | None = None,
     include_closed: bool = False,
     workflow_stages: list[str] | None = None,
